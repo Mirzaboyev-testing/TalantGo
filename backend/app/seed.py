@@ -5,7 +5,7 @@ Inserted once per track slug. Later edits made in the admin page are never overw
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import Task, Track, University
+from .models import Group, Task, Track, University
 
 POINTS_BY_WEEK = {1: 10, 2: 15, 3: 20, 4: 30}
 
@@ -182,3 +182,17 @@ async def seed(session: AsyncSession) -> None:
                              description=description, proof_hint=proof_hint, points=POINTS_BY_WEEK[week]))
     await session.commit()
     await add_starters(session)
+    await add_official_groups(session)
+
+
+async def add_official_groups(session: AsyncSession) -> None:
+    """One group for the whole community and one per track; members are added when they open Groups."""
+    if not await session.scalar(select(Group.id).where(Group.auto_join_all)):
+        session.add(Group(name="CareerFlow hamjamiyati", is_private=False, is_official=True, auto_join_all=True,
+                          description="Talabalar, mentorlar, universitetlar va kompaniyalar: hamma shu yerda."))
+    have = set((await session.execute(select(Group.track_id).where(Group.is_official, Group.track_id.isnot(None)))).scalars())
+    for track in (await session.execute(select(Track))).scalars():
+        if track.id not in have:
+            session.add(Group(name=f"{track.icon} {track.title.split(':')[0]}", is_private=False, is_official=True,
+                              track_id=track.id, description=f"{track.title} yo'nalishidagilar guruhi"))
+    await session.commit()

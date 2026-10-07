@@ -49,8 +49,10 @@ async def webhook(update: dict, session: Session,
         role = {"hr": "employer", "uni": "university"}.get(payload)
         if payload.startswith("r") and payload[1:].isdigit():
             await _remember_referral(session, message["from"], int(payload[1:]))
+        join = payload[1:] if payload.startswith("g") and len(payload) > 4 else None
         try:
-            await telegram_bot.send_welcome(token, message["chat"]["id"], settings.public_url, role)
+            await telegram_bot.send_welcome(token, message["chat"]["id"], settings.public_url, role,
+                                            **({"join": join} if join else {}))
         except telegram_bot.BotError as exc:     # never make Telegram retry the update
             log.warning("welcome message failed: %s", exc)
     return {"ok": True}

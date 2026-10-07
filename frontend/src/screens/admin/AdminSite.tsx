@@ -5,6 +5,7 @@ import { Accounts, MyAccount } from "./Accounts";
 import Announcements from "./Announcements";
 import AuthScreen from "./AuthScreen";
 import Dashboard from "./Dashboard";
+import GroupsAdmin from "./GroupsAdmin";
 import { Applications, Companies, Jobs } from "./Market";
 import Queue from "./Queue";
 import { AuditCard, BotCard, ExportCard, PartnerLinks, RulesCard } from "./Settings";
@@ -33,6 +34,7 @@ const MENU: { group: string; pages: Page[] }[] = [
   ] },
   { group: "Ta'lim", pages: [{ id: "universities", label: "Universitetlar", icon: "🏛️" }] },
   { group: "Aloqa", pages: [
+    { id: "groups", label: "Guruhlar", icon: "💬" },
     { id: "announcements", label: "E'lonlar (bot)", icon: "📣" },
     { id: "bot", label: "Telegram bot", icon: "🤖", ownerOnly: true },
   ] },
@@ -125,6 +127,7 @@ export default function AdminSite() {
             {current.id === "jobs" && <Jobs />}
             {current.id === "applications" && <Applications />}
             {current.id === "universities" && <div className="narrow"><Universities /></div>}
+            {current.id === "groups" && <GroupsAdmin />}
             {current.id === "announcements" && <div className="narrow"><Announcements /></div>}
             {current.id === "bot" && <div className="narrow"><BotCard /></div>}
             {current.id === "reports" && <div className="narrow"><ExportCard /></div>}

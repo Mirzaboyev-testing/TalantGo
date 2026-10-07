@@ -12,6 +12,10 @@ import JobsScreen from "./screens/Jobs";
 import Welcome, { PendingScreen } from "./screens/Welcome";
 import EmployerApp from "./screens/employer/EmployerApp";
 import UniversityApp from "./screens/university/UniversityApp";
+import Groups from "./screens/Groups";
+
+// A group invite (t.me/<bot>?start=g<code>) opens the app with ?join=<code>.
+const joinCode = new URLSearchParams(window.location.search).get("join");
 
 type Tab = "path" | "jobs" | "review" | "community" | "profile";
 const TABS: { id: Tab; icon: string; label: string }[] = [
@@ -27,10 +31,12 @@ type AuthState = { kind: "loading" } | { kind: "outside" } | { kind: "dev" } | {
 export default function App() {
   const [auth, setAuth] = useState<AuthState>({ kind: "loading" });
   const [me, setMe] = useState<Me | null>(null);
-  const [tab, setTab] = useState<Tab>("path");
+  const [tab, setTab] = useState<Tab>(joinCode ? "community" : "path");
+  const [unread, setUnread] = useState(0);
   const [changingTrack, setChangingTrack] = useState(false);
   const [chosenStudent, setChosenStudent] = useState(false);
-  const [communityView, setCommunityView] = useState<"peers" | "top">("peers");
+  const [communityView, setCommunityView] = useState<"groups" | "peers" | "top">("groups");
+  const refreshUnread = useCallback(() => api.groups.unread().then((r) => setUnread(r.unread), () => {}), []);
 
   const refreshMe = useCallback(async () => setMe(await api.me()), []);
 
@@ -55,6 +61,14 @@ export default function App() {
       (e) => setAuth({ kind: "error", text: message(e) }),
     );
   }, [signIn]);
+
+  // unread group messages on the Hamjamiyat tab, refreshed every 30 seconds
+  useEffect(() => {
+    if (auth.kind !== "ok") return;
+    void refreshUnread();
+    const timer = setInterval(refreshUnread, 30000);
+    return () => clearInterval(timer);
+  }, [auth.kind, refreshUnread]);
 
   if (auth.kind === "loading") return <div className="center hint">Yuklanmoqda…</div>;
   if (auth.kind === "outside") {
@@ -109,10 +123,13 @@ export default function App() {
         {tab === "community" && (
           <>
             <div className="segmented" style={{ marginTop: 4 }}>
+              <button className={communityView === "groups" ? "on" : ""} onClick={() => setCommunityView("groups")}>Guruhlar</button>
               <button className={communityView === "peers" ? "on" : ""} onClick={() => setCommunityView("peers")}>Tengdoshlar</button>
               <button className={communityView === "top" ? "on" : ""} onClick={() => setCommunityView("top")}>Reyting</button>
             </div>
-            {communityView === "peers" ? <PeersScreen me={me} /> : <LeaderboardScreen />}
+            {communityView === "groups" && <Groups joinCode={joinCode} onUnreadChange={refreshUnread} />}
+            {communityView === "peers" && <PeersScreen me={me} />}
+            {communityView === "top" && <LeaderboardScreen />}
           </>
         )}
         {tab === "profile" && <ProfileScreen me={me} onSaved={setMe} onChangeTrack={() => setChangingTrack(true)} />}
@@ -121,7 +138,7 @@ export default function App() {
         <div className="tabbar-inner">
           {TABS.map((t) => (
             <button key={t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}>
-              <span>{t.icon}</span>{t.label}
+              <span>{t.icon}</span>{t.label}{t.id === "community" && unread > 0 && <span className="dot">{unread}</span>}
             </button>
           ))}
         </div>

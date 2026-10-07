@@ -363,3 +363,51 @@ class AdminAccount(Base):
     status: Mapped[str] = mapped_column(String(16), default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Group(Base):
+    """A chat space inside CareerFlow. Official groups (the whole community, one per track) are open;
+    groups people create themselves are private: invisible to others, joined only with the invite code."""
+    __tablename__ = "groups"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(80))
+    description: Mapped[str] = mapped_column(String(300), default="")
+    is_private: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_official: Mapped[bool] = mapped_column(Boolean, default=False)
+    auto_join_all: Mapped[bool] = mapped_column(Boolean, default=False)     # the whole-community group
+    track_id: Mapped[int | None] = mapped_column(ForeignKey("tracks.id", ondelete="SET NULL"))  # track members auto-join
+    invite_code: Mapped[str] = mapped_column(String(16), unique=True, default=lambda: secrets.token_urlsafe(9))
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class GroupMember(Base):
+    __tablename__ = "group_members"
+    __table_args__ = (UniqueConstraint("group_id", "user_id"), _in("role", ("owner", "member"), "group_member_role_valid"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(16), default="member")
+    last_read_id: Mapped[int] = mapped_column(Integer, default=0)
+    last_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped[User] = relationship(lazy="selectin")
+
+
+class GroupMessage(Base):
+    __tablename__ = "group_messages"
+    __table_args__ = (Index("ix_group_messages_group_id_id", "group_id", "id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User | None] = relationship(lazy="selectin")

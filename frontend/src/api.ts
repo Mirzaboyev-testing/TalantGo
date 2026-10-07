@@ -173,6 +173,24 @@ export const api = {
       request<{ token: string }>("PUT", "/admin-auth/password", { current_password, new_password }, true),
   },
 
+  groups: {
+    list: () => request<{ mine: GroupCard[]; discover: GroupCard[] }>("GET", "/groups"),
+    unread: () => request<{ unread: number }>("GET", "/groups/unread"),
+    create: (name: string, description: string) => request<GroupCard>("POST", "/groups", { name, description }),
+    joinPublic: (id: number) => request<GroupCard>("POST", `/groups/${id}/join`),
+    joinByCode: (code: string) => request<GroupCard>("POST", "/groups/join", { code }),
+    detail: (id: number) => request<GroupDetail>("GET", `/groups/${id}`),
+    edit: (id: number, name: string, description: string) => request<GroupCard>("PATCH", `/groups/${id}`, { name, description }),
+    remove: (id: number) => request<null>("DELETE", `/groups/${id}`),
+    leave: (id: number) => request<null>("POST", `/groups/${id}/leave`),
+    removeMember: (id: number, userId: number) => request<null>("DELETE", `/groups/${id}/members/${userId}`),
+    resetInvite: (id: number) => request<{ invite_code: string }>("POST", `/groups/${id}/invite/reset`),
+    messages: (id: number, params: { after?: number; before?: number }) =>
+      request<ChatMessage[]>("GET", `/groups/${id}/messages?${new URLSearchParams(Object.entries(params).filter(([, v]) => v).map(([k, v]) => [k, String(v)]))}`),
+    send: (id: number, text: string) => request<ChatMessage>("POST", `/groups/${id}/messages`, { text }),
+    deleteMessage: (id: number, messageId: number) => request<null>("DELETE", `/groups/${id}/messages/${messageId}`),
+  },
+
   employer: {
     company: () => request<Company>("GET", "/employer/company"),
     editCompany: (c: Omit<Company, "id" | "status" | "review_note" | "created_at">) => request<Company>("PATCH", "/employer/company", c),
@@ -212,6 +230,10 @@ export const api = {
     updateAccount: (id: number, changes: { role?: "owner" | "admin"; status?: "active" | "disabled" }) =>
       request<AdminAccount>("PATCH", `/admin/accounts/${id}`, changes, true),
     resetPassword: (id: number) => request<{ temporary_password: string }>("POST", `/admin/accounts/${id}/reset-password`, undefined, true),
+    groups: () => request<AdminGroup[]>("GET", "/admin/groups", undefined, true),
+    groupMessages: (id: number) => request<{ id: number; author: string; text: string; deleted: boolean; created_at: string }[]>("GET", `/admin/groups/${id}/messages`, undefined, true),
+    deleteGroupMessage: (messageId: number) => request<null>("DELETE", `/admin/group-messages/${messageId}`, undefined, true),
+    archiveGroup: (id: number) => request<{ is_archived: boolean }>("POST", `/admin/groups/${id}/archive`, undefined, true),
     exportApplications: () => download("/admin/export/applications.csv", "careerflow-arizalar.csv"),
     stats: () => request<AdminStats>("GET", "/admin/stats", undefined, true),
     users: (params: Record<string, string>) => request<AdminUser[]>("GET", `/admin/users?${new URLSearchParams(params)}`, undefined, true),
@@ -316,4 +338,22 @@ export interface Dashboard {
   recent_submissions: { id: number; student: string; task: string; track: string; status: Status; created_at: string }[];
   per_track: { icon: string; title: string; students: number }[];
   per_university: { name: string; students: number }[];
+}
+
+export interface GroupCard {
+  id: number; name: string; description: string; is_private: boolean; is_official: boolean; members: number;
+  unread: number; my_role: "owner" | "member" | null;
+  last_message: { author: string; text: string; created_at: string } | null;
+}
+export interface GroupDetail extends GroupCard {
+  invite_code: string | null;
+  member_list: { user_id: number; name: string; badge: string; role: "owner" | "member"; username: string | null }[];
+}
+export interface ChatMessage {
+  id: number; text: string | null; deleted: boolean; created_at: string; mine: boolean; user_id: number | null;
+  author: string; badge: string;
+}
+export interface AdminGroup {
+  id: number; name: string; is_private: boolean; is_official: boolean; is_archived: boolean; members: number;
+  messages: number; created_at: string;
 }

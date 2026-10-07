@@ -61,9 +61,11 @@ async def connect(token: str, public_url: str) -> dict:
     return me
 
 
-async def send_welcome(token: str, chat_id: int, public_url: str, role: str | None = None) -> None:
-    """role comes from a partner link (?start=hr or ?start=uni) and opens the matching sign-up."""
-    url = f"{public_url}/?role={role}" if role else public_url
+async def send_welcome(token: str, chat_id: int, public_url: str, role: str | None = None,
+                       join: str | None = None) -> None:
+    """role comes from a partner link (?start=hr / ?start=uni); join from a group invite (?start=g<code>)."""
+    query = f"role={role}" if role else (f"join={join}" if join else "")
+    url = f"{public_url}/?{query}" if query else public_url
     markup = {"inline_keyboard": [[{"text": "🚀 Ilovani ochish", "web_app": {"url": url}}]]}
     try:
         await call(token, "sendPhoto", chat_id=chat_id, photo=f"{public_url}/media/welcome.png",

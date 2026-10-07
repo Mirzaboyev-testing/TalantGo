@@ -112,3 +112,17 @@ th { color: var(--hint); font-weight: 500; }
 select:disabled, input:disabled { opacity: .7; }
 .progress { height: 8px; background: var(--bg2); border-radius: 4px; overflow: hidden; }
 .progress > div { height: 100%; background: var(--btn); border-radius: 4px; transition: width .3s; }
+
+/* chat */
+.chat { display: flex; flex-direction: column; height: calc(100vh - 112px - env(safe-area-inset-bottom)); height: calc(100dvh - 112px - env(safe-area-inset-bottom)); }
+.chat-head { display: flex; align-items: center; gap: 10px; padding: 4px 0 10px; border-bottom: 1px solid var(--line); }
+.chat-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 10px 0; }
+.chat-day { align-self: center; font-size: 12px; color: var(--hint); background: var(--bg); border-radius: 10px; padding: 2px 10px; margin: 6px 0; }
+.bubble { max-width: 82%; background: var(--bg); border-radius: 14px 14px 14px 4px; padding: 7px 10px 4px; align-self: flex-start; }
+.bubble.mine { align-self: flex-end; background: var(--btn); color: var(--btn-text); border-radius: 14px 14px 4px 14px; }
+.bubble-author { font-size: 12px; font-weight: 600; color: var(--link); margin-bottom: 2px; }
+.bubble-author span { font-weight: 400; color: var(--hint); }
+.bubble-time { font-size: 11px; opacity: .7; text-align: right; margin-top: 2px; display: flex; justify-content: flex-end; gap: 6px; align-items: center; }
+.bubble-del { border: 0; background: none; cursor: pointer; font-size: 11px; padding: 0; opacity: .7; color: inherit; }
+.chat-input { display: flex; gap: 8px; align-items: flex-end; padding-top: 8px; border-top: 1px solid var(--line); }
+.chat-input textarea { min-height: 40px; max-height: 120px; resize: none; }

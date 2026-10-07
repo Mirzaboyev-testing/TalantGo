@@ -4,12 +4,14 @@ import { api, APPLICATION_STATUS, JOB_KIND, salary, WORK_MODE, type Applicant, t
 import { ask, haptic, openLink } from "../../tg";
 import { ErrorText, Sheet, message } from "../../ui";
 import CompanyForm from "./CompanyForm";
+import Groups from "../Groups";
 
-type Tab = "jobs" | "talent" | "contacts" | "company";
+type Tab = "jobs" | "talent" | "contacts" | "groups" | "company";
 const TABS: { id: Tab; icon: string; label: string }[] = [
   { id: "jobs", icon: "📋", label: "Vakansiyalar" },
   { id: "talent", icon: "🔎", label: "Talantlar" },
   { id: "contacts", icon: "🤝", label: "Kontaktlar" },
+  { id: "groups", icon: "💬", label: "Guruhlar" },
   { id: "company", icon: "🏢", label: "Kompaniya" },
 ];
 const JOB_STATUS: Record<string, [string, string]> = {
@@ -26,6 +28,7 @@ export default function EmployerApp({ me, onChanged }: { me: Me; onChanged: (m: 
         {tab === "jobs" && <JobsTab />}
         {tab === "talent" && <TalentTab />}
         {tab === "contacts" && <ContactsTab />}
+        {tab === "groups" && <Groups />}
         {tab === "company" && (
           <div>
             <h1>Kompaniya</h1>

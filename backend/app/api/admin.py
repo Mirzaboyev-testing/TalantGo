@@ -15,8 +15,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import aliased
 
 from ..core.config import settings
-from ..models import (AdminAccount, Announcement, Application, AuditLog, Company, Job, Role, Status, Submission,
-                      Task, Track, University, User)
+from ..models import (AdminAccount, Announcement, Application, AuditLog, Company, Group, GroupMember, GroupMessage, Job,
+                      Role, Status, Submission, Task, Track, University, User)
 from ..schemas import (AdminSubmissionOut, AdminTaskOut, AdminTrackOut, AdminUserOut, AnnouncementIn,
                        AnnouncementOut, AuditOut, BotStatusOut, BotTokenIn, CompanyOut, PointsAdjustIn,
                        ReviewDecisionIn, ReviewOut, TaskIn, TaskPatch, TrackIn, TrackPatch, UniversityIn,
@@ -26,6 +26,7 @@ from ..services.admin_accounts import hash_password
 from ..services.career import decide_verification
 from ..services.rules import Rules, get_rules, save_rules
 from .deps import AdminActor, OwnerActor, Session, audit
+from ..seed import add_official_groups
 from .jobs import company_hr_ids, job_out
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -193,6 +194,7 @@ async def create_track(body: TrackIn, actor: AdminActor, session: Session) -> Ad
     session.add(track)
     audit(session, actor, "track.create", body.title)
     await session.commit()
+    await add_official_groups(session)              # every track gets its open group
     return AdminTrackOut.model_validate(track)
 
 
@@ -664,3 +666,50 @@ async def export_applications(actor: AdminActor, session: Session) -> StreamingR
     await session.commit()
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv; charset=utf-8",
                              headers={"Content-Disposition": 'attachment; filename="careerflow-arizalar.csv"'})
+
+
+# --------------------------------------------------------------------------- groups
+
+@router.get("/groups")
+async def admin_groups(_: AdminActor, session: Session) -> list[dict]:
+    """All groups with sizes. Private groups show only their name and size: their messages stay private
+    unless someone reports a problem and the owner decides to archive the group."""
+    members = select(func.count()).where(GroupMember.group_id == Group.id).correlate(Group).scalar_subquery()
+    msgs = select(func.count()).where(GroupMessage.group_id == Group.id).correlate(Group).scalar_subquery()
+    rows = (await session.execute(select(Group, members, msgs).order_by(Group.is_official.desc(), Group.created_at.desc()))).all()
+    return [{"id": g.id, "name": g.name, "is_private": g.is_private, "is_official": g.is_official,
+             "is_archived": g.is_archived, "members": m, "messages": n, "created_at": g.created_at} for g, m, n in rows]
+
+
+@router.get("/groups/{group_id}/messages")
+async def admin_group_messages(group_id: int, _: AdminActor, session: Session) -> list[dict]:
+    group = await session.get(Group, group_id)
+    if group is None:
+        raise HTTPException(404, "Guruh topilmadi")
+    if group.is_private:
+        raise HTTPException(403, "Shaxsiy guruh xabarlari faqat a'zolarga ko'rinadi")
+    rows = (await session.execute(select(GroupMessage).where(GroupMessage.group_id == group_id)
+                                  .order_by(GroupMessage.id.desc()).limit(200))).scalars()
+    return [{"id": m.id, "author": m.user.full_name if m.user else "—", "text": m.text, "deleted": m.deleted_at is not None,
+             "created_at": m.created_at} for m in rows]
+
+
+@router.delete("/group-messages/{message_id}", status_code=204)
+async def admin_delete_message(message_id: int, actor: AdminActor, session: Session) -> None:
+    msg = await session.get(GroupMessage, message_id)
+    if msg is None:
+        raise HTTPException(404, "Xabar topilmadi")
+    msg.deleted_at = datetime.now(UTC)
+    audit(session, actor, "group.message.delete", f"guruh #{msg.group_id}", msg.text[:200])
+    await session.commit()
+
+
+@router.post("/groups/{group_id}/archive")
+async def archive_group(group_id: int, actor: AdminActor, session: Session) -> dict:
+    group = await session.get(Group, group_id)
+    if group is None:
+        raise HTTPException(404, "Guruh topilmadi")
+    group.is_archived = not group.is_archived
+    audit(session, actor, "group.archive" if group.is_archived else "group.restore", group.name)
+    await session.commit()
+    return {"is_archived": group.is_archived}

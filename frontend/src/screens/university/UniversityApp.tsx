@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, APPLICATION_STATUS, VERIFICATION_LABEL, type Me, type UniversityDashboard, type UniversityStudent } from "../../api";
 import { ErrorText, message } from "../../ui";
+import Groups from "../Groups";
 
-type Tab = "dashboard" | "verify" | "students";
+type Tab = "dashboard" | "verify" | "students" | "groups";
 const TABS: { id: Tab; icon: string; label: string }[] = [
   { id: "dashboard", icon: "📊", label: "Ko'rsatkichlar" },
   { id: "verify", icon: "✅", label: "Tasdiqlash" },
   { id: "students", icon: "🎓", label: "Talabalar" },
+  { id: "groups", icon: "💬", label: "Guruhlar" },
 ];
 
 export default function UniversityApp({ me }: { me: Me }) {
@@ -18,6 +20,7 @@ export default function UniversityApp({ me }: { me: Me }) {
         {tab === "dashboard" && <Dashboard />}
         {tab === "verify" && <StudentList mode="verify" />}
         {tab === "students" && <StudentList mode="all" />}
+        {tab === "groups" && <Groups />}
       </div>
       <nav className="tabbar"><div className="tabbar-inner">
         {TABS.map((t) => <button key={t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}><span>{t.icon}</span>{t.label}</button>)}
