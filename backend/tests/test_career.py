@@ -10,9 +10,7 @@ JOB = {"title": "Data analitik stajyor", "kind": "internship", "work_mode": "hyb
        "skills": ["SQL", "Power BI"], "counts_as_practice": True, "rules_accepted": True}
 
 
-async def owner(client) -> dict:
-    token = (await client.post("/api/v1/auth/admin", json={"password": "test-admin-password"})).json()["token"]
-    return {"Authorization": f"Bearer {token}"}
+from tests.conftest import owner_headers as owner
 
 
 async def uni_id(short: str) -> int:

@@ -1,4 +1,3 @@
-import asyncio
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException
@@ -7,14 +6,13 @@ from sqlalchemy import select
 from ..core.config import settings
 from ..core.security import InitDataError, create_token, validate_init_data
 from ..models import User
-from ..schemas import AdminLoginIn, DevAuthIn, TelegramAuthIn, TokenOut
-from ..services import admin_password, settings_store
+from ..schemas import DevAuthIn, TelegramAuthIn, TokenOut
+from ..services import settings_store
 from .deps import Session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 USER_TOKEN_HOURS = 24 * 7
-ADMIN_TOKEN_HOURS = 12
 
 
 async def _upsert(session: Session, telegram_id: int, full_name: str, username: str | None,
@@ -60,10 +58,3 @@ async def dev_login(body: DevAuthIn, session: Session) -> TokenOut:
     return TokenOut(token=create_token(str(user.id), "user", USER_TOKEN_HOURS))
 
 
-@router.post("/admin", response_model=TokenOut)
-async def admin_login(body: AdminLoginIn, session: Session) -> TokenOut:
-    if not await admin_password.verify(session, body.password):
-        await asyncio.sleep(1)              # slows down password guessing
-        raise HTTPException(401, "Parol noto'g'ri")
-    fp = await admin_password.fingerprint(session)
-    return TokenOut(token=create_token(f"admin:{fp}", "admin", ADMIN_TOKEN_HOURS))

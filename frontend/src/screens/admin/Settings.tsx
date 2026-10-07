@@ -2,22 +2,8 @@ import { useEffect, useState } from "react";
 import { api, type AuditEntry, type BotStatus, type Rules } from "../../api";
 import { BOT_URL } from "../../tg";
 import { ErrorText, message } from "../../ui";
-import type { AdminCtx } from "./AdminPanel";
 
-export default function Settings({ ctx }: { ctx: AdminCtx }) {
-  return (
-    <div>
-      {ctx.isOwner && <PasswordCard />}
-      <PartnerLinks />
-      <RulesCard canEdit={ctx.isOwner} />
-      <ExportCard />
-      {ctx.isOwner && <BotCard />}
-      <AuditCard />
-    </div>
-  );
-}
-
-function RulesCard({ canEdit }: { canEdit: boolean }) {
+export function RulesCard({ canEdit }: { canEdit: boolean }) {
   const [rules, setRules] = useState<Rules | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -55,19 +41,22 @@ function RulesCard({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function ExportCard() {
+export function ExportCard() {
   const [error, setError] = useState("");
   return (
     <div className="card">
       <b>Eksport</b>
-      <p className="hint">Barcha talabalar ro'yxati: ball, tasdiqlangan ishlar, guruh. Excel'da ochiladi. Kompyuterdan /admin sahifasida yuklash qulayroq.</p>
-      <button className="btn small ghost" onClick={() => api.admin.exportUsers().catch((e) => setError(message(e)))}>CSV yuklab olish</button>
+      <p className="hint">Excel'da ochiladigan CSV fayllar.</p>
+      <div className="row wrap">
+        <button className="btn small ghost" onClick={() => api.admin.exportUsers().catch((e) => setError(message(e)))}>Talabalar ro'yxati</button>
+        <button className="btn small ghost" onClick={() => api.admin.exportApplications().catch((e) => setError(message(e)))}>Arizalar</button>
+      </div>
       <ErrorText error={error} />
     </div>
   );
 }
 
-function BotCard() {
+export function BotCard() {
   const [status, setStatus] = useState<BotStatus | null>(null);
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
@@ -112,7 +101,7 @@ const ACTION_LABEL: Record<string, string> = {
   "bot.token": "Bot tokeni almashtirildi", "bot.connect": "Bot ulandi", "export.users": "Ro'yxat yuklab olindi",
 };
 
-function AuditCard() {
+export function AuditCard() {
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
   const [error, setError] = useState("");
   useEffect(() => { api.admin.audit().then(setEntries, (e) => setError(message(e))); }, []);
@@ -133,46 +122,7 @@ function AuditCard() {
   );
 }
 
-function PasswordCard() {
-  const [current, setCurrent] = useState("");
-  const [next, setNext] = useState("");
-  const [repeat, setRepeat] = useState("");
-  const [done, setDone] = useState(false);
-  const [error, setError] = useState("");
-
-  async function save() {
-    setError("");
-    if (next !== repeat) {
-      setError("Yangi parollar bir xil emas");
-      return;
-    }
-    try {
-      await api.admin.changePassword(current, next);
-      setDone(true);
-      setCurrent(""); setNext(""); setRepeat("");
-    } catch (e) {
-      setError(message(e));
-    }
-  }
-
-  return (
-    <div className="card">
-      <b>Admin paroli</b>
-      <p className="hint">Kompyuterdagi /admin sahifasiga kirish paroli. O'zgartirilgach, eski parol bilan ochilgan barcha oynalar yopiladi.</p>
-      <label>Joriy parol</label>
-      <input type="password" value={current} autoComplete="current-password" onChange={(e) => setCurrent(e.target.value)} />
-      <label>Yangi parol (kamida 10 belgi)</label>
-      <input type="password" value={next} autoComplete="new-password" onChange={(e) => setNext(e.target.value)} />
-      <label>Yangi parolni takrorlang</label>
-      <input type="password" value={repeat} autoComplete="new-password" onChange={(e) => setRepeat(e.target.value)} />
-      <ErrorText error={error} />
-      {done && <p className="notice">Parol o'zgartirildi. Kompyuterda yangi parol bilan qayta kiring.</p>}
-      <button className="btn small" style={{ marginTop: 10 }} disabled={!current || next.length < 10 || !repeat} onClick={save}>Parolni o'zgartirish</button>
-    </div>
-  );
-}
-
-function PartnerLinks() {
+export function PartnerLinks() {
   const links = [
     ["HR va kompaniyalar uchun", `${BOT_URL}?start=hr`],
     ["Universitet karyera markazi uchun", `${BOT_URL}?start=uni`],

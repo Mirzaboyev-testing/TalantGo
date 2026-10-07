@@ -3,7 +3,7 @@ import type { Company } from "../../api";
 import { ErrorText, message } from "../../ui";
 import { Consent } from "../Consent";
 
-type CompanyInput = Omit<Company, "id" | "status" | "review_note">;
+type CompanyInput = Omit<Company, "id" | "status" | "review_note" | "created_at">;
 
 export default function CompanyForm({ initial, submitLabel, onSubmit, requireConsent = false }: {
   initial?: Company; submitLabel: string; onSubmit: (c: CompanyInput) => Promise<void>; requireConsent?: boolean;

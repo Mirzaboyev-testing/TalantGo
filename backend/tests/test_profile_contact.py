@@ -9,36 +9,6 @@ from app.services import settings_store, telegram_bot
 BOT_TOKEN = "123456:TEST-token-for-unit-tests-only-abcdefghij"
 
 
-async def login(client, password: str):
-    return await client.post("/api/v1/auth/admin", json={"password": password})
-
-
-async def test_owner_changes_admin_password_and_old_sessions_end(client):
-    old = (await login(client, "test-admin-password")).json()["token"]
-    h = {"Authorization": f"Bearer {old}"}
-    r = await client.put("/api/v1/admin/password", json={"current_password": "wrong", "new_password": "yangi-parol-123"}, headers=h)
-    assert r.status_code == 400
-    r = await client.put("/api/v1/admin/password", json={"current_password": "test-admin-password", "new_password": "qisqa"}, headers=h)
-    assert r.status_code == 422
-    r = await client.put("/api/v1/admin/password",
-                         json={"current_password": "test-admin-password", "new_password": "yangi-parol-123"}, headers=h)
-    assert r.status_code == 200
-    # the old session is signed out, the old password stops working, the new one works
-    assert (await client.get("/api/v1/admin/me", headers=h)).status_code == 401
-    assert (await login(client, "test-admin-password")).status_code == 401
-    new = (await login(client, "yangi-parol-123")).json()["token"]
-    assert (await client.get("/api/v1/admin/me", headers={"Authorization": f"Bearer {new}"})).status_code == 200
-
-
-async def test_admin_cannot_change_password(client, make_user):
-    from app.models import Role
-    admin = await make_user("Nodira", Role.admin)
-    r = await client.put("/api/v1/admin/password",
-                         json={"current_password": "test-admin-password", "new_password": "yangi-parol-123"},
-                         headers=admin["headers"])
-    assert r.status_code == 403
-
-
 async def test_phone_typed_by_hand_is_unverified_and_hidden_by_default(client, make_user):
     a, b = await make_user("Aziza"), await make_user("Bekzod")
     track = (await client.get("/api/v1/tracks")).json()[0]

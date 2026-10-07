@@ -4,49 +4,102 @@ PROOF = {"proof_url": "https://github.com/someone/sql-practice"}
 GOOD = {"approved": True, "comment": "So'rovlar to'g'ri, JOIN yaxshi ishlatilgan"}
 
 
-async def owner_headers(client) -> dict:
-    token = (await client.post("/api/v1/auth/admin", json={"password": "test-admin-password"})).json()["token"]
-    return {"Authorization": f"Bearer {token}"}
+from tests.conftest import OWNER, owner_headers
 
 
-async def test_password_owner_and_permissions(client, make_user):
+async def register(client, name, email, password="parol-1234567", code=None):
+    return await client.post("/api/v1/admin-auth/register",
+                             json={"name": name, "email": email, "password": password, "setup_code": code})
+
+
+async def login(client, email, password="parol-1234567"):
+    return await client.post("/api/v1/admin-auth/login", json={"email": email, "password": password})
+
+
+async def test_first_account_needs_the_setup_code_and_becomes_owner(client, make_user):
+    assert (await client.get("/api/v1/admin-auth/status")).json() == {"needs_owner": True}
+    assert (await register(client, "Xurshid", "x@mail.uz")).status_code == 403
+    assert (await register(client, "Xurshid", "x@mail.uz", code="wrong")).status_code == 403
+    assert (await register(client, "Xurshid", "not-an-email", code="test-admin-password")).status_code == 422
+    r = await register(client, "Ega", "Ega@Gmail.com", code="test-admin-password")
+    assert r.status_code == 200 and r.json()["status"] == "active"
+    me = (await client.get("/api/v1/admin-auth/me", headers={"Authorization": f"Bearer {r.json()['token']}"})).json()
+    assert me["email"] == "ega@gmail.com" and me["is_owner"] is True
+    assert (await client.get("/api/v1/admin-auth/status")).json() == {"needs_owner": False}
+    assert (await register(client, "Ega2", "ega@gmail.com")).status_code == 409
+
+    # Telegram users never reach the admin API, whatever their role
     student = await make_user("Sardor")
+    assert (await client.get("/api/v1/admin/users", headers=student["headers"])).status_code == 401
     assert (await client.get("/api/v1/admin/users")).status_code == 401
-    assert (await client.post("/api/v1/auth/admin", json={"password": "wrong"})).status_code == 401
-    assert (await client.get("/api/v1/admin/users", headers=student["headers"])).status_code == 403
+
+
+async def test_new_admins_wait_for_the_owner_and_cannot_manage_owners_things(client, make_user):
     owner = await owner_headers(client)
-    assert (await client.get("/api/v1/me", headers=owner)).status_code == 401
-    assert (await client.get("/api/v1/admin/me", headers=owner)).json()["is_owner"] is True
-    assert (await client.put("/api/v1/admin/bot", json={"token": "not-a-token"}, headers=owner)).status_code == 422
+    assert (await register(client, "Nodira", "nodira@gmail.com")).json() == {"status": "pending"}
+    assert (await login(client, "nodira@gmail.com")).status_code == 403
+    assert (await login(client, "nodira@gmail.com", "wrong-password")).status_code == 401
 
+    accounts = (await client.get("/api/v1/admin/accounts", headers=owner)).json()
+    nodira = next(a for a in accounts if a["email"] == "nodira@gmail.com")
+    assert nodira["status"] == "pending"
+    await client.patch(f"/api/v1/admin/accounts/{nodira['id']}", json={"status": "active"}, headers=owner)
+    h = {"Authorization": f"Bearer {(await login(client, 'nodira@gmail.com')).json()['token']}"}
 
-async def test_owner_appoints_admins_who_run_the_app_but_cannot_appoint_admins(client, make_user):
-    owner = await owner_headers(client)
-    me, helper, student = await make_user("Muhammadqodir"), await make_user("Nodira"), await make_user("Sardor")
-
-    # the password owner marks their own Telegram account as owner: that grants admin too
-    r = await client.patch(f"/api/v1/admin/users/{me['id']}", json={"is_owner": True}, headers=owner)
-    assert r.json()["role"] == "admin" and r.json()["is_owner"] is True
-    assert (await client.get("/api/v1/me", headers=me["headers"])).json()["is_owner"] is True
-
-    # from inside the app the owner appoints an admin
-    r = await client.patch(f"/api/v1/admin/users/{helper['id']}", json={"role": "admin"}, headers=me["headers"])
-    assert r.json()["role"] == "admin"
-
-    # that admin runs the app: mentors, tracks, users...
-    h = helper["headers"]
-    assert (await client.patch(f"/api/v1/admin/users/{student['id']}", json={"role": "mentor"}, headers=h)).status_code == 200
-    # ...but cannot create admins, touch other admins, the bot token or the rules
-    assert (await client.patch(f"/api/v1/admin/users/{student['id']}", json={"role": "admin"}, headers=h)).status_code == 403
-    assert (await client.patch(f"/api/v1/admin/users/{me['id']}", json={"is_blocked": True}, headers=h)).status_code == 403
+    # an admin runs the app: mentors, tracks, moderation...
+    student = await make_user("Sardor")
+    r = await client.patch(f"/api/v1/admin/users/{student['id']}", json={"role": "mentor"}, headers=h)
+    assert r.status_code == 200 and r.json()["role"] == "mentor"
+    assert (await client.patch(f"/api/v1/admin/users/{student['id']}", json={"role": "admin"}, headers=h)).status_code == 422
+    # ...but owners' things stay with owners
+    assert (await client.get("/api/v1/admin/accounts", headers=h)).status_code == 403
     assert (await client.put("/api/v1/admin/rules", json={"peer_approvals_required": 1}, headers=h)).status_code == 403
     assert (await client.post("/api/v1/admin/bot/connect", headers=h)).status_code == 403
-    # nobody locks themselves out
-    assert (await client.patch(f"/api/v1/admin/users/{me['id']}", json={"is_blocked": True},
-                               headers=me["headers"])).status_code == 400
 
-    log = (await client.get("/api/v1/admin/audit", headers=me["headers"])).json()
-    assert [e["actor"] for e in log[:3]] == ["Nodira", "Muhammadqodir", "Ega (parol orqali)"]
+    # the last owner cannot step down
+    me = (await client.get("/api/v1/admin-auth/me", headers=owner)).json()
+    r = await client.patch(f"/api/v1/admin/accounts/{me['id']}", json={"status": "disabled"}, headers=owner)
+    assert r.status_code == 400
+
+    # disabling an admin ends their session at once
+    await client.patch(f"/api/v1/admin/accounts/{nodira['id']}", json={"status": "disabled"}, headers=owner)
+    assert (await client.get("/api/v1/admin/stats", headers=h)).status_code == 401
+
+    log = (await client.get("/api/v1/admin/audit", headers=owner)).json()
+    assert any(e["action"] == "user.update" and "nodira@gmail.com" in e["actor"] for e in log)
+
+
+async def test_password_change_and_reset_end_old_sessions(client):
+    owner = await owner_headers(client)
+    other_tab = await owner_headers(client)
+    r = await client.put("/api/v1/admin-auth/password", json={"current_password": "wrong", "new_password": "yangi-parol-123"},
+                         headers=owner)
+    assert r.status_code == 400
+    r = await client.put("/api/v1/admin-auth/password",
+                         json={"current_password": OWNER["password"], "new_password": "yangi-parol-123"}, headers=owner)
+    fresh = {"Authorization": f"Bearer {r.json()['token']}"}
+    assert (await client.get("/api/v1/admin-auth/me", headers=other_tab)).status_code == 401
+    assert (await client.get("/api/v1/admin-auth/me", headers=fresh)).status_code == 200
+    assert (await login(client, OWNER["email"], "yangi-parol-123")).status_code == 200
+
+    await register(client, "Bekzod", "bekzod@gmail.com")
+    bekzod = next(a for a in (await client.get("/api/v1/admin/accounts", headers=fresh)).json() if a["email"] == "bekzod@gmail.com")
+    await client.patch(f"/api/v1/admin/accounts/{bekzod['id']}", json={"status": "active"}, headers=fresh)
+    temporary = (await client.post(f"/api/v1/admin/accounts/{bekzod['id']}/reset-password", headers=fresh)).json()["temporary_password"]
+    assert (await login(client, "bekzod@gmail.com")).status_code == 401
+    assert (await login(client, "bekzod@gmail.com", temporary)).status_code == 200
+
+
+async def test_dashboard_and_applications(client, make_user):
+    owner = await owner_headers(client)
+    await make_user("Aziza")
+    d = (await client.get("/api/v1/admin/dashboard", headers=owner)).json()
+    assert d["kpis"]["students"] == 1 and d["kpis"]["new_students"] == 1
+    assert len(d["series"]["dates"]) == 30 and sum(d["series"]["registrations"]) == 1
+    assert set(d["applications"]) == {"new", "viewed", "shortlisted", "hired", "rejected"}
+    assert (await client.get("/api/v1/admin/dashboard", params={"from": "2026-10-10", "to": "2026-10-01"},
+                             headers=owner)).status_code == 422
+    assert (await client.get("/api/v1/admin/applications", headers=owner)).json() == []
 
 
 async def test_blocked_user_is_locked_out_and_hidden(client, make_user):

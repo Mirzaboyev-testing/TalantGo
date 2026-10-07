@@ -1,34 +1,35 @@
-"""Management API. Admins (appointed by the owner) run the app; only the owner appoints admins,
-changes the bot token and the review rules. Every change is written to the audit log."""
+"""Management API for the admin website. Admin accounts (email + password) run the app; only owners
+approve admins and change the bot token and review rules. Every change is written to the audit log."""
 import csv
 import io
 import re
-from datetime import UTC, datetime, timedelta
+import secrets
+from datetime import UTC, date, datetime, timedelta
+from typing import Literal
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import aliased
 
 from ..core.config import settings
-from ..models import (Announcement, AuditLog, Company, Job, Role, Status, Submission, Task, Track, University,
-                      User)
-from ..schemas import (AdminMeOut, AdminSubmissionOut, AdminTaskOut, AdminTrackOut, AdminUserOut,
-                       AnnouncementIn, AnnouncementOut, AuditOut, BotStatusOut, BotTokenIn, CompanyOut,
-                       PasswordChangeIn, PointsAdjustIn, ReviewDecisionIn, ReviewOut, TaskIn, TaskPatch, TrackIn, TrackPatch,
-                       UniversityIn, UniversityOut, UniversityPatch, UserPatch)
-from ..services import admin_password, announcements, notify, settings_store, telegram_bot
+from ..models import (AdminAccount, Announcement, Application, AuditLog, Company, Job, Role, Status, Submission,
+                      Task, Track, University, User)
+from ..schemas import (AdminSubmissionOut, AdminTaskOut, AdminTrackOut, AdminUserOut, AnnouncementIn,
+                       AnnouncementOut, AuditOut, BotStatusOut, BotTokenIn, CompanyOut, PointsAdjustIn,
+                       ReviewDecisionIn, ReviewOut, TaskIn, TaskPatch, TrackIn, TrackPatch, UniversityIn,
+                       UniversityOut, UniversityPatch, UserPatch)
+from ..services import announcements, notify, settings_store, telegram_bot
+from ..services.admin_accounts import hash_password
 from ..services.career import decide_verification
-from .jobs import company_hr_ids, job_out
 from ..services.rules import Rules, get_rules, save_rules
-from .deps import Actor, AdminActor, OwnerActor, Session
+from .deps import AdminActor, OwnerActor, Session, audit
+from .jobs import company_hr_ids, job_out
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 VERIFIED = (Status.peer_verified, Status.mentor_verified)
-
-
-def audit(session: Session, actor: Actor, action: str, target: str = "", details: str = "") -> None:
-    session.add(AuditLog(actor=actor.name[:160], action=action, target=target[:200], details=details[:2000]))
 
 
 def _verified_count():
@@ -37,11 +38,6 @@ def _verified_count():
 
 
 # --------------------------------------------------------------------------- who am I, overview
-
-@router.get("/me", response_model=AdminMeOut)
-async def admin_me(actor: AdminActor) -> AdminMeOut:
-    return AdminMeOut(name=actor.name, is_owner=actor.is_owner)
-
 
 @router.get("/stats")
 async def stats(_: AdminActor, session: Session) -> dict:
@@ -99,14 +95,9 @@ async def update_user(user_id: int, body: UserPatch, actor: AdminActor, session:
     if user is None:
         raise HTTPException(404, "Foydalanuvchi topilmadi")
     changes = body.model_dump(exclude_unset=True, exclude_none=True)
-    touches_admins = ("role" in changes and Role.admin in (changes["role"], user.role)) or "is_owner" in changes
-    if (touches_admins or user.is_owner or user.role is Role.admin) and not actor.is_owner:
-        raise HTTPException(403, "Adminlarni faqat ilova egasi tayinlaydi yoki o'zgartiradi")
-    if actor.user and actor.user.id == user.id and (changes.get("is_blocked") or changes.get("is_owner") is False
-                                                     or changes.get("role") not in (None, Role.admin)):
-        raise HTTPException(400, "O'zingizni bloklay yoki huquqingizni olib tashlay olmaysiz")
-    if changes.get("is_owner"):
-        changes["role"] = Role.admin             # an owner always has admin rights
+    changes.pop("is_owner", None)                # admin rights live in website accounts, not Telegram users
+    if changes.get("role") is Role.admin:
+        raise HTTPException(422, "Telegram foydalanuvchisiga faqat talaba yoki mentor roli beriladi")
     if "company_id" in changes:
         if not await session.get(Company, changes["company_id"]):
             raise HTTPException(404, "Kompaniya topilmadi")
@@ -290,19 +281,6 @@ async def update_rules(body: Rules, actor: OwnerActor, session: Session) -> Rule
     return await save_rules(session, body)
 
 
-@router.put("/password")
-async def change_password(body: PasswordChangeIn, actor: OwnerActor, session: Session) -> dict:
-    """Owner only. Every admin session opened with the old password is signed out."""
-    if not await admin_password.verify(session, body.current_password):
-        raise HTTPException(400, "Joriy parol noto'g'ri")
-    if body.new_password == body.current_password:
-        raise HTTPException(400, "Yangi parol eskisidan farq qilishi kerak")
-    audit(session, actor, "admin.password", "", "admin paroli almashtirildi")
-    await session.flush()
-    await admin_password.change(session, body.new_password)
-    return {"ok": True}
-
-
 @router.get("/bot", response_model=BotStatusOut)
 async def bot_status(_: AdminActor, session: Session) -> BotStatusOut:
     hint = await settings_store.get_hint(session, settings_store.BOT_TOKEN)
@@ -434,7 +412,7 @@ async def review_company(company_id: int, body: ReviewDecisionIn, actor: AdminAc
 
 
 @router.get("/jobs")
-async def jobs(_: AdminActor, session: Session, status: str | None = "pending") -> list:
+async def jobs(_: AdminActor, session: Session, status: str | None = None) -> list:
     query = select(Job)
     if status:
         query = query.where(Job.status == status)
@@ -509,3 +487,180 @@ async def edit_university(university_id: int, body: UniversityPatch, actor: Admi
     audit(session, actor, "university.update", uni.name)
     await session.commit()
     return uni
+
+
+# --------------------------------------------------------------------------- dashboard
+
+TASHKENT = ZoneInfo("Asia/Tashkent")
+
+
+def _period(date_from: date | None, date_to: date | None) -> tuple[date, date]:
+    to = date_to or datetime.now(TASHKENT).date()
+    frm = date_from or to - timedelta(days=29)
+    if frm > to:
+        raise HTTPException(422, "«Dan» sanasi «gacha» sanasidan keyin bo'lmasin")
+    if (to - frm).days > 366:
+        raise HTTPException(422, "Oraliq bir yildan oshmasin")
+    return frm, to
+
+
+async def _per_day(session: Session, column, frm: date, to: date, *where) -> list[int]:
+    day = func.date(func.timezone("Asia/Tashkent", column))
+    rows = dict((await session.execute(select(day, func.count()).where(day >= frm, day <= to, *where)
+                                       .group_by(day))).all())
+    return [rows.get(frm + timedelta(days=i), 0) for i in range((to - frm).days + 1)]
+
+
+@router.get("/dashboard")
+async def dashboard(_: AdminActor, session: Session,
+                    date_from: date | None = Query(default=None, alias="from"),
+                    date_to: date | None = Query(default=None, alias="to")) -> dict:
+    """Numbers for the admin home page within a date range (Tashkent days, both ends included)."""
+    frm, to = _period(date_from, date_to)
+    day = lambda col: func.date(func.timezone("Asia/Tashkent", col))  # noqa: E731
+    in_period = lambda col: (day(col) >= frm) & (day(col) <= to)  # noqa: E731
+    students = User.account_type == "student"
+    count = lambda model, *where: session.scalar(select(func.count()).select_from(model).where(*where))  # noqa: E731
+    week_ago = datetime.now(UTC) - timedelta(days=7)
+
+    apps_by_status = dict((await session.execute(
+        select(Application.status, func.count()).where(in_period(Application.created_at))
+        .group_by(Application.status))).all())
+    subs_by_status = dict((await session.execute(
+        select(Submission.status, func.count()).where(in_period(Submission.created_at))
+        .group_by(Submission.status))).all())
+    recent_apps = (await session.execute(
+        select(Application).where(in_period(Application.created_at))
+        .order_by(Application.created_at.desc()).limit(10))).scalars().all()
+    recent_subs = (await session.execute(
+        select(Submission).where(in_period(Submission.created_at))
+        .order_by(Submission.created_at.desc()).limit(10))).scalars().all()
+    per_track = (await session.execute(
+        select(Track.icon, Track.title, func.count(User.id)).outerjoin(User, (User.track_id == Track.id) & students)
+        .group_by(Track.id).order_by(func.count(User.id).desc()))).all()
+    per_uni = (await session.execute(
+        select(University.short_name, func.count(User.id)).join(User, User.university_id == University.id)
+        .where(students).group_by(University.id).order_by(func.count(User.id).desc()).limit(6))).all()
+
+    return {
+        "from": frm, "to": to,
+        "kpis": {
+            "students": await count(User, students),
+            "new_students": await count(User, students, in_period(User.created_at)),
+            "active_7d": await count(User, students, User.last_seen_at >= week_ago),
+            "verified_students": await count(User, students, User.verification == "verified"),
+            "submissions": sum(subs_by_status.values()),
+            "awaiting_review": await count(Submission, Submission.status.in_([Status.pending, Status.peer_verified])),
+            "companies": await count(Company, Company.status == "approved"),
+            "live_jobs": await count(Job, Job.status == "approved"),
+            "queue": (await count(User, User.verification == "pending")) + (await count(Company, Company.status == "pending"))
+                     + (await count(Job, Job.status == "pending")) + (await count(User, User.staff_status == "pending"))
+                     + (await count(AdminAccount, AdminAccount.status == "pending")),
+        },
+        "applications": {s: apps_by_status.get(s, 0) for s in ("new", "viewed", "shortlisted", "hired", "rejected")},
+        "submissions_by_status": {s.value: subs_by_status.get(s, 0) for s in Status},
+        "series": {
+            "dates": [frm + timedelta(days=i) for i in range((to - frm).days + 1)],
+            "registrations": await _per_day(session, User.created_at, frm, to, students),
+            "submissions": await _per_day(session, Submission.created_at, frm, to),
+            "applications": await _per_day(session, Application.created_at, frm, to),
+        },
+        "recent_applications": [{"id": a.id, "candidate": a.user.full_name, "job": a.job.title,
+                                 "company": a.job.company.name, "status": a.status, "created_at": a.created_at}
+                                for a in recent_apps],
+        "recent_submissions": [{"id": s.id, "student": s.user.full_name, "task": s.task.title,
+                                "track": s.task.track.title, "status": s.status.value, "created_at": s.created_at}
+                               for s in recent_subs],
+        "per_track": [{"icon": i, "title": t, "students": n} for i, t, n in per_track],
+        "per_university": [{"name": n, "students": c} for n, c in per_uni],
+    }
+
+
+# --------------------------------------------------------------------------- applications
+
+@router.get("/applications")
+async def applications(_: AdminActor, session: Session, status: str | None = None,
+                       q: str | None = Query(default=None, max_length=80),
+                       date_from: date | None = Query(default=None, alias="from"),
+                       date_to: date | None = Query(default=None, alias="to")) -> list[dict]:
+    query = select(Application).join(Job).join(Company).join(User, User.id == Application.user_id)
+    if status:
+        query = query.where(Application.status == status)
+    if q:
+        like = f"%{q.strip()}%"
+        query = query.where(User.full_name.ilike(like) | Job.title.ilike(like) | Company.name.ilike(like))
+    if date_from or date_to:
+        frm, to = _period(date_from, date_to)
+        day = func.date(func.timezone("Asia/Tashkent", Application.created_at))
+        query = query.where(day >= frm, day <= to)
+    rows = (await session.execute(query.order_by(Application.created_at.desc()).limit(500))).scalars()
+    return [{"id": a.id, "candidate": a.user.full_name, "username": a.user.username, "phone": a.user.phone,
+             "university": a.user.university_ref.short_name if a.user.university_ref else None,
+             "job": a.job.title, "kind": a.job.kind, "company": a.job.company.name, "status": a.status,
+             "note": a.note, "created_at": a.created_at, "updated_at": a.updated_at} for a in rows]
+
+
+# --------------------------------------------------------------------------- admin accounts (owner)
+
+def _account_out(a: AdminAccount) -> dict:
+    return {"id": a.id, "name": a.name, "email": a.email, "role": a.role, "status": a.status,
+            "created_at": a.created_at, "last_login_at": a.last_login_at}
+
+
+@router.get("/accounts")
+async def accounts(_: OwnerActor, session: Session) -> list[dict]:
+    rows = (await session.execute(select(AdminAccount).order_by(
+        (AdminAccount.status == "pending").desc(), AdminAccount.created_at))).scalars()
+    return [_account_out(a) for a in rows]
+
+
+class AccountPatch(BaseModel):
+    role: Literal["owner", "admin"] | None = None
+    status: Literal["active", "disabled"] | None = None
+
+
+@router.patch("/accounts/{account_id}")
+async def update_account(account_id: int, body: AccountPatch, actor: OwnerActor, session: Session) -> dict:
+    account = await session.get(AdminAccount, account_id)
+    if account is None:
+        raise HTTPException(404, "Hisob topilmadi")
+    changes = body.model_dump(exclude_none=True)
+    losing_owner = account.role == "owner" and account.status == "active" and (
+        changes.get("role") == "admin" or changes.get("status") == "disabled")
+    if losing_owner and await session.scalar(select(func.count()).select_from(AdminAccount).where(
+            AdminAccount.role == "owner", AdminAccount.status == "active")) <= 1:
+        raise HTTPException(400, "Kamida bitta faol ega qolishi kerak")
+    for field, value in changes.items():
+        setattr(account, field, value)
+    audit(session, actor, "account.update", account.email, ", ".join(f"{k}: {v}" for k, v in changes.items()))
+    await session.commit()
+    return _account_out(account)
+
+
+@router.post("/accounts/{account_id}/reset-password")
+async def reset_password(account_id: int, actor: OwnerActor, session: Session) -> dict:
+    """Sets a temporary password, shown once; the person changes it after signing in."""
+    account = await session.get(AdminAccount, account_id)
+    if account is None:
+        raise HTTPException(404, "Hisob topilmadi")
+    temporary = secrets.token_urlsafe(9)
+    account.password_hash = hash_password(temporary)
+    audit(session, actor, "account.reset", account.email)
+    await session.commit()
+    return {"temporary_password": temporary}
+
+
+@router.get("/export/applications.csv")
+async def export_applications(actor: AdminActor, session: Session) -> StreamingResponse:
+    rows = await applications(actor, session)
+    buf = io.StringIO()
+    buf.write("\ufeff")
+    out = csv.writer(buf)
+    out.writerow(["Nomzod", "Telefon", "Universitet", "Vakansiya", "Kompaniya", "Holat", "Sana"])
+    for r in rows:
+        out.writerow([r["candidate"], r["phone"], r["university"] or "", r["job"], r["company"], r["status"],
+                      r["created_at"].astimezone(TASHKENT).strftime("%Y-%m-%d %H:%M")])
+    audit(session, actor, "export.applications", f"{len(rows)} qator")
+    await session.commit()
+    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv; charset=utf-8",
+                             headers={"Content-Disposition": 'attachment; filename="careerflow-arizalar.csv"'})

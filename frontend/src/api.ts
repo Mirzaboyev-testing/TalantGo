@@ -33,7 +33,7 @@ export type WorkMode = "office" | "remote" | "hybrid";
 export interface University { id: number; name: string; short_name: string; city: string }
 export interface Company {
   id: number; name: string; stir: string | null; industry: string; website: string; city: string;
-  description: string; status: "pending" | "approved" | "rejected"; review_note: string;
+  description: string; status: "pending" | "approved" | "rejected"; review_note: string; created_at: string;
 }
 export interface Job {
   id: number; company_id: number; company_name: string; company_industry: string; title: string; kind: JobKind;
@@ -98,6 +98,8 @@ export class ApiError extends Error {
 
 let userToken = "";
 let adminToken = "";
+let onAdminUnauthorized: () => void = () => {};
+export const setAdminUnauthorizedHandler = (fn: () => void) => { onAdminUnauthorized = fn; };
 export const setUserToken = (t: string) => { userToken = t; };
 export const setAdminToken = (t: string) => { adminToken = t; };
 
@@ -124,6 +126,7 @@ async function request<T>(method: string, path: string, body?: unknown, admin = 
     throw new ApiError(0, "Internet aloqasi yo'q");
   }
   const data = resp.headers.get("content-type")?.includes("json") ? await resp.json() : null;
+  if (resp.status === 401 && admin) onAdminUnauthorized();
   if (!resp.ok) throw new ApiError(resp.status, describe(data?.detail));
   return data as T;
 }
@@ -149,7 +152,7 @@ export const api = {
   rules: () => request<Rules>("GET", "/rules"),
   universities: () => request<University[]>("GET", "/universities"),
   requestVerification: () => request<Me>("POST", "/me/verification"),
-  registerCompany: (c: Omit<Company, "id" | "status" | "review_note">) => request<Me>("POST", "/me/company", c),
+  registerCompany: (c: Omit<Company, "id" | "status" | "review_note" | "created_at">) => request<Me>("POST", "/me/company", c),
   requestStaff: (university_id: number, position: string) => request<Me>("POST", "/me/staff-request", { university_id, position }),
   backToStudent: () => request<Me>("POST", "/me/account-type/student"),
   jobs: (params: Record<string, string>) => request<Job[]>("GET", `/jobs?${new URLSearchParams(params)}`),
@@ -160,9 +163,19 @@ export const api = {
   myContacts: () => request<StudentContact[]>("GET", "/me/contacts"),
   answerContact: (id: number, accept: boolean) => request<{ status: string }>("POST", `/me/contacts/${id}`, { accept }),
 
+  adminAuth: {
+    status: () => request<{ needs_owner: boolean }>("GET", "/admin-auth/status"),
+    register: (b: { name: string; email: string; password: string; setup_code?: string }) =>
+      request<{ status: "active" | "pending"; token?: string }>("POST", "/admin-auth/register", b),
+    login: (email: string, password: string) => request<{ token: string }>("POST", "/admin-auth/login", { email, password }),
+    me: () => request<{ id: number; name: string; email: string; role: string; is_owner: boolean }>("GET", "/admin-auth/me", undefined, true),
+    changePassword: (current_password: string, new_password: string) =>
+      request<{ token: string }>("PUT", "/admin-auth/password", { current_password, new_password }, true),
+  },
+
   employer: {
     company: () => request<Company>("GET", "/employer/company"),
-    editCompany: (c: Omit<Company, "id" | "status" | "review_note">) => request<Company>("PATCH", "/employer/company", c),
+    editCompany: (c: Omit<Company, "id" | "status" | "review_note" | "created_at">) => request<Company>("PATCH", "/employer/company", c),
     jobs: () => request<Job[]>("GET", "/employer/jobs"),
     createJob: (j: JobInput) => request<Job>("POST", "/employer/jobs", j),
     editJob: (id: number, j: JobInput) => request<Job>("PUT", `/employer/jobs/${id}`, j),
@@ -192,11 +205,17 @@ export const api = {
   leaderboard: (scope: "all" | "track" | "group" | "university") => request<Leaderboard>("GET", `/leaderboard?scope=${scope}`),
 
   admin: {
-    login: (password: string) => request<{ token: string }>("POST", "/auth/admin", { password }),
-    me: () => request<{ name: string; is_owner: boolean }>("GET", "/admin/me", undefined, true),
+    dashboard: (from: string, to: string) => request<Dashboard>("GET", `/admin/dashboard?from=${from}&to=${to}`, undefined, true),
+    applications: (params: Record<string, string>) => request<AdminApplication[]>("GET", `/admin/applications?${new URLSearchParams(params)}`, undefined, true),
+    allJobs: (status: string) => request<Job[]>("GET", `/admin/jobs${status ? `?status=${status}` : ""}`, undefined, true),
+    accounts: () => request<AdminAccount[]>("GET", "/admin/accounts", undefined, true),
+    updateAccount: (id: number, changes: { role?: "owner" | "admin"; status?: "active" | "disabled" }) =>
+      request<AdminAccount>("PATCH", `/admin/accounts/${id}`, changes, true),
+    resetPassword: (id: number) => request<{ temporary_password: string }>("POST", `/admin/accounts/${id}/reset-password`, undefined, true),
+    exportApplications: () => download("/admin/export/applications.csv", "careerflow-arizalar.csv"),
     stats: () => request<AdminStats>("GET", "/admin/stats", undefined, true),
     users: (params: Record<string, string>) => request<AdminUser[]>("GET", `/admin/users?${new URLSearchParams(params)}`, undefined, true),
-    updateUser: (id: number, changes: Partial<Pick<AdminUser, "role" | "is_owner" | "is_blocked" | "group_name" | "university">>) =>
+    updateUser: (id: number, changes: Partial<Pick<AdminUser, "role" | "is_blocked" | "group_name" | "university">>) =>
       request<AdminUser>("PATCH", `/admin/users/${id}`, changes, true),
     adjustPoints: (id: number, delta: number, reason: string) => request<{ points: number }>("POST", `/admin/users/${id}/points`, { delta, reason }, true),
     submissions: (params: Record<string, string>) => request<AdminSubmission[]>("GET", `/admin/submissions?${new URLSearchParams(params)}`, undefined, true),
@@ -217,8 +236,6 @@ export const api = {
     testBot: () => request<{ username: string }>("POST", "/admin/bot/test", undefined, true),
     connectBot: () => request<{ username: string }>("POST", "/admin/bot/connect", undefined, true),
     exportUsers: () => download("/admin/export/users.csv", "careerflow-talabalar.csv"),
-    changePassword: (current_password: string, new_password: string) =>
-      request<{ ok: boolean }>("PUT", "/admin/password", { current_password, new_password }, true),
     inbox: () => request<{ verifications: number; companies: number; jobs: number; staff: number }>("GET", "/admin/inbox", undefined, true),
     verifications: () => request<PendingStudent[]>("GET", "/admin/verifications", undefined, true),
     decideVerification: (id: number, approve: boolean, note: string) => request<unknown>("POST", `/admin/verifications/${id}`, { approve, note }, true),
@@ -279,3 +296,24 @@ export function salary(job: Pick<Job, "is_paid" | "salary_from" | "salary_to">):
 }
 
 export const courseLabel = (c: number | null | undefined) => (!c ? "" : c === 7 ? "magistratura" : `${c}-kurs`);
+
+export interface AdminAccount {
+  id: number; name: string; email: string; role: "owner" | "admin"; status: "pending" | "active" | "disabled";
+  created_at: string; last_login_at: string | null;
+}
+export interface AdminApplication {
+  id: number; candidate: string; username: string | null; phone: string; university: string | null; job: string;
+  kind: JobKind; company: string; status: string; note: string; created_at: string; updated_at: string;
+}
+export interface Dashboard {
+  from: string; to: string;
+  kpis: { students: number; new_students: number; active_7d: number; verified_students: number; submissions: number;
+          awaiting_review: number; companies: number; live_jobs: number; queue: number };
+  applications: Record<"new" | "viewed" | "shortlisted" | "hired" | "rejected", number>;
+  submissions_by_status: Record<Status, number>;
+  series: { dates: string[]; registrations: number[]; submissions: number[]; applications: number[] };
+  recent_applications: { id: number; candidate: string; job: string; company: string; status: string; created_at: string }[];
+  recent_submissions: { id: number; student: string; task: string; track: string; status: Status; created_at: string }[];
+  per_track: { icon: string; title: string; students: number }[];
+  per_university: { name: string; students: number }[];
+}

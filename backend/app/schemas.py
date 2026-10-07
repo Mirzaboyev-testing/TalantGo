@@ -212,6 +212,7 @@ class CompanyOut(ORM):
     description: str
     status: str
     review_note: str
+    created_at: datetime
 
 
 class CompanyIn(BaseModel):

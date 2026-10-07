@@ -8,20 +8,18 @@ import ReviewScreen from "./screens/Review";
 import PeersScreen from "./screens/Peers";
 import LeaderboardScreen from "./screens/Leaderboard";
 import ProfileScreen from "./screens/Profile";
-import AdminPanel from "./screens/admin/AdminPanel";
 import JobsScreen from "./screens/Jobs";
 import Welcome, { PendingScreen } from "./screens/Welcome";
 import EmployerApp from "./screens/employer/EmployerApp";
 import UniversityApp from "./screens/university/UniversityApp";
 
-type Tab = "path" | "jobs" | "review" | "community" | "profile" | "admin";
+type Tab = "path" | "jobs" | "review" | "community" | "profile";
 const TABS: { id: Tab; icon: string; label: string }[] = [
   { id: "path", icon: "🧭", label: "Yo'l" },
   { id: "jobs", icon: "💼", label: "Vakansiyalar" },
   { id: "review", icon: "✅", label: "Tekshirish" },
   { id: "community", icon: "🤝", label: "Hamjamiyat" },
   { id: "profile", icon: "👤", label: "Profil" },
-  { id: "admin", icon: "⚙️", label: "Boshqaruv" },
 ];
 
 type AuthState = { kind: "loading" } | { kind: "outside" } | { kind: "dev" } | { kind: "error"; text: string } | { kind: "ok" };
@@ -101,8 +99,6 @@ export default function App() {
     );
   }
 
-  const isAdmin = me.role === "admin" || me.is_owner;
-  const tabs = TABS.filter((t) => t.id !== "admin" || isAdmin);
 
   return (
     <>
@@ -120,11 +116,10 @@ export default function App() {
           </>
         )}
         {tab === "profile" && <ProfileScreen me={me} onSaved={setMe} onChangeTrack={() => setChangingTrack(true)} />}
-        {tab === "admin" && isAdmin && <AdminPanel />}
       </div>
       <nav className="tabbar">
         <div className="tabbar-inner">
-          {tabs.map((t) => (
+          {TABS.map((t) => (
             <button key={t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}>
               <span>{t.icon}</span>{t.label}
             </button>

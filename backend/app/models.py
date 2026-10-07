@@ -347,3 +347,19 @@ class ContactRequest(Base):
     company: Mapped[Company] = relationship(lazy="selectin")
     student: Mapped[User] = relationship(foreign_keys=[student_id], lazy="selectin")
     job: Mapped[Job | None] = relationship(lazy="selectin")
+
+
+class AdminAccount(Base):
+    """A person who manages CareerFlow on the admin website. Not a Telegram user."""
+    __tablename__ = "admin_accounts"
+    __table_args__ = (_in("role", ("owner", "admin"), "admin_role_valid"),
+                      _in("status", ("pending", "active", "disabled"), "admin_status_valid"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(254), unique=True)
+    name: Mapped[str] = mapped_column(String(120))
+    password_hash: Mapped[str] = mapped_column(String(200))
+    role: Mapped[str] = mapped_column(String(16), default="admin")
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

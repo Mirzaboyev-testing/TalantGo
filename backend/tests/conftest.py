@@ -59,3 +59,14 @@ def make_user():
             await session.commit()
             return {"id": user.id, "headers": {"Authorization": f"Bearer {create_token(str(user.id), 'user', 1)}"}}
     return _make
+
+
+OWNER = {"name": "Muhammadqodir", "email": "owner@careerflow.test", "password": "owner-password-123"}
+
+
+async def owner_headers(client) -> dict:
+    """Signs in the site owner, creating the account with the setup code on first use."""
+    r = await client.post("/api/v1/admin-auth/login", json={"email": OWNER["email"], "password": OWNER["password"]})
+    if r.status_code != 200:
+        r = await client.post("/api/v1/admin-auth/register", json={**OWNER, "setup_code": "test-admin-password"})
+    return {"Authorization": f"Bearer {r.json()['token']}"}

@@ -7,6 +7,7 @@ from app.core.db import SessionLocal
 from app.models import Task, User
 from app.services import progress, reminders, settings_store, telegram_bot
 from app.services.progress import TASHKENT
+from tests.conftest import owner_headers
 
 BOT_TOKEN = "123456:TEST-token-for-unit-tests-only-abcdefghij"
 HEADERS = {"X-Telegram-Bot-Api-Secret-Token": telegram_bot.webhook_secret(BOT_TOKEN)}
@@ -40,8 +41,7 @@ async def test_invite_link_attributes_new_people_only(client, make_user, monkeyp
     me = (await client.get("/api/v1/me", headers=inviter["headers"])).json()
     assert me["invited_count"] == 1 and sent[0] == (700002, None)
 
-    owner = (await client.post("/api/v1/auth/admin", json={"password": "test-admin-password"})).json()["token"]
-    stats = (await client.get("/api/v1/admin/stats", headers={"Authorization": f"Bearer {owner}"})).json()
+    stats = (await client.get("/api/v1/admin/stats", headers=await owner_headers(client))).json()
     assert stats["top_inviters"] == [{"name": "Muhammadqodir", "count": 1}]
 
 

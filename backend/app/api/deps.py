@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_session
 from ..core.security import read_token
-from ..models import Role, User
-from ..services import admin_password
+from ..models import AdminAccount, AuditLog, User
+from ..services.admin_accounts import fingerprint
 
 Session = Annotated[AsyncSession, Depends(get_session)]
 
@@ -30,32 +30,37 @@ async def current_user(session: Session, authorization: Annotated[str | None, He
 
 @dataclass
 class Actor:
-    """Who is using the admin panel: the owner's password, or an admin's own Telegram account."""
-    name: str
-    is_owner: bool
-    user: User | None
+    """Who is using the admin website: an approved email account."""
+    account: AdminAccount
+
+    @property
+    def name(self) -> str:
+        return f"{self.account.name} <{self.account.email}>"
+
+    @property
+    def is_owner(self) -> bool:
+        return self.account.role == "owner"
 
 
 async def admin_actor(session: Session, authorization: Annotated[str | None, Header()] = None) -> Actor:
-    token = _bearer(authorization)
-    admin_sub = read_token(token, "admin")
-    if admin_sub is not None:
-        if admin_sub != f"admin:{await admin_password.fingerprint(session)}":
-            raise HTTPException(401, "Parol o'zgargan. Yangi parol bilan qayta kiring.")
-        return Actor(name="Ega (parol orqali)", is_owner=True, user=None)
-    user_id = read_token(token, "user")
-    user = await session.get(User, int(user_id)) if user_id else None
-    if user is None or user.is_blocked:
+    sub = read_token(_bearer(authorization), "admin") or ""
+    parts = sub.split(":")
+    if len(parts) != 3 or parts[0] != "acct" or not parts[1].isdigit():
         raise HTTPException(401, "Admin sifatida kiring")
-    if not (user.is_owner or user.role is Role.admin):
-        raise HTTPException(403, "Bu bo'lim faqat adminlar uchun")
-    return Actor(name=user.full_name, is_owner=user.is_owner, user=user)
+    account = await session.get(AdminAccount, int(parts[1]))
+    if account is None or account.status != "active" or parts[2] != fingerprint(account):
+        raise HTTPException(401, "Sessiya tugagan. Qayta kiring.")
+    return Actor(account=account)
 
 
 async def owner_actor(actor: Annotated[Actor, Depends(admin_actor)]) -> Actor:
     if not actor.is_owner:
         raise HTTPException(403, "Buni faqat ilova egasi qila oladi")
     return actor
+
+
+def audit(session: AsyncSession, actor: Actor, action: str, target: str = "", details: str = "") -> None:
+    session.add(AuditLog(actor=actor.name[:160], action=action, target=target[:200], details=details[:2000]))
 
 
 CurrentUser = Annotated[User, Depends(current_user)]

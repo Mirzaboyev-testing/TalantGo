@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type AdminTrack, type AdminUser, type Role } from "../../api";
+import { api, type AdminTrack, type AdminUser } from "../../api";
 import { ask } from "../../tg";
 import { ErrorText, message } from "../../ui";
-import type { AdminCtx } from "./AdminPanel";
+import type { AdminCtx } from "./AdminSite";
 
-type Level = Role | "owner";
-const LEVEL_LABEL: Record<Level, string> = { student: "Talaba", mentor: "Mentor", admin: "Admin", owner: "Ega" };
-const levelOf = (u: AdminUser): Level => (u.is_owner ? "owner" : u.role);
+// Telegram users are students or mentors; admins are separate website accounts ("Adminlar").
+type Level = "student" | "mentor";
+const LEVEL_LABEL: Record<Level, string> = { student: "Talaba", mentor: "Mentor" };
+const levelOf = (u: AdminUser): Level => (u.role === "student" ? "student" : "mentor");
 
 function ago(iso: string | null): string {
   if (!iso) return "hali kirmagan";
@@ -42,14 +43,14 @@ export default function Users({ ctx, onShowWork }: { ctx: AdminCtx; onShowWork: 
         <button className="btn small" type="submit">Qidirish</button>
       </form>
       <div className="chips" style={{ margin: "8px 0" }}>
-        {[["", "Hammasi"], ["student", "Talabalar"], ["mentor", "Mentorlar"], ["admin", "Adminlar"], ["blocked", "Bloklangan"]].map(([id, label]) => (
+        {[["", "Hammasi"], ["student", "Talabalar"], ["mentor", "Mentorlar"], ["blocked", "Bloklangan"]].map(([id, label]) => (
           <button key={id} className={`chip ${role === id ? "on" : ""}`} onClick={() => setRole(id)}>{label}</button>
         ))}
         <button className="chip" onClick={load}>↻ Yangilash</button>
       </div>
       <p className="hint">
-        Mentorlar tengdoshlar tasdiqlagan ishlarni yakuniy tasdiqlaydi. Adminlar ilovani boshqaradi.
-        {ctx.isOwner ? " Admin va egani faqat siz tayinlaysiz." : " Adminlarni faqat ilova egasi tayinlaydi."}
+        Mentorlar tengdoshlar tasdiqlagan ishlarni yakuniy tasdiqlaydi.
+        {" "}Sayt adminlari «Adminlar» bo'limida boshqariladi.
       </p>
       <ErrorText error={error} />
       {!users && !error && <div className="hint">Yuklanmoqda…</div>}
@@ -71,8 +72,7 @@ function UserCard({ user, ctx, track, onChanged, onShowWork }: {
   const [delta, setDelta] = useState("");
   const [reason, setReason] = useState("");
   const level = levelOf(user);
-  const protectedUser = (level === "admin" || level === "owner") && !ctx.isOwner;
-  const levels: Level[] = ctx.isOwner ? ["student", "mentor", "admin", "owner"] : ["student", "mentor"];
+  const levels: Level[] = ["student", "mentor"];
 
   async function run(action: () => Promise<AdminUser>) {
     setBusy(true); setError("");
@@ -81,8 +81,8 @@ function UserCard({ user, ctx, track, onChanged, onShowWork }: {
 
   async function setLevel(next: Level) {
     if (next === level) return;
-    if ((next === "owner" || next === "admin") && !(await ask(`${user.full_name} ga «${LEVEL_LABEL[next]}» huquqi berilsinmi?`))) return;
-    void run(() => api.admin.updateUser(user.id, next === "owner" ? { is_owner: true } : { role: next, ...(user.is_owner ? { is_owner: false } : {}) }));
+    if (next === "mentor" && !(await ask(`${user.full_name} mentor bo'lsinmi? U ishlarni yakuniy tasdiqlay oladi.`))) return;
+    void run(() => api.admin.updateUser(user.id, { role: next }));
   }
 
   async function adjust() {
@@ -104,14 +104,14 @@ function UserCard({ user, ctx, track, onChanged, onShowWork }: {
           </div>
           <div className="hint">{user.points} ball · {user.verified_tasks} tasdiqlangan ish · {ago(user.last_seen_at)}</div>
         </div>
-        <select value={level} disabled={busy || protectedUser} style={{ width: "auto" }} onChange={(e) => void setLevel(e.target.value as Level)}>
-          {(protectedUser ? [level] : levels).map((l) => <option key={l} value={l}>{LEVEL_LABEL[l]}</option>)}
+        <select value={level} disabled={busy} style={{ width: "auto" }} onChange={(e) => void setLevel(e.target.value as Level)}>
+          {levels.map((l) => <option key={l} value={l}>{LEVEL_LABEL[l]}</option>)}
         </select>
       </div>
       <div className="row wrap" style={{ marginTop: 8 }}>
         <button className="btn small ghost" onClick={onShowWork}>Ishlari</button>
         {user.username && <a className="btn small ghost" href={`https://t.me/${user.username}`} target="_blank" rel="noreferrer">Yozish</a>}
-        {!protectedUser && (
+        {(
           <button className="btn small ghost" disabled={busy}
                   onClick={async () => (user.is_blocked || (await ask(`${user.full_name} bloklansinmi? U ilovaga kira olmaydi.`))) &&
                     run(() => api.admin.updateUser(user.id, { is_blocked: !user.is_blocked }))}>

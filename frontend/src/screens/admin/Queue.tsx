@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, JOB_KIND, salary, type Company, type Job, type PendingStudent, type StaffRequest } from "../../api";
 import { openLink } from "../../tg";
 import { ErrorText, message } from "../../ui";
-import type { AdminCtx } from "./AdminPanel";
+import type { AdminCtx } from "./AdminSite";
 
 type Kind = "verifications" | "companies" | "jobs" | "staff";
 const KINDS: [Kind, string][] = [["verifications", "Talabalar"], ["companies", "Kompaniyalar"], ["jobs", "Vakansiyalar"], ["staff", "Universitet xodimlari"]];
