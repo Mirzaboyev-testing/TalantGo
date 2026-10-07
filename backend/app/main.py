@@ -1,0 +1,52 @@
+import logging
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+from .api import admin, auth, learning, pages, people
+from .core.config import settings
+from .core.db import Base, SessionLocal, engine
+from .seed import seed
+
+logging.basicConfig(level=logging.INFO)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Pilot stage: tables are created from the models. Switch to Alembic migrations before the
+    # second group joins, when the schema has to change under real data.
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    async with SessionLocal() as session:
+        await seed(session)
+    yield
+    await engine.dispose()
+
+
+app = FastAPI(title="CareerFlow API", version="0.1.0", lifespan=lifespan,
+              docs_url="/api/docs" if settings.app_env == "dev" else None, openapi_url="/api/openapi.json")
+
+for router in (auth.router, people.router, learning.router, admin.router):
+    app.include_router(router, prefix="/api/v1")
+app.include_router(pages.router)
+
+
+@app.get("/api/health", include_in_schema=False)
+async def health() -> dict:
+    return {"ok": True}
+
+
+# The Telegram app (React build). Any non-API path falls back to index.html for client routing.
+static = Path(settings.static_dir)
+if (static / "index.html").exists():
+    app.mount("/assets", StaticFiles(directory=static / "assets"), name="assets")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    async def spa(path: str) -> FileResponse:
+        file = (static / path).resolve()
+        if path and file.is_file() and file.is_relative_to(static.resolve()):
+            return FileResponse(file)
+        return FileResponse(static / "index.html", headers={"Cache-Control": "no-cache"})

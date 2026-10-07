@@ -1,0 +1,42 @@
+# CareerFlow: its own project name, database, volume and ports. Shares nothing with other projects.
+name: careerflow
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: careerflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-careerflow_dev}
+      POSTGRES_DB: careerflow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5434:5432"          # local only; 5433 belongs to another project
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U careerflow -d careerflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  api:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://careerflow:${POSTGRES_PASSWORD:-careerflow_dev}@db:5432/careerflow
+      SECRETS_DIR: /data/secrets
+    volumes:
+      - ./secrets:/data/secrets          # instance key: never in the database, never in git
+      - ./backend/app:/app/app
+      - ./backend/tests:/app/tests
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8090}:8000"
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

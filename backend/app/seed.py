@@ -1,0 +1,123 @@
+"""Starting tracks for the pilot group (economics & management students plus IT).
+
+Inserted once per track slug. Later edits made in the admin page are never overwritten.
+"""
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .models import Task, Track
+
+POINTS_BY_WEEK = {1: 10, 2: 15, 3: 20, 4: 30}
+
+TRACKS: list[dict] = [
+    {
+        "slug": "data-analytics", "icon": "📊", "title": "Data Analytics: Excel, SQL, Power BI",
+        "description": "Ma'lumotni tozalash, so'rov yozish va biznes uchun dashboard qurish.",
+        "tasks": [
+            ("Excel: tozalash va pivot jadval",
+             "Ochiq datasetni oling (data.gov.uz, stat.uz yoki Kaggle). Dublikat va bo'sh qiymatlarni tozalang, "
+             "2 ta pivot jadval va 1 ta grafik tuzing. Qaysi qadamlarni bajarganingizni alohida varaqda yozing.",
+             "Fayl havolasi (Google Drive yoki OneDrive, ko'rish ochiq)."),
+            ("SQL: 10 ta so'rov",
+             "SQLite yoki PostgreSQL'da jadval yarating va SELECT, WHERE, GROUP BY, JOIN ishlatib 10 ta so'rov yozing. "
+             "Har biri uchun: savol, so'rov va natija.",
+             "GitHub repo yoki Google Doc havolasi."),
+            ("Power BI: birinchi dashboard",
+             "Kamida 3 ta vizual, 1 ta slicer (filtr) va 1 ta DAX o'lchovi bo'lgan dashboard yarating.",
+             "Publish to web havolasi yoki skrinshotlar va .pbix fayl joylangan Drive papkasi."),
+            ("Mini-loyiha: biznes savoliga javob",
+             "Bitta biznes savolini tanlang, ma'lumotni tahlil qiling va 3 ta aniq xulosa chiqaring. "
+             "Natijani 5 slaydli taqdimotga joylang.",
+             "Taqdimot havolasi va ishlatilgan fayllar."),
+        ],
+    },
+    {
+        "slug": "econometrics", "icon": "📈", "title": "Ekonometrika va statistika: Stata / R",
+        "description": "Statistik tahlil, gipotezalarni tekshirish va regressiya modellari.",
+        "tasks": [
+            ("Tavsifiy statistika",
+             "Dataset uchun o'rtacha, median, standart og'ish, gistogramma va korrelyatsiya matritsasini hisoblang. "
+             "Natijani 5-6 gapda oddiy tilda tushuntiring.",
+             "Stata do-file yoki R skript va natijalar (GitHub yoki Drive)."),
+            ("Gipotezalarni tekshirish",
+             "Bitta t-test va bitta xi-kvadrat test o'tkazing. Nol gipoteza, p-qiymat va xulosani yozing.",
+             "Skript va natijalar havolasi."),
+            ("Chiziqli regressiya (OLS)",
+             "Regressiya modeli quring, koeffitsiyentlarni talqin qiling, R² va heteroskedastiklik testini ko'rsating.",
+             "Skript va 1 betlik izoh."),
+            ("Mini-tadqiqot: O'zbekiston ma'lumotlari",
+             "stat.uz ma'lumotlari asosida bitta iqtisodiy savolni tahlil qiling va 2-3 betlik hisobot yozing.",
+             "Hisobot (PDF) va skript havolasi."),
+        ],
+    },
+    {
+        "slug": "machine-learning", "icon": "🤖", "title": "Machine Learning: Python",
+        "description": "Python, pandas va scikit-learn bilan bashorat modellari.",
+        "tasks": [
+            ("Python va pandas: EDA",
+             "Google Colab yoki Kaggle'da datasetni yuklang, ma'lumotni o'rganing (EDA) va 3 ta grafik chizing.",
+             "Ochiq notebook havolasi (Colab, Kaggle yoki GitHub)."),
+            ("Birinchi model",
+             "Ma'lumotni train/test ga bo'ling, LinearRegression yoki LogisticRegression o'qiting va metrikani hisoblang.",
+             "Notebook havolasi."),
+            ("Modellarni taqqoslash",
+             "Kamida 3 ta algoritmni cross-validation bilan solishtiring va natijani jadvalda ko'rsating.",
+             "Notebook havolasi."),
+            ("Kaggle loyiha",
+             "Titanic yoki House Prices musobaqasiga submission yuboring va notebookni ochiq qiling.",
+             "Kaggle notebook havolasi va olingan ball."),
+        ],
+    },
+    {
+        "slug": "finance", "icon": "💼", "title": "Moliyaviy tahlil va biznes",
+        "description": "Hisobotlarni o'qish, moliyaviy model va unit-ekonomika.",
+        "tasks": [
+            ("Moliyaviy hisobotni o'qish",
+             "Bitta kompaniyaning (masalan, openinfo.uz dagi aksiyadorlik jamiyati) balans va foyda hisobotidan "
+             "5 ta koeffitsiyent hisoblang va ularni izohlang.",
+             "Excel fayl havolasi."),
+            ("Excel'da moliyaviy model",
+             "3 yillik daromad va xarajat prognozini tuzing: optimistik, asosiy va pessimistik ssenariylar bilan.",
+             "Excel fayl havolasi."),
+            ("Unit-ekonomika",
+             "Bitta biznes uchun CAC, LTV va marjani hisoblang. Taxminlaringiz manbasini yozing.",
+             "Hisob-kitob fayli havolasi."),
+            ("Lean Canvas va pitch",
+             "Bitta biznes g'oya uchun 1 betlik Lean Canvas va 5 slaydli pitch tayyorlang.",
+             "Taqdimot havolasi."),
+        ],
+    },
+    {
+        "slug": "backend", "icon": "⚙️", "title": "Backend: Python va API",
+        "description": "Git, Python, REST API va ma'lumotlar bazasi.",
+        "tasks": [
+            ("Git va GitHub",
+             "Repo yarating, README yozing va kamida 5 ta mazmunli commit qiling.",
+             "GitHub repo havolasi."),
+            ("Python CLI dastur",
+             "Ma'lumotni faylga saqlaydigan konsol dastur yozing (masalan, xarajatlar hisobchisi).",
+             "GitHub repo havolasi."),
+            ("FastAPI bilan REST API",
+             "4 ta CRUD endpointli API yozing, /docs sahifasi ishlashi kerak.",
+             "GitHub repo havolasi va ishga tushirish yo'riqnomasi."),
+            ("API va ma'lumotlar bazasi",
+             "API'ni SQLite yoki PostgreSQL'ga ulang. README'da qanday ishga tushirishni yozing.",
+             "GitHub repo havolasi."),
+        ],
+    },
+]
+
+
+async def seed(session: AsyncSession) -> None:
+    existing = set((await session.execute(select(Track.slug))).scalars())
+    for order, spec in enumerate(TRACKS):
+        if spec["slug"] in existing:
+            continue
+        track = Track(slug=spec["slug"], icon=spec["icon"], title=spec["title"],
+                      description=spec["description"], sort_order=order)
+        session.add(track)
+        await session.flush()
+        for week, (title, description, proof_hint) in enumerate(spec["tasks"], start=1):
+            session.add(Task(track_id=track.id, week=week, sort_order=week, title=title,
+                             description=description, proof_hint=proof_hint, points=POINTS_BY_WEEK[week]))
+    await session.commit()
