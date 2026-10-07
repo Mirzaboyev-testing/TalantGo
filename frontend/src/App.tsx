@@ -9,13 +9,17 @@ import PeersScreen from "./screens/Peers";
 import LeaderboardScreen from "./screens/Leaderboard";
 import ProfileScreen from "./screens/Profile";
 import AdminPanel from "./screens/admin/AdminPanel";
+import JobsScreen from "./screens/Jobs";
+import Welcome, { PendingScreen } from "./screens/Welcome";
+import EmployerApp from "./screens/employer/EmployerApp";
+import UniversityApp from "./screens/university/UniversityApp";
 
-type Tab = "path" | "review" | "peers" | "top" | "profile" | "admin";
+type Tab = "path" | "jobs" | "review" | "community" | "profile" | "admin";
 const TABS: { id: Tab; icon: string; label: string }[] = [
   { id: "path", icon: "🧭", label: "Yo'l" },
+  { id: "jobs", icon: "💼", label: "Vakansiyalar" },
   { id: "review", icon: "✅", label: "Tekshirish" },
-  { id: "peers", icon: "🤝", label: "Tengdoshlar" },
-  { id: "top", icon: "🏆", label: "Reyting" },
+  { id: "community", icon: "🤝", label: "Hamjamiyat" },
   { id: "profile", icon: "👤", label: "Profil" },
   { id: "admin", icon: "⚙️", label: "Boshqaruv" },
 ];
@@ -27,6 +31,8 @@ export default function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [tab, setTab] = useState<Tab>("path");
   const [changingTrack, setChangingTrack] = useState(false);
+  const [chosenStudent, setChosenStudent] = useState(false);
+  const [communityView, setCommunityView] = useState<"peers" | "top">("peers");
 
   const refreshMe = useCallback(async () => setMe(await api.me()), []);
 
@@ -68,6 +74,21 @@ export default function App() {
   if (auth.kind === "dev") return <DevLogin onLogin={(id, name) => signIn(() => api.devLogin(id, name))} />;
   if (!me) return null;
 
+  // Employers and university staff get their own apps once an admin has checked them.
+  if (me.account_type === "employer") {
+    return me.company?.status === "approved"
+      ? <EmployerApp me={me} onChanged={setMe} />
+      : <div className="app"><PendingScreen me={me} onChanged={setMe} /></div>;
+  }
+  if (me.account_type === "university") {
+    return me.staff_status === "approved"
+      ? <UniversityApp me={me} />
+      : <div className="app"><PendingScreen me={me} onChanged={setMe} /></div>;
+  }
+  if (!me.track && !me.has_consent && !chosenStudent) {
+    return <div className="app"><Welcome me={me} onStudent={() => setChosenStudent(true)} onChanged={setMe} /></div>;
+  }
+
   if (!me.track || changingTrack) {
     return (
       <div className="app">
@@ -85,8 +106,16 @@ export default function App() {
       <div className="app">
         {tab === "path" && <PathScreen me={me} onChanged={refreshMe} onChangeTrack={() => setChangingTrack(true)} />}
         {tab === "review" && <ReviewScreen me={me} onChanged={refreshMe} />}
-        {tab === "peers" && <PeersScreen me={me} />}
-        {tab === "top" && <LeaderboardScreen />}
+        {tab === "jobs" && <JobsScreen me={me} onOpenProfile={() => setTab("profile")} />}
+        {tab === "community" && (
+          <>
+            <div className="segmented" style={{ marginTop: 4 }}>
+              <button className={communityView === "peers" ? "on" : ""} onClick={() => setCommunityView("peers")}>Tengdoshlar</button>
+              <button className={communityView === "top" ? "on" : ""} onClick={() => setCommunityView("top")}>Reyting</button>
+            </div>
+            {communityView === "peers" ? <PeersScreen me={me} /> : <LeaderboardScreen />}
+          </>
+        )}
         {tab === "profile" && <ProfileScreen me={me} onSaved={setMe} onChangeTrack={() => setChangingTrack(true)} />}
         {tab === "admin" && isAdmin && <AdminPanel />}
       </div>

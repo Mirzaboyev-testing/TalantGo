@@ -1,0 +1,237 @@
+"""Employer (HR) side: company profile, job posts, applicants, anonymous talent search, contacts.
+
+Students stay anonymous to an employer until they apply to its job or accept its contact request.
+"""
+from datetime import UTC, datetime, timedelta
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select
+
+from ..models import Application, Company, ContactRequest, Job, Role, Status, Submission, User
+from ..schemas import (ApplicantOut, ApplicationPatch, CompanyIn, CompanyOut, ContactIn, JobIn, JobOut)
+from ..services import notify
+from ..services.career import JOB_KIND_LABEL, anonymous_card, identity
+from .deps import CurrentUser, Session
+from .jobs import job_out
+
+router = APIRouter(prefix="/employer", tags=["employer"])
+CONTACTS_PER_DAY = 20          # per company: keeps students from being spammed
+
+
+async def employer(user: CurrentUser) -> User:
+    if user.account_type != "employer" or user.company is None:
+        raise HTTPException(403, "Bu bo'lim ish beruvchilar uchun")
+    return user
+
+
+async def approved_employer(user: Annotated[User, Depends(employer)]) -> User:
+    if user.company.status != "approved":
+        raise HTTPException(403, "Kompaniyangiz hali tekshirilmoqda. Tasdiqlangach vakansiya joylay olasiz.")
+    return user
+
+
+Employer = Annotated[User, Depends(employer)]
+ApprovedEmployer = Annotated[User, Depends(approved_employer)]
+
+
+def _verified_count():
+    return (select(func.count()).where(Submission.user_id == User.id,
+                                       Submission.status.in_([Status.peer_verified, Status.mentor_verified]))
+            .correlate(User).scalar_subquery())
+
+
+async def _notify_admins(session: Session, text: str) -> None:
+    ids = (await session.execute(select(User.telegram_id).where(
+        (User.role == Role.admin) | User.is_owner, User.is_blocked.is_(False)))).scalars().all()
+    notify.send(list(ids), text)
+
+
+# --------------------------------------------------------------------------- company
+
+@router.get("/company", response_model=CompanyOut)
+async def my_company(user: Employer) -> Company:
+    return user.company
+
+
+@router.patch("/company", response_model=CompanyOut)
+async def edit_company(body: CompanyIn, user: Employer, session: Session) -> Company:
+    company = user.company
+    if body.stir and body.stir != company.stir and await session.scalar(
+            select(func.count()).select_from(Company).where(Company.stir == body.stir)):
+        raise HTTPException(409, "Bu STIR boshqa kompaniyaga tegishli")
+    identity_changed = body.name != company.name or body.stir != company.stir
+    for field, value in body.model_dump().items():
+        setattr(company, field, value)
+    if identity_changed and company.status == "approved":
+        company.status = "pending"              # a new name or STIR has to be checked again
+    await session.commit()
+    return company
+
+
+# --------------------------------------------------------------------------- jobs
+
+@router.get("/jobs", response_model=list[JobOut])
+async def my_jobs(user: Employer, session: Session) -> list[JobOut]:
+    counts = (select(func.count()).where(Application.job_id == Job.id).correlate(Job).scalar_subquery())
+    rows = (await session.execute(select(Job, counts).where(Job.company_id == user.company_id)
+                                  .order_by(Job.created_at.desc()))).all()
+    return [job_out(j, applications=n) for j, n in rows]
+
+
+@router.post("/jobs", response_model=JobOut, status_code=201)
+async def create_job(body: JobIn, user: ApprovedEmployer, session: Session) -> JobOut:
+    job = Job(**body.model_dump(), company_id=user.company_id, created_by_id=user.id)
+    session.add(job)
+    await session.commit()
+    await session.refresh(job)
+    await _notify_admins(session, f"Yangi vakansiya tekshiruvni kutmoqda: {user.company.name}, «{job.title}».")
+    return job_out(job)
+
+
+async def _own_job(session: Session, user: User, job_id: int) -> Job:
+    job = await session.get(Job, job_id)
+    if job is None or job.company_id != user.company_id:
+        raise HTTPException(404, "Vakansiya topilmadi")
+    return job
+
+
+@router.put("/jobs/{job_id}", response_model=JobOut)
+async def edit_job(job_id: int, body: JobIn, user: ApprovedEmployer, session: Session) -> JobOut:
+    job = await _own_job(session, user, job_id)
+    if job.status == "closed":
+        raise HTTPException(409, "Yopilgan vakansiyani tahrirlab bo'lmaydi")
+    for field, value in body.model_dump().items():
+        setattr(job, field, value)
+    job.status, job.review_note = "pending", ""        # every edit is checked again before students see it
+    await session.commit()
+    return job_out(job)
+
+
+@router.post("/jobs/{job_id}/close", response_model=JobOut)
+async def close_job(job_id: int, user: Employer, session: Session) -> JobOut:
+    job = await _own_job(session, user, job_id)
+    job.status = "closed"
+    await session.commit()
+    return job_out(job)
+
+
+@router.get("/jobs/{job_id}/applicants", response_model=list[ApplicantOut])
+async def applicants(job_id: int, user: Employer, session: Session) -> list[ApplicantOut]:
+    await _own_job(session, user, job_id)
+    verified = _verified_count().label("verified")
+    rows = (await session.execute(select(Application, verified).join(User, User.id == Application.user_id)
+                                  .where(Application.job_id == job_id)
+                                  .order_by(Application.created_at.desc()))).all()
+    out = []
+    for app, n in rows:
+        if app.status == "new":
+            app.status = "viewed"
+        out.append(ApplicantOut(id=app.id, status=app.status, note=app.note, employer_note=app.employer_note,
+                                created_at=app.created_at, card=anonymous_card(app.user, n),
+                                identity=identity(app.user)))      # the student chose to apply: identity is shared
+    await session.commit()
+    return out
+
+
+STATUS_MESSAGE = {
+    "shortlisted": "🎉 «{job}» ({company}) bo'yicha arizangiz keyingi bosqichga o'tdi. Kompaniya siz bilan bog'lanadi.",
+    "rejected": "«{job}» ({company}) bo'yicha arizangiz bu safar qabul qilinmadi. Boshqa vakansiyalarni ko'ring!",
+    "hired": "🏆 Tabriklaymiz! «{job}» ({company}) bo'yicha sizni qabul qilishdi.",
+}
+
+
+@router.patch("/applications/{application_id}", response_model=ApplicantOut)
+async def update_application(application_id: int, body: ApplicationPatch, user: Employer, session: Session) -> ApplicantOut:
+    app = await session.get(Application, application_id)
+    if app is None or app.job.company_id != user.company_id:
+        raise HTTPException(404, "Ariza topilmadi")
+    previous = app.status
+    for field, value in body.model_dump(exclude_unset=True, exclude_none=True).items():
+        setattr(app, field, value)
+    await session.commit()
+    if app.status != previous and app.status in STATUS_MESSAGE:
+        notify.send([app.user.telegram_id], STATUS_MESSAGE[app.status].format(job=app.job.title, company=user.company.name))
+    n = await session.scalar(select(func.count()).where(Submission.user_id == app.user_id,
+                                                        Submission.status.in_([Status.peer_verified, Status.mentor_verified])))
+    return ApplicantOut(id=app.id, status=app.status, note=app.note, employer_note=app.employer_note,
+                        created_at=app.created_at, card=anonymous_card(app.user, n), identity=identity(app.user))
+
+
+# --------------------------------------------------------------------------- talent search
+
+@router.get("/talent")
+async def talent(user: ApprovedEmployer, session: Session,
+                 university_id: int | None = None, track_id: int | None = None,
+                 course: int | None = Query(default=None, ge=1, le=7),
+                 skill: str | None = Query(default=None, max_length=40),
+                 job_type: str | None = None, city: str | None = Query(default=None, max_length=60),
+                 verified_only: bool = False, min_points: int = Query(default=0, ge=0)) -> list[dict]:
+    """Anonymous cards of students who said they are open to work."""
+    verified = _verified_count().label("verified")
+    query = select(User, verified).where(
+        User.account_type == "student", User.open_to_work.is_(True), User.is_blocked.is_(False),
+        User.consent_at.isnot(None), User.verification != "rejected", User.points >= min_points)
+    if university_id:
+        query = query.where(User.university_id == university_id)
+    if track_id:
+        query = query.where(User.track_id == track_id)
+    if course:
+        query = query.where(User.course == course)
+    if skill:
+        query = query.where(User.skills.contains([skill.strip()]))
+    if job_type:
+        query = query.where(User.job_types.contains([job_type]))
+    if city:
+        query = query.where(User.city.ilike(city.strip()))
+    if verified_only:
+        query = query.where(User.verification == "verified")
+    rows = (await session.execute(query.order_by((User.verification == "verified").desc(), User.points.desc())
+                                  .limit(60))).all()
+    contacted = dict((await session.execute(select(ContactRequest.student_id, ContactRequest.status)
+                                            .where(ContactRequest.company_id == user.company_id))).all())
+    return [{**anonymous_card(u, n), "contact_status": contacted.get(u.id)} for u, n in rows]
+
+
+@router.post("/talent/{student_id}/contact", status_code=201)
+async def contact(student_id: int, body: ContactIn, user: ApprovedEmployer, session: Session) -> dict:
+    student = await session.get(User, student_id)
+    if student is None or not student.open_to_work or student.account_type != "student" or student.is_blocked:
+        raise HTTPException(404, "Talaba topilmadi")
+    if await session.scalar(select(ContactRequest.id).where(ContactRequest.company_id == user.company_id,
+                                                            ContactRequest.student_id == student_id)):
+        raise HTTPException(409, "Bu talabaga allaqachon so'rov yuborgansiz")
+    since = datetime.now(UTC) - timedelta(days=1)
+    sent_today = await session.scalar(select(func.count()).select_from(ContactRequest).where(
+        ContactRequest.company_id == user.company_id, ContactRequest.created_at >= since))
+    if sent_today >= CONTACTS_PER_DAY:
+        raise HTTPException(429, f"Bir kunda {CONTACTS_PER_DAY} tadan ortiq so'rov yuborib bo'lmaydi")
+    if body.job_id and not await session.scalar(select(Job.id).where(Job.id == body.job_id, Job.company_id == user.company_id)):
+        raise HTTPException(404, "Vakansiya topilmadi")
+    session.add(ContactRequest(company_id=user.company_id, employer_id=user.id, student_id=student_id,
+                               job_id=body.job_id, message=body.message.strip()))
+    await session.commit()
+    notify.send([student.telegram_id],
+                f"💼 {user.company.name} kompaniyasi siz bilan bog'lanmoqchi:\n\n{body.message.strip()}\n\n"
+                "Ilovadagi «Vakansiyalar» bo'limida rozilik bersangiz, ismingiz va profilingiz ularga ochiladi.")
+    return {"status": "pending"}
+
+
+@router.get("/contacts")
+async def contacts(user: Employer, session: Session) -> list[dict]:
+    verified = _verified_count().label("verified")
+    rows = (await session.execute(select(ContactRequest, verified).join(User, User.id == ContactRequest.student_id)
+                                  .where(ContactRequest.company_id == user.company_id)
+                                  .order_by(ContactRequest.created_at.desc()))).all()
+    return [{"id": c.id, "status": c.status, "message": c.message, "created_at": c.created_at,
+             "job_title": c.job.title if c.job else None, "card": anonymous_card(c.student, n),
+             "identity": identity(c.student) if c.status == "accepted" else None} for c, n in rows]
+
+
+@router.get("/stats")
+async def employer_stats(user: Employer, session: Session) -> dict:
+    jobs = (await session.execute(select(Job.status, func.count()).where(Job.company_id == user.company_id)
+                                  .group_by(Job.status))).all()
+    apps = (await session.execute(select(Application.status, func.count()).join(Job)
+                                  .where(Job.company_id == user.company_id).group_by(Application.status))).all()
+    return {"jobs": dict(jobs), "applications": dict(apps), "kinds": JOB_KIND_LABEL}

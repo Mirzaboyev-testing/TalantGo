@@ -10,11 +10,15 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 
 from ..core.config import settings
-from ..models import Announcement, AuditLog, Role, Status, Submission, Task, Track, User
+from ..models import (Announcement, AuditLog, Company, Job, Role, Status, Submission, Task, Track, University,
+                      User)
 from ..schemas import (AdminMeOut, AdminSubmissionOut, AdminTaskOut, AdminTrackOut, AdminUserOut,
-                       AnnouncementIn, AnnouncementOut, AuditOut, BotStatusOut, BotTokenIn,
-                       PointsAdjustIn, ReviewOut, TaskIn, TaskPatch, TrackIn, TrackPatch, UserPatch)
-from ..services import announcements, settings_store, telegram_bot
+                       AnnouncementIn, AnnouncementOut, AuditOut, BotStatusOut, BotTokenIn, CompanyOut,
+                       PointsAdjustIn, ReviewDecisionIn, ReviewOut, TaskIn, TaskPatch, TrackIn, TrackPatch,
+                       UniversityIn, UniversityOut, UniversityPatch, UserPatch)
+from ..services import announcements, notify, settings_store, telegram_bot
+from ..services.career import decide_verification
+from .jobs import company_hr_ids, job_out
 from ..services.rules import Rules, get_rules, save_rules
 from .deps import Actor, AdminActor, OwnerActor, Session
 
@@ -98,6 +102,10 @@ async def update_user(user_id: int, body: UserPatch, actor: AdminActor, session:
         raise HTTPException(400, "O'zingizni bloklay yoki huquqingizni olib tashlay olmaysiz")
     if changes.get("is_owner"):
         changes["role"] = Role.admin             # an owner always has admin rights
+    if "company_id" in changes:
+        if not await session.get(Company, changes["company_id"]):
+            raise HTTPException(404, "Kompaniya topilmadi")
+        changes["account_type"] = "employer"
     before = {k: getattr(user, k) for k in changes}
     for field, value in changes.items():
         setattr(user, field, value)
@@ -348,3 +356,138 @@ async def export_users(actor: AdminActor, session: Session) -> StreamingResponse
     await session.commit()
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv; charset=utf-8",
                              headers={"Content-Disposition": 'attachment; filename="careerflow-talabalar.csv"'})
+
+
+# --------------------------------------------------------------------------- moderation queues
+
+@router.get("/inbox")
+async def inbox(_: AdminActor, session: Session) -> dict:
+    """Counts behind the badges: everything that waits for an admin decision."""
+    count = lambda model, *where: session.scalar(select(func.count()).select_from(model).where(*where))  # noqa: E731
+    return {
+        "verifications": await count(User, User.verification == "pending"),
+        "companies": await count(Company, Company.status == "pending"),
+        "jobs": await count(Job, Job.status == "pending"),
+        "staff": await count(User, User.staff_status == "pending"),
+    }
+
+
+@router.get("/verifications")
+async def verifications(_: AdminActor, session: Session, status: str = "pending") -> list[dict]:
+    rows = (await session.execute(select(User).where(User.verification == status, User.account_type == "student")
+                                  .order_by(User.created_at).limit(200))).scalars()
+    return [{"id": u.id, "full_name": u.full_name, "username": u.username,
+             "university": u.university_ref.name if u.university_ref else None, "faculty": u.faculty,
+             "course": u.course, "group_name": u.group_name, "student_number": u.student_number,
+             "verification": u.verification, "verified_by": u.verified_by} for u in rows]
+
+
+@router.post("/verifications/{user_id}")
+async def decide(user_id: int, body: ReviewDecisionIn, actor: AdminActor, session: Session) -> dict:
+    student = await session.get(User, user_id)
+    if student is None:
+        raise HTTPException(404, "Foydalanuvchi topilmadi")
+    audit(session, actor, "verification.decide", f"{student.full_name} (#{student.id})",
+          ("tasdiqlandi" if body.approve else "rad etildi") + (f": {body.note}" if body.note else ""))
+    await decide_verification(session, student, body.approve, "CareerFlow", body.note.strip())
+    return {"verification": student.verification}
+
+
+@router.get("/companies", response_model=list[CompanyOut])
+async def companies(_: AdminActor, session: Session, status: str | None = None) -> list[Company]:
+    query = select(Company)
+    if status:
+        query = query.where(Company.status == status)
+    return list((await session.execute(query.order_by(Company.created_at.desc()).limit(300))).scalars())
+
+
+@router.post("/companies/{company_id}/review", response_model=CompanyOut)
+async def review_company(company_id: int, body: ReviewDecisionIn, actor: AdminActor, session: Session) -> Company:
+    company = await session.get(Company, company_id)
+    if company is None:
+        raise HTTPException(404, "Kompaniya topilmadi")
+    company.status, company.review_note = ("approved" if body.approve else "rejected"), body.note.strip()
+    audit(session, actor, "company.review", company.name, f"{company.status}: STIR {company.stir or '-'} {body.note}")
+    await session.commit()
+    notify.send(await company_hr_ids(session, company.id),
+                f"✅ {company.name} tasdiqlandi. Endi vakansiya joylashingiz va talabalarni qidirishingiz mumkin."
+                if body.approve else f"{company.name} tasdiqlanmadi. Izoh: {body.note or '-'}")
+    return company
+
+
+@router.get("/jobs")
+async def jobs(_: AdminActor, session: Session, status: str | None = "pending") -> list:
+    query = select(Job)
+    if status:
+        query = query.where(Job.status == status)
+    return [job_out(j) for j in (await session.execute(query.order_by(Job.created_at.desc()).limit(300))).scalars()]
+
+
+@router.post("/jobs/{job_id}/review")
+async def review_job(job_id: int, body: ReviewDecisionIn, actor: AdminActor, session: Session):
+    job = await session.get(Job, job_id)
+    if job is None:
+        raise HTTPException(404, "Vakansiya topilmadi")
+    if body.approve and job.company.status != "approved":
+        raise HTTPException(409, "Avval kompaniyani tasdiqlang")
+    job.status, job.review_note = ("approved" if body.approve else "rejected"), body.note.strip()
+    audit(session, actor, "job.review", f"{job.company.name}: {job.title}", f"{job.status} {body.note}")
+    await session.commit()
+    notify.send(await company_hr_ids(session, job.company_id),
+                f"✅ «{job.title}» vakansiyasi e'lon qilindi." if body.approve
+                else f"«{job.title}» vakansiyasi qaytarildi. Izoh: {body.note or '-'}")
+    return job_out(job)
+
+
+@router.get("/staff")
+async def staff_requests(_: AdminActor, session: Session, status: str = "pending") -> list[dict]:
+    rows = (await session.execute(select(User).where(User.staff_status == status).order_by(User.created_at))).scalars()
+    return [{"id": u.id, "full_name": u.full_name, "username": u.username, "position": u.staff_position,
+             "university": u.staff_university.name if u.staff_university else None, "status": u.staff_status}
+            for u in rows]
+
+
+@router.post("/staff/{user_id}/review")
+async def review_staff(user_id: int, body: ReviewDecisionIn, actor: OwnerActor, session: Session) -> dict:
+    """Owner only: staff can verify students, so this access is checked by a person (call the university)."""
+    user = await session.get(User, user_id)
+    if user is None or not user.staff_status:
+        raise HTTPException(404, "So'rov topilmadi")
+    user.staff_status = "approved" if body.approve else "rejected"
+    uni = user.staff_university.name if user.staff_university else "?"
+    audit(session, actor, "staff.review", f"{user.full_name} ({uni})", user.staff_status)
+    await session.commit()
+    notify.send([user.telegram_id], f"✅ {uni} karyera markazi paneliga kirish berildi." if body.approve
+                else "Universitet xodimi sifatidagi so'rovingiz tasdiqlanmadi.")
+    return {"status": user.staff_status}
+
+
+@router.get("/universities")
+async def admin_universities(_: AdminActor, session: Session) -> list[dict]:
+    students = (select(func.count()).where(User.university_id == University.id, User.account_type == "student")
+                .correlate(University).scalar_subquery())
+    rows = (await session.execute(select(University, students).order_by(University.name))).all()
+    return [{**UniversityOut.model_validate(u).model_dump(), "is_active": u.is_active, "students": n} for u, n in rows]
+
+
+@router.post("/universities", response_model=UniversityOut, status_code=201)
+async def add_university(body: UniversityIn, actor: AdminActor, session: Session) -> University:
+    if await session.scalar(select(func.count()).select_from(University).where(University.name == body.name.strip())):
+        raise HTTPException(409, "Bu universitet ro'yxatda bor")
+    uni = University(name=body.name.strip(), short_name=body.short_name.strip(), city=body.city.strip())
+    session.add(uni)
+    audit(session, actor, "university.create", uni.name)
+    await session.commit()
+    return uni
+
+
+@router.patch("/universities/{university_id}", response_model=UniversityOut)
+async def edit_university(university_id: int, body: UniversityPatch, actor: AdminActor, session: Session) -> University:
+    uni = await session.get(University, university_id)
+    if uni is None:
+        raise HTTPException(404, "Universitet topilmadi")
+    for field, value in body.model_dump(exclude_unset=True, exclude_none=True).items():
+        setattr(uni, field, value)
+    audit(session, actor, "university.update", uni.name)
+    await session.commit()
+    return uni

@@ -2,7 +2,7 @@ import enum
 import secrets
 from datetime import date, datetime
 
-from sqlalchemy import (BigInteger, Boolean, CheckConstraint, Date, DateTime, Enum, ForeignKey,
+from sqlalchemy import (BigInteger, Boolean, CheckConstraint, Date, DateTime, Enum, Float, ForeignKey,
                         Index, Integer, String, Text, UniqueConstraint, func)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -30,6 +30,47 @@ class ReviewKind(str, enum.Enum):
 
 def _enum(cls: type[enum.Enum], name: str) -> Enum:
     return Enum(cls, name=name, values_callable=lambda e: [m.value for m in e])
+
+
+# Plain strings with CHECK constraints (not PostgreSQL enums) for values that will keep growing.
+ACCOUNT_TYPES = ("student", "employer", "university")
+VERIFICATION = ("none", "pending", "verified", "rejected")
+REVIEW_STATES = ("pending", "approved", "rejected")
+JOB_KINDS = ("internship", "part_time", "junior", "project")
+WORK_MODES = ("office", "remote", "hybrid")
+JOB_STATES = ("pending", "approved", "rejected", "closed")
+APPLICATION_STATES = ("new", "viewed", "shortlisted", "rejected", "hired")
+CONTACT_STATES = ("pending", "accepted", "declined")
+
+
+def _in(column: str, values: tuple[str, ...], name: str) -> CheckConstraint:
+    return CheckConstraint(f"{column} IN ({', '.join(repr(v) for v in values)})", name=name)
+
+
+class University(Base):
+    __tablename__ = "universities"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), unique=True)
+    short_name: Mapped[str] = mapped_column(String(40))
+    city: Mapped[str] = mapped_column(String(60), default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+
+class Company(Base):
+    __tablename__ = "companies"
+    __table_args__ = (_in("status", REVIEW_STATES, "company_status_valid"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(160))
+    stir: Mapped[str | None] = mapped_column(String(9), unique=True)     # taxpayer ID, checked by an admin
+    industry: Mapped[str] = mapped_column(String(80), default="")
+    website: Mapped[str] = mapped_column(String(256), default="")
+    city: Mapped[str] = mapped_column(String(60), default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    review_note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Track(Base):
@@ -74,6 +115,11 @@ class User(Base):
         CheckConstraint("streak_count >= 0", name="user_streak_nonnegative"),
         Index("ix_users_goals", "goals", postgresql_using="gin"),
         Index("ix_users_track_points", "track_id", "points"),
+        Index("ix_users_skills", "skills", postgresql_using="gin"),
+        _in("account_type", ACCOUNT_TYPES, "user_account_type_valid"),
+        _in("verification", VERIFICATION, "user_verification_valid"),
+        CheckConstraint("course IS NULL OR course BETWEEN 1 AND 7", name="user_course_range"),
+        CheckConstraint("gpa IS NULL OR (gpa >= 0 AND gpa <= gpa_scale)", name="user_gpa_range"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -95,11 +141,38 @@ class User(Base):
     cv_slug: Mapped[str] = mapped_column(String(16), unique=True, default=lambda: secrets.token_urlsafe(8))
     cv_public: Mapped[bool] = mapped_column(Boolean, default=False)
     is_owner: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    account_type: Mapped[str] = mapped_column(String(16), default="student", server_default="student")
+    consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))   # personal-data consent
+    # student career profile (what employers filter on)
+    university_id: Mapped[int | None] = mapped_column(ForeignKey("universities.id", ondelete="SET NULL"), index=True)
+    faculty: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    course: Mapped[int | None] = mapped_column(Integer)
+    graduation_year: Mapped[int | None] = mapped_column(Integer)
+    gpa: Mapped[float | None] = mapped_column(Float)
+    gpa_scale: Mapped[int] = mapped_column(Integer, default=5, server_default="5")
+    student_number: Mapped[str] = mapped_column(String(32), default="", server_default="")   # HEMIS ID, private
+    skills: Mapped[list[str]] = mapped_column(ARRAY(String(40)), default=list, server_default="{}")
+    languages: Mapped[list[str]] = mapped_column(ARRAY(String(40)), default=list, server_default="{}")
+    job_types: Mapped[list[str]] = mapped_column(ARRAY(String(16)), default=list, server_default="{}")
+    city: Mapped[str] = mapped_column(String(60), default="", server_default="")
+    open_to_work: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    verification: Mapped[str] = mapped_column(String(16), default="none", server_default="none")
+    verified_by: Mapped[str] = mapped_column(String(160), default="", server_default="")
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    verification_note: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # employer and university staff accounts
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id", ondelete="SET NULL"), index=True)
+    staff_university_id: Mapped[int | None] = mapped_column(ForeignKey("universities.id", ondelete="SET NULL"))
+    staff_status: Mapped[str] = mapped_column(String(16), default="", server_default="")
+    staff_position: Mapped[str] = mapped_column(String(120), default="", server_default="")
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     track: Mapped[Track | None] = relationship(lazy="selectin")
+    university_ref: Mapped[University | None] = relationship(foreign_keys=[university_id], lazy="selectin")
+    company: Mapped[Company | None] = relationship(lazy="selectin")
+    staff_university: Mapped[University | None] = relationship(foreign_keys=[staff_university_id], lazy="selectin")
 
 
 class Submission(Base):
@@ -193,3 +266,77 @@ class Announcement(Base):
     failed: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Job(Base):
+    """Early-career only: internships, part-time, junior roles and paid projects."""
+    __tablename__ = "jobs"
+    __table_args__ = (
+        _in("kind", JOB_KINDS, "job_kind_valid"),
+        _in("work_mode", WORK_MODES, "job_work_mode_valid"),
+        _in("status", JOB_STATES, "job_status_valid"),
+        CheckConstraint("salary_from IS NULL OR salary_from >= 0", name="job_salary_nonnegative"),
+        CheckConstraint("salary_to IS NULL OR salary_from IS NULL OR salary_to >= salary_from", name="job_salary_order"),
+        Index("ix_jobs_status_created", "status", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    title: Mapped[str] = mapped_column(String(160))
+    kind: Mapped[str] = mapped_column(String(16))
+    work_mode: Mapped[str] = mapped_column(String(16), default="office")
+    city: Mapped[str] = mapped_column(String(60), default="")
+    is_paid: Mapped[bool] = mapped_column(Boolean, default=True)
+    salary_from: Mapped[int | None] = mapped_column(Integer)          # so'm per month
+    salary_to: Mapped[int | None] = mapped_column(Integer)
+    hours_per_week: Mapped[int | None] = mapped_column(Integer)
+    description: Mapped[str] = mapped_column(Text)
+    requirements: Mapped[str] = mapped_column(Text, default="")
+    skills: Mapped[list[str]] = mapped_column(ARRAY(String(40)), default=list, server_default="{}")
+    track_ids: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, server_default="{}")
+    counts_as_practice: Mapped[bool] = mapped_column(Boolean, default=False)   # usable as malakaviy amaliyot
+    deadline: Mapped[date | None] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    review_note: Mapped[str] = mapped_column(Text, default="")
+    views: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    company: Mapped[Company] = relationship(lazy="selectin")
+
+
+class Application(Base):
+    __tablename__ = "applications"
+    __table_args__ = (UniqueConstraint("job_id", "user_id"), _in("status", APPLICATION_STATES, "application_status_valid"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16), default="new")
+    employer_note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    job: Mapped[Job] = relationship(lazy="selectin")
+    user: Mapped[User] = relationship(lazy="selectin")
+
+
+class ContactRequest(Base):
+    """An employer asks to see an anonymous student's identity; the student decides."""
+    __tablename__ = "contact_requests"
+    __table_args__ = (UniqueConstraint("company_id", "student_id"), _in("status", CONTACT_STATES, "contact_status_valid"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    employer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    student_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id", ondelete="SET NULL"))
+    message: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    company: Mapped[Company] = relationship(lazy="selectin")
+    student: Mapped[User] = relationship(foreign_keys=[student_id], lazy="selectin")
+    job: Mapped[Job | None] = relationship(lazy="selectin")

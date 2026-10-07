@@ -2,10 +2,11 @@ import { useState } from "react";
 import { api, type Me } from "../api";
 import { haptic, openLink } from "../tg";
 import { Avatar, ErrorText, message } from "../ui";
+import CareerProfile from "./CareerProfile";
 
 export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; onSaved: (m: Me) => void; onChangeTrack: () => void }) {
   const [form, setForm] = useState({
-    university: me.university, group_name: me.group_name, bio: me.bio,
+    group_name: me.group_name, bio: me.bio,
     github_url: me.github_url, linkedin_url: me.linkedin_url, goals: me.goals.join(", "),
   });
   const [busy, setBusy] = useState(false);
@@ -62,10 +63,10 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
         </div>
       </div>
 
+      <CareerProfile me={me} onSaved={onSaved} />
+
       <div className="card">
-        <b>Ma'lumotlar</b>
-        <label>Universitet</label>
-        <input value={form.university} maxLength={120} onChange={set("university")} />
+        <b>Qo'shimcha ma'lumotlar</b>
         <label>Guruh</label>
         <input value={form.group_name} maxLength={40} onChange={set("group_name")} />
         <label>O'zim haqimda</label>

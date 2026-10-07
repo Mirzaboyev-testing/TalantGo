@@ -5,7 +5,7 @@ Inserted once per track slug. Later edits made in the admin page are never overw
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import Task, Track
+from .models import Task, Track, University
 
 POINTS_BY_WEEK = {1: 10, 2: 15, 3: 20, 4: 30}
 
@@ -108,7 +108,44 @@ TRACKS: list[dict] = [
 ]
 
 
+# Starting list; admins add the rest in the admin page. (name, short name, city)
+UNIVERSITIES: list[tuple[str, str, str]] = [
+    ("Toshkent davlat iqtisodiyot universiteti", "TDIU", "Toshkent"),
+    ("Muhammad al-Xorazmiy nomidagi Toshkent axborot texnologiyalari universiteti", "TATU", "Toshkent"),
+    ("Mirzo Ulug'bek nomidagi O'zbekiston Milliy universiteti", "O'zMU", "Toshkent"),
+    ("Islom Karimov nomidagi Toshkent davlat texnika universiteti", "TDTU", "Toshkent"),
+    ("Jahon iqtisodiyoti va diplomatiya universiteti", "JIDU", "Toshkent"),
+    ("Toshkent davlat yuridik universiteti", "TDYU", "Toshkent"),
+    ("O'zbekiston davlat jahon tillari universiteti", "O'zDJTU", "Toshkent"),
+    ("Nizomiy nomidagi Toshkent davlat pedagogika universiteti", "TDPU", "Toshkent"),
+    ("Toshkent davlat sharqshunoslik universiteti", "TDShU", "Toshkent"),
+    ("Toshkent kimyo-texnologiya instituti", "TKTI", "Toshkent"),
+    ("Bank-moliya akademiyasi", "BMA", "Toshkent"),
+    ("Toshkentdagi Westminster xalqaro universiteti", "WIUT", "Toshkent"),
+    ("Toshkentdagi Inha universiteti", "IUT", "Toshkent"),
+    ("Toshkentdagi Turin politexnika universiteti", "TTPU", "Toshkent"),
+    ("Toshkentdagi Webster universiteti", "Webster", "Toshkent"),
+    ("Toshkentdagi Amity universiteti", "Amity", "Toshkent"),
+    ("Toshkentdagi Singapur menejmentni rivojlantirish instituti", "MDIS", "Toshkent"),
+    ("Yangi O'zbekiston universiteti", "NewUU", "Toshkent"),
+    ("Akfa universiteti", "Akfa", "Toshkent"),
+    ("TEAM universiteti", "TEAM", "Toshkent"),
+    ("Central Asian University", "CAU", "Toshkent"),
+    ("Millat Umidi universiteti", "MU", "Toshkent"),
+    ("Samarqand davlat universiteti", "SamDU", "Samarqand"),
+    ("Buxoro davlat universiteti", "BuxDU", "Buxoro"),
+    ("Farg'ona davlat universiteti", "FarDU", "Farg'ona"),
+    ("Andijon davlat universiteti", "AnDU", "Andijon"),
+    ("Namangan davlat universiteti", "NamDU", "Namangan"),
+    ("Qarshi davlat universiteti", "QarDU", "Qarshi"),
+    ("Urganch davlat universiteti", "UrDU", "Urganch"),
+    ("Qoraqalpoq davlat universiteti", "QDU", "Nukus"),
+]
+
+
 async def seed(session: AsyncSession) -> None:
+    known = set((await session.execute(select(University.name))).scalars())
+    session.add_all(University(name=n, short_name=sh, city=c) for n, sh, c in UNIVERSITIES if n not in known)
     existing = set((await session.execute(select(Track.slug))).scalars())
     for order, spec in enumerate(TRACKS):
         if spec["slug"] in existing:

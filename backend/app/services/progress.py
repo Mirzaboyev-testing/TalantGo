@@ -137,7 +137,8 @@ async def review_queue(session: AsyncSession, reviewer: User, limit: int = 30) -
 
 
 async def rank_of(session: AsyncSession, user: User, track_id: int | None = None) -> int:
-    query = select(func.count()).select_from(User).where(User.points > user.points, User.is_blocked.is_(False))
+    query = select(func.count()).select_from(User).where(User.points > user.points, User.is_blocked.is_(False),
+                                                         User.account_type == "student")
     if track_id is not None:
         query = query.where(User.track_id == track_id)
     return (await session.scalar(query)) + 1

@@ -18,7 +18,42 @@ export interface Me {
   track: Track | null; university: string; group_name: string; bio: string; goals: string[];
   github_url: string; linkedin_url: string; points: number; streak: number; rank_overall: number;
   cv_slug: string; cv_public: boolean; is_owner: boolean;
+  account_type: AccountType; has_consent: boolean; university_ref: University | null; faculty: string;
+  course: number | null; graduation_year: number | null; gpa: number | null; gpa_scale: number;
+  student_number: string; skills: string[]; languages: string[]; job_types: JobKind[]; city: string;
+  open_to_work: boolean; verification: Verification; verified_by: string; verification_note: string;
+  company: Company | null; staff_university: University | null; staff_status: string; staff_position: string;
+  completeness: { percent: number; missing: string[] };
 }
+export type AccountType = "student" | "employer" | "university";
+export type Verification = "none" | "pending" | "verified" | "rejected";
+export type JobKind = "internship" | "part_time" | "junior" | "project";
+export type WorkMode = "office" | "remote" | "hybrid";
+export interface University { id: number; name: string; short_name: string; city: string }
+export interface Company {
+  id: number; name: string; stir: string | null; industry: string; website: string; city: string;
+  description: string; status: "pending" | "approved" | "rejected"; review_note: string;
+}
+export interface Job {
+  id: number; company_id: number; company_name: string; company_industry: string; title: string; kind: JobKind;
+  work_mode: WorkMode; city: string; is_paid: boolean; salary_from: number | null; salary_to: number | null;
+  hours_per_week: number | null; description: string; requirements: string; skills: string[]; track_ids: number[];
+  counts_as_practice: boolean; deadline: string | null; status: string; review_note: string; views: number;
+  created_at: string; applied: boolean; application_status: string | null; match: number; applications: number;
+}
+export type JobInput = Pick<Job, "title" | "kind" | "work_mode" | "city" | "is_paid" | "salary_from" | "salary_to" |
+  "hours_per_week" | "description" | "requirements" | "skills" | "track_ids" | "counts_as_practice" | "deadline"> & { rules_accepted: boolean };
+export interface MyApplication { id: number; status: string; note: string; created_at: string; updated_at: string; job: Job }
+export interface TalentCard {
+  id: number; code: string; university: string | null; university_name: string | null; faculty: string;
+  course: number | null; graduation_year: number | null; gpa: number | null; gpa_scale: number; track: string | null;
+  track_icon: string; skills: string[]; languages: string[]; job_types: string[]; city: string; points: number;
+  verified_tasks: number; verification: Verification; verified_by: string; contact_status?: string | null;
+}
+export interface Identity { full_name: string; username: string | null; photo_url: string | null; cv_url: string | null; github_url: string; linkedin_url: string }
+export interface Applicant { id: number; status: string; note: string; employer_note: string; created_at: string; card: TalentCard; identity: Identity }
+export interface EmployerContact { id: number; status: string; message: string; created_at: string; job_title: string | null; card: TalentCard; identity: Identity | null }
+export interface StudentContact { id: number; company: string; industry: string; message: string; job_title: string | null; status: string; created_at: string }
 export interface QueueItem {
   submission_id: number; status: Status; task_title: string; track_title: string; proof_hint: string;
   proof_url: string; note: string; author_name: string; peer_reviews: number; submitted_at: string;
@@ -102,8 +137,43 @@ export const api = {
   devLogin: (telegram_id: number, full_name: string) =>
     request<{ token: string }>("POST", "/auth/dev", { telegram_id, full_name }),
   me: () => request<Me>("GET", "/me"),
-  updateMe: (changes: Partial<Omit<Me, "track">> & { track_id?: number | null }) => request<Me>("PATCH", "/me", changes),
+  updateMe: (changes: Partial<Omit<Me, "track" | "university_ref" | "company" | "staff_university" | "completeness">> &
+    { track_id?: number | null; university_id?: number | null; consent?: boolean }) => request<Me>("PATCH", "/me", changes),
   tracks: () => request<Track[]>("GET", "/tracks"),
+  universities: () => request<University[]>("GET", "/universities"),
+  requestVerification: () => request<Me>("POST", "/me/verification"),
+  registerCompany: (c: Omit<Company, "id" | "status" | "review_note">) => request<Me>("POST", "/me/company", c),
+  requestStaff: (university_id: number, position: string) => request<Me>("POST", "/me/staff-request", { university_id, position }),
+  backToStudent: () => request<Me>("POST", "/me/account-type/student"),
+  jobs: (params: Record<string, string>) => request<Job[]>("GET", `/jobs?${new URLSearchParams(params)}`),
+  job: (id: number) => request<Job>("GET", `/jobs/${id}`),
+  apply: (id: number, note: string) => request<MyApplication>("POST", `/jobs/${id}/apply`, { note }),
+  myApplications: () => request<MyApplication[]>("GET", "/me/applications"),
+  withdraw: (id: number) => request<null>("POST", `/me/applications/${id}/withdraw`),
+  myContacts: () => request<StudentContact[]>("GET", "/me/contacts"),
+  answerContact: (id: number, accept: boolean) => request<{ status: string }>("POST", `/me/contacts/${id}`, { accept }),
+
+  employer: {
+    company: () => request<Company>("GET", "/employer/company"),
+    editCompany: (c: Omit<Company, "id" | "status" | "review_note">) => request<Company>("PATCH", "/employer/company", c),
+    jobs: () => request<Job[]>("GET", "/employer/jobs"),
+    createJob: (j: JobInput) => request<Job>("POST", "/employer/jobs", j),
+    editJob: (id: number, j: JobInput) => request<Job>("PUT", `/employer/jobs/${id}`, j),
+    closeJob: (id: number) => request<Job>("POST", `/employer/jobs/${id}/close`),
+    applicants: (jobId: number) => request<Applicant[]>("GET", `/employer/jobs/${jobId}/applicants`),
+    updateApplication: (id: number, changes: { status?: string; employer_note?: string }) =>
+      request<Applicant>("PATCH", `/employer/applications/${id}`, changes),
+    talent: (params: Record<string, string>) => request<TalentCard[]>("GET", `/employer/talent?${new URLSearchParams(params)}`),
+    contact: (studentId: number, message: string) => request<{ status: string }>("POST", `/employer/talent/${studentId}/contact`, { message }),
+    contacts: () => request<EmployerContact[]>("GET", "/employer/contacts"),
+  },
+
+  university: {
+    dashboard: () => request<UniversityDashboard>("GET", "/university/dashboard"),
+    students: (params: Record<string, string>) => request<UniversityStudent[]>("GET", `/university/students?${new URLSearchParams(params)}`),
+    verify: (id: number, approve: boolean, note: string) => request<{ verification: string }>("POST", `/university/verifications/${id}`, { approve, note }),
+    exportCsv: () => download("/university/export.csv", "talabalar-hisobot.csv"),
+  },
   tasks: (trackId: number) => request<Task[]>("GET", `/tracks/${trackId}/tasks`),
   submit: (taskId: number, proof_url: string, note: string) =>
     request<Submission>("POST", `/tasks/${taskId}/submit`, { proof_url, note }),
@@ -139,6 +209,18 @@ export const api = {
     testBot: () => request<{ username: string }>("POST", "/admin/bot/test", undefined, true),
     connectBot: () => request<{ username: string }>("POST", "/admin/bot/connect", undefined, true),
     exportUsers: () => download("/admin/export/users.csv", "careerflow-talabalar.csv"),
+    inbox: () => request<{ verifications: number; companies: number; jobs: number; staff: number }>("GET", "/admin/inbox", undefined, true),
+    verifications: () => request<PendingStudent[]>("GET", "/admin/verifications", undefined, true),
+    decideVerification: (id: number, approve: boolean, note: string) => request<unknown>("POST", `/admin/verifications/${id}`, { approve, note }, true),
+    companies: (status: string) => request<Company[]>("GET", `/admin/companies?status=${status}`, undefined, true),
+    reviewCompany: (id: number, approve: boolean, note: string) => request<Company>("POST", `/admin/companies/${id}/review`, { approve, note }, true),
+    pendingJobs: () => request<Job[]>("GET", "/admin/jobs?status=pending", undefined, true),
+    reviewJob: (id: number, approve: boolean, note: string) => request<Job>("POST", `/admin/jobs/${id}/review`, { approve, note }, true),
+    staff: () => request<StaffRequest[]>("GET", "/admin/staff", undefined, true),
+    reviewStaff: (id: number, approve: boolean) => request<unknown>("POST", `/admin/staff/${id}/review`, { approve, note: "" }, true),
+    universities: () => request<(University & { is_active: boolean; students: number })[]>("GET", "/admin/universities", undefined, true),
+    addUniversity: (u: { name: string; short_name: string; city: string }) => request<University>("POST", "/admin/universities", u, true),
+    editUniversity: (id: number, changes: Partial<University & { is_active: boolean }>) => request<University>("PATCH", `/admin/universities/${id}`, changes, true),
   },
 };
 
@@ -148,3 +230,40 @@ export const STATUS_LABEL: Record<Status, string> = {
   mentor_verified: "Mentor tasdiqladi",
   rejected: "Qaytarildi",
 };
+
+export interface PendingStudent {
+  id: number; full_name: string; username: string | null; university: string | null; faculty: string;
+  course: number | null; group_name: string; student_number: string; verification: string; verified_by: string;
+}
+export interface StaffRequest { id: number; full_name: string; username: string | null; position: string; university: string | null; status: string }
+export interface UniversityStudent {
+  id: number; full_name: string; username: string | null; faculty: string; course: number | null; group_name: string;
+  student_number: string; verification: Verification; track: string | null; points: number; verified_tasks: number;
+  open_to_work: boolean; cv_public: boolean; last_seen_at: string | null;
+}
+export interface UniversityDashboard {
+  university: string; students: number; verified: number; pending_verification: number; active_7d: number;
+  with_track: number; cv_public: number; open_to_work: number; percent: Record<string, number>;
+  applications: Record<string, number>; hired: number;
+  companies_by_applications: { name: string; count: number }[]; companies_by_contacts: { name: string; count: number }[];
+  by_course: { course: number | null; count: number }[]; by_faculty: { faculty: string; count: number }[];
+  recent_hires: { student: string; job: string; company: string; date: string }[];
+}
+
+export const JOB_KIND: Record<JobKind, string> = { internship: "Amaliyot", part_time: "Yarim stavka", junior: "Junior", project: "Loyiha" };
+export const WORK_MODE: Record<WorkMode, string> = { office: "Ofisda", remote: "Masofaviy", hybrid: "Aralash" };
+export const APPLICATION_STATUS: Record<string, string> = {
+  new: "Yuborildi", viewed: "Ko'rildi", shortlisted: "Keyingi bosqich", rejected: "Rad etildi", hired: "Qabul qilindi",
+};
+export const VERIFICATION_LABEL: Record<Verification, string> = {
+  none: "Tasdiqlanmagan", pending: "Tasdiqlash kutilmoqda", verified: "Talabalik tasdiqlangan", rejected: "Rad etilgan",
+};
+
+export function salary(job: Pick<Job, "is_paid" | "salary_from" | "salary_to">): string {
+  if (!job.is_paid) return "To'lanmaydi";
+  const f = (n: number) => `${(n / 1_000_000).toLocaleString("uz", { maximumFractionDigits: 1 })} mln`;
+  if (job.salary_from && job.salary_to) return `${f(job.salary_from)}–${f(job.salary_to)} so'm`;
+  if (job.salary_from) return `${f(job.salary_from)} so'mdan`;
+  if (job.salary_to) return `${f(job.salary_to)} so'mgacha`;
+  return "To'lanadi (kelishiladi)";
+}

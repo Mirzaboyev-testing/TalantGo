@@ -15,6 +15,7 @@
             display:grid; place-items:center; font-size:32px; font-weight:600; color:var(--muted); }
   h1 { margin:0; font-size:28px; letter-spacing:-.01em; }
   .sub { color:var(--muted); }
+  .verified { display:inline-block; margin-top:4px; font-size:13px; font-weight:600; color:var(--ok); background:#e8f5ee; border-radius:999px; padding:2px 10px; }
   .links a { color:var(--accent); margin-right:14px; text-decoration:none; }
   .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:24px 0; }
   .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
@@ -47,8 +48,9 @@
     <div>
       <h1>{{ cv.full_name }}</h1>
       <div class="sub">
-        {{ cv.track or "Yo'l tanlanmagan" }}{% if cv.university %} · {{ cv.university }}{% endif %}{% if cv.group_name %} · {{ cv.group_name }}{% endif %}
+        {{ cv.track or "Yo'l tanlanmagan" }}{% if cv.university %} · {{ cv.university }}{% endif %}{% if cv.faculty %} · {{ cv.faculty }}{% endif %}{% if cv.course %} · {{ cv.course }}-kurs{% endif %}
       </div>
+      {% if cv.verification == "verified" %}<div class="verified">✓ Talabalik tasdiqlangan: {{ cv.verified_by }}</div>{% endif %}
       <div class="links">
         {% if cv.username %}<a href="https://t.me/{{ cv.username }}">Telegram</a>{% endif %}
         {% if cv.github_url %}<a href="{{ cv.github_url }}" rel="nofollow">GitHub</a>{% endif %}
@@ -65,6 +67,8 @@
   </section>
 
   {% if cv.bio %}<h2>O'zim haqimda</h2><p class="bio">{{ cv.bio }}</p>{% endif %}
+  {% if cv.skills %}<h2>Ko'nikmalar</h2><div class="tags">{% for g in cv.skills %}<span>{{ g }}</span>{% endfor %}</div>{% endif %}
+  {% if cv.languages %}<h2>Tillar</h2><div class="tags">{% for g in cv.languages %}<span>{{ g }}</span>{% endfor %}</div>{% endif %}
   {% if cv.goals %}<h2>Maqsadlar</h2><div class="tags">{% for g in cv.goals %}<span>{{ g }}</span>{% endfor %}</div>{% endif %}
 
   <h2>Tasdiqlangan ishlar</h2>

@@ -1,7 +1,7 @@
-from datetime import datetime
-from typing import Annotated
+from datetime import date, datetime
+from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from .models import ReviewKind, Role, Status
 
@@ -14,6 +14,9 @@ def _http_url(value: str) -> str:
 
 Url = Annotated[str, StringConstraints(strip_whitespace=True, max_length=512), AfterValidator(_http_url)]
 Goal = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=40)]
+Tag = Goal
+JobKind = Literal["internship", "part_time", "junior", "project"]
+WorkMode = Literal["office", "remote", "hybrid"]
 
 
 class ORM(BaseModel):
@@ -127,6 +130,28 @@ class MeOut(ORM):
     cv_slug: str
     cv_public: bool
     is_owner: bool
+    account_type: str
+    has_consent: bool
+    university_ref: "UniversityOut | None"
+    faculty: str
+    course: int | None
+    graduation_year: int | None
+    gpa: float | None
+    gpa_scale: int
+    student_number: str
+    skills: list[str]
+    languages: list[str]
+    job_types: list[str]
+    city: str
+    open_to_work: bool
+    verification: str
+    verified_by: str
+    verification_note: str
+    company: "CompanyOut | None"
+    staff_university: "UniversityOut | None"
+    staff_status: str
+    staff_position: str
+    completeness: dict
 
 
 class MeUpdate(BaseModel):
@@ -138,6 +163,152 @@ class MeUpdate(BaseModel):
     github_url: Url | None = None
     linkedin_url: Url | None = None
     cv_public: bool | None = None
+    consent: bool | None = None
+    university_id: int | None = None
+    faculty: str | None = Field(default=None, max_length=120)
+    course: int | None = Field(default=None, ge=1, le=7)
+    graduation_year: int | None = Field(default=None, ge=2020, le=2040)
+    gpa: float | None = Field(default=None, ge=0, le=5)
+    gpa_scale: Literal[4, 5] | None = None
+    student_number: str | None = Field(default=None, max_length=32)
+    skills: list[Tag] | None = Field(default=None, max_length=20)
+    languages: list[Tag] | None = Field(default=None, max_length=6)
+    job_types: list[JobKind] | None = None
+    city: str | None = Field(default=None, max_length=60)
+    open_to_work: bool | None = None
+
+
+class UniversityOut(ORM):
+    id: int
+    name: str
+    short_name: str
+    city: str
+
+
+class CompanyOut(ORM):
+    id: int
+    name: str
+    stir: str | None
+    industry: str
+    website: str
+    city: str
+    description: str
+    status: str
+    review_note: str
+
+
+class CompanyIn(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    stir: Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^\d{9}$")] | None = None
+    industry: str = Field(default="", max_length=80)
+    website: Url = ""
+    city: str = Field(default="", max_length=60)
+    description: str = Field(default="", max_length=2000)
+
+
+class StaffRequestIn(BaseModel):
+    university_id: int
+    position: str = Field(min_length=3, max_length=120)
+
+
+class JobIn(BaseModel):
+    title: str = Field(min_length=3, max_length=160)
+    kind: JobKind
+    work_mode: WorkMode = "office"
+    city: str = Field(default="", max_length=60)
+    is_paid: bool = True
+    salary_from: int | None = Field(default=None, ge=0, le=1_000_000_000)
+    salary_to: int | None = Field(default=None, ge=0, le=1_000_000_000)
+    hours_per_week: int | None = Field(default=None, ge=1, le=60)
+    description: str = Field(min_length=20, max_length=5000)
+    requirements: str = Field(default="", max_length=3000)
+    skills: list[Tag] = Field(default_factory=list, max_length=15)
+    track_ids: list[int] = Field(default_factory=list, max_length=10)
+    counts_as_practice: bool = False
+    deadline: date | None = None
+    # Platform rule (as on Handshake): no MLM, no commission-only pay, no fees charged to students
+    rules_accepted: bool = Field(exclude=True)
+
+    @model_validator(mode="after")
+    def _salary(self):
+        if not self.rules_accepted:
+            raise ValueError("Platforma qoidalarini tasdiqlang: MLM, faqat foizga ishlash va talabadan pul olish taqiqlangan")
+        if self.salary_from is not None and self.salary_to is not None and self.salary_to < self.salary_from:
+            raise ValueError("Maosh oralig'i noto'g'ri: «gacha» qiymati «dan» dan kichik")
+        if not self.is_paid:
+            self.salary_from = self.salary_to = None
+        return self
+
+
+class JobOut(ORM):
+    id: int
+    company_id: int
+    company_name: str = ""
+    company_industry: str = ""
+    title: str
+    kind: str
+    work_mode: str
+    city: str
+    is_paid: bool
+    salary_from: int | None
+    salary_to: int | None
+    hours_per_week: int | None
+    description: str
+    requirements: str
+    skills: list[str]
+    track_ids: list[int]
+    counts_as_practice: bool
+    deadline: date | None
+    status: str
+    review_note: str
+    views: int
+    created_at: datetime
+    applied: bool = False
+    application_status: str | None = None
+    match: int = 0
+    applications: int = 0
+
+
+class ApplyIn(BaseModel):
+    note: str = Field(default="", max_length=1500)
+
+
+class MyApplicationOut(BaseModel):
+    id: int
+    status: str
+    note: str
+    created_at: datetime
+    updated_at: datetime
+    job: JobOut
+
+
+class ApplicantOut(BaseModel):
+    id: int
+    status: str
+    note: str
+    employer_note: str
+    created_at: datetime
+    card: dict
+    identity: dict
+
+
+class ApplicationPatch(BaseModel):
+    status: Literal["viewed", "shortlisted", "rejected", "hired"] | None = None
+    employer_note: str | None = Field(default=None, max_length=1000)
+
+
+class ContactIn(BaseModel):
+    message: str = Field(min_length=10, max_length=1000)
+    job_id: int | None = None
+
+
+class ContactAnswerIn(BaseModel):
+    accept: bool
+
+
+class ReviewDecisionIn(BaseModel):
+    approve: bool
+    note: str = Field(default="", max_length=500)
 
 
 class PeerOut(BaseModel):
@@ -196,6 +367,9 @@ class AdminUserOut(ORM):
     university: str
     group_name: str
     points: int
+    account_type: str = "student"
+    verification: str = "none"
+    company_id: int | None = None
     verified_tasks: int = 0
     last_seen_at: datetime | None
     created_at: datetime
@@ -203,6 +377,7 @@ class AdminUserOut(ORM):
 
 class UserPatch(BaseModel):
     role: Role | None = None
+    company_id: int | None = None          # attach an HR person to an existing company
     is_owner: bool | None = None
     is_blocked: bool | None = None
     group_name: str | None = Field(default=None, max_length=40)
@@ -311,3 +486,19 @@ class AuditOut(ORM):
     target: str
     details: str
     created_at: datetime
+
+
+MeOut.model_rebuild()
+
+
+class UniversityIn(BaseModel):
+    name: str = Field(min_length=3, max_length=200)
+    short_name: str = Field(min_length=2, max_length=40)
+    city: str = Field(default="", max_length=60)
+
+
+class UniversityPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=3, max_length=200)
+    short_name: str | None = Field(default=None, min_length=2, max_length=40)
+    city: str | None = Field(default=None, max_length=60)
+    is_active: bool | None = None

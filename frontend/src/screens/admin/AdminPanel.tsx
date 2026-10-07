@@ -6,12 +6,16 @@ import Submissions from "./Submissions";
 import Tracks from "./Tracks";
 import Announcements from "./Announcements";
 import Settings from "./Settings";
+import Queue from "./Queue";
+import Universities from "./Universities";
 
 const SECTIONS = [
   { id: "home", label: "Umumiy" },
+  { id: "queue", label: "Navbat" },
   { id: "users", label: "Odamlar" },
   { id: "work", label: "Ishlar" },
   { id: "tracks", label: "Yo'nalishlar" },
+  { id: "unis", label: "Universitetlar" },
   { id: "news", label: "E'lonlar" },
   { id: "settings", label: "Sozlamalar" },
 ] as const;
@@ -24,6 +28,11 @@ export default function AdminPanel() {
   const [section, setSection] = useState<Section>("home");
   const [userFilter, setUserFilter] = useState<{ id: number; name: string } | null>(null);
   const [error, setError] = useState("");
+  const [waiting, setWaiting] = useState(0);
+
+  useEffect(() => {
+    api.admin.inbox().then((c) => setWaiting(c.verifications + c.companies + c.jobs + c.staff), () => {});
+  }, [section]);
 
   useEffect(() => {
     api.admin.me().then((m) => setCtx({ isOwner: m.is_owner, name: m.name }), (e) => setError(message(e)));
@@ -38,10 +47,14 @@ export default function AdminPanel() {
       <p className="hint" style={{ marginTop: -8 }}>{ctx.name} · {ctx.isOwner ? "ilova egasi" : "admin"}</p>
       <div className="scroll-tabs">
         {SECTIONS.map((s) => (
-          <button key={s.id} className={`chip ${section === s.id ? "on" : ""}`} onClick={() => setSection(s.id)}>{s.label}</button>
+          <button key={s.id} className={`chip ${section === s.id ? "on" : ""}`} onClick={() => setSection(s.id)}>
+            {s.label}{s.id === "queue" && waiting > 0 && <span className="dot">{waiting}</span>}
+          </button>
         ))}
       </div>
       {section === "home" && <Overview />}
+      {section === "queue" && <Queue ctx={ctx} />}
+      {section === "unis" && <Universities />}
       {section === "users" && (
         <Users ctx={ctx} onShowWork={(u) => { setUserFilter(u); setSection("work"); }} />
       )}
