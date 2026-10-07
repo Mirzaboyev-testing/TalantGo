@@ -17,7 +17,7 @@ export interface Me {
   id: number; full_name: string; username: string | null; photo_url: string | null; role: Role;
   track: Track | null; university: string; group_name: string; bio: string; goals: string[];
   github_url: string; linkedin_url: string; points: number; streak: number; rank_overall: number;
-  cv_slug: string; cv_public: boolean;
+  cv_slug: string; cv_public: boolean; is_owner: boolean;
 }
 export interface QueueItem {
   submission_id: number; status: Status; task_title: string; track_title: string; proof_hint: string;
@@ -29,8 +29,27 @@ export interface Peer {
 }
 export interface LeaderRow { rank: number; id: number; full_name: string; group_name: string; track_icon: string; points: number; is_me: boolean }
 export interface Leaderboard { rows: LeaderRow[]; my_rank: number }
-export interface AdminUser { id: number; full_name: string; username: string | null; role: Role; group_name: string; points: number; created_at: string }
 export interface BotStatus { configured: boolean; hint: string | null; public_url: string }
+export interface AdminUser {
+  id: number; full_name: string; username: string | null; role: Role; is_owner: boolean; is_blocked: boolean;
+  track_id: number | null; university: string; group_name: string; points: number; verified_tasks: number;
+  last_seen_at: string | null; created_at: string;
+}
+export interface AdminSubmission {
+  id: number; status: Status; round: number; points_awarded: number; proof_url: string; note: string;
+  task_title: string; track_title: string; author_id: number; author_name: string; reviews: Review[]; updated_at: string;
+}
+export interface AdminTrack extends Track { sort_order: number; is_active: boolean; student_count: number; task_count: number }
+export interface AdminTask { id: number; track_id: number; week: number; sort_order: number; title: string; description: string; proof_hint: string; points: number; is_active: boolean }
+export interface Announcement { id: number; text: string; audience: string; created_by: string; total: number; sent: number; failed: number; created_at: string; finished_at: string | null }
+export interface AuditEntry { id: number; actor: string; action: string; target: string; details: string; created_at: string }
+export interface Rules { peer_approvals_required: number; review_points: number; mentor_bonus_percent: number }
+export interface AdminStats {
+  users: number; with_track: number; seen_7d: number; active_7d: number; mentors: number; blocked: number;
+  submissions: Record<Status, number>;
+  per_track: { icon: string; title: string; students: number }[];
+  top: { name: string; group: string; points: number }[];
+}
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -51,7 +70,8 @@ function describe(detail: unknown): string {
 }
 
 async function request<T>(method: string, path: string, body?: unknown, admin = false): Promise<T> {
-  const token = admin ? adminToken : userToken;
+  // the admin API accepts the owner's password session or an admin's own Telegram session
+  const token = admin ? adminToken || userToken : userToken;
   let resp: Response;
   try {
     resp = await fetch(`/api/v1${path}`, {
@@ -65,6 +85,15 @@ async function request<T>(method: string, path: string, body?: unknown, admin = 
   const data = resp.headers.get("content-type")?.includes("json") ? await resp.json() : null;
   if (!resp.ok) throw new ApiError(resp.status, describe(data?.detail));
   return data as T;
+}
+
+async function download(path: string, filename: string): Promise<void> {
+  const resp = await fetch(`/api/v1${path}`, { headers: { Authorization: `Bearer ${adminToken || userToken}` } });
+  if (!resp.ok) throw new ApiError(resp.status, "Yuklab bo'lmadi");
+  const url = URL.createObjectURL(await resp.blob());
+  const a = Object.assign(document.createElement("a"), { href: url, download: filename });
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export const api = {
@@ -86,13 +115,30 @@ export const api = {
 
   admin: {
     login: (password: string) => request<{ token: string }>("POST", "/auth/admin", { password }),
+    me: () => request<{ name: string; is_owner: boolean }>("GET", "/admin/me", undefined, true),
+    stats: () => request<AdminStats>("GET", "/admin/stats", undefined, true),
+    users: (params: Record<string, string>) => request<AdminUser[]>("GET", `/admin/users?${new URLSearchParams(params)}`, undefined, true),
+    updateUser: (id: number, changes: Partial<Pick<AdminUser, "role" | "is_owner" | "is_blocked" | "group_name" | "university">>) =>
+      request<AdminUser>("PATCH", `/admin/users/${id}`, changes, true),
+    adjustPoints: (id: number, delta: number, reason: string) => request<{ points: number }>("POST", `/admin/users/${id}/points`, { delta, reason }, true),
+    submissions: (params: Record<string, string>) => request<AdminSubmission[]>("GET", `/admin/submissions?${new URLSearchParams(params)}`, undefined, true),
+    deleteSubmission: (id: number, reason: string) => request<null>("DELETE", `/admin/submissions/${id}?reason=${encodeURIComponent(reason)}`, undefined, true),
+    tracks: () => request<AdminTrack[]>("GET", "/admin/tracks", undefined, true),
+    createTrack: (t: { title: string; icon: string; description: string }) => request<AdminTrack>("POST", "/admin/tracks", t, true),
+    updateTrack: (id: number, changes: Partial<AdminTrack>) => request<AdminTrack>("PATCH", `/admin/tracks/${id}`, changes, true),
+    tasks: (trackId: number) => request<AdminTask[]>("GET", `/admin/tasks?track_id=${trackId}`, undefined, true),
+    createTask: (t: Omit<AdminTask, "id" | "sort_order" | "is_active">) => request<AdminTask>("POST", "/admin/tasks", t, true),
+    updateTask: (id: number, changes: Partial<AdminTask>) => request<AdminTask>("PATCH", `/admin/tasks/${id}`, changes, true),
+    announcements: () => request<Announcement[]>("GET", "/admin/announcements", undefined, true),
+    announce: (a: { text: string; track_id: number | null; group_name: string | null }) => request<Announcement>("POST", "/admin/announcements", a, true),
+    rules: () => request<Rules>("GET", "/admin/rules", undefined, true),
+    saveRules: (r: Rules) => request<Rules>("PUT", "/admin/rules", r, true),
+    audit: () => request<AuditEntry[]>("GET", "/admin/audit", undefined, true),
     bot: () => request<BotStatus>("GET", "/admin/bot", undefined, true),
     saveBot: (token: string) => request<BotStatus>("PUT", "/admin/bot", { token }, true),
     testBot: () => request<{ username: string }>("POST", "/admin/bot/test", undefined, true),
     connectBot: () => request<{ username: string }>("POST", "/admin/bot/connect", undefined, true),
-    stats: () => request<{ users: number; with_track: number; submissions: Record<Status, number> }>("GET", "/admin/stats", undefined, true),
-    users: () => request<AdminUser[]>("GET", "/admin/users", undefined, true),
-    setRole: (id: number, role: Role) => request<AdminUser>("PATCH", `/admin/users/${id}`, { role }, true),
+    exportUsers: () => download("/admin/export/users.csv", "careerflow-talabalar.csv"),
   },
 };
 

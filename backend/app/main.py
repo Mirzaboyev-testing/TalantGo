@@ -9,9 +9,13 @@ from fastapi.staticfiles import StaticFiles
 from .api import admin, auth, learning, pages, people
 from .core.config import settings
 from .core.db import Base, SessionLocal, engine
+from .core.upgrades import upgrade
 from .seed import seed
 
 logging.basicConfig(level=logging.INFO)
+# httpx logs every request URL at INFO, and a Bot API URL contains the bot token
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 @asynccontextmanager
@@ -20,6 +24,7 @@ async def lifespan(_: FastAPI):
     # second group joins, when the schema has to change under real data.
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await upgrade(conn)
     async with SessionLocal() as session:
         await seed(session)
     yield

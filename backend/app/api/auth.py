@@ -1,4 +1,5 @@
 import asyncio
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
@@ -25,6 +26,7 @@ async def _upsert(session: Session, telegram_id: int, full_name: str, username: 
     else:
         # Telegram is the source of truth for name, username and photo: they change there
         user.full_name, user.username, user.photo_url = full_name, username, photo_url
+    user.last_seen_at = datetime.now(UTC)
     await session.commit()
     return user
 

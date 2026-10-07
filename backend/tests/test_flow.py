@@ -124,18 +124,3 @@ async def test_peers_and_leaderboard(client, make_user):
     board = (await client.get("/api/v1/leaderboard", params={"scope": "group"}, headers=u["Bekzod"]["headers"])).json()
     assert [(r["full_name"], r["rank"]) for r in board["rows"]] == [("Aziza", 1), ("Bekzod", 2), ("Dilnoza", 2)]
     assert board["my_rank"] == 2
-
-
-async def test_admin_requires_password_and_manages_roles(client, make_user):
-    student = await make_user("Sardor")
-    assert (await client.get("/api/v1/admin/users")).status_code == 401
-    assert (await client.post("/api/v1/auth/admin", json={"password": "wrong"})).status_code == 401
-    token = (await client.post("/api/v1/auth/admin", json={"password": "test-admin-password"})).json()["token"]
-    h = {"Authorization": f"Bearer {token}"}
-    # a user token is not an admin token, and vice versa
-    assert (await client.get("/api/v1/admin/users", headers=student["headers"])).status_code == 401
-    assert (await client.get("/api/v1/me", headers=h)).status_code == 401
-    r = await client.patch(f"/api/v1/admin/users/{student['id']}", json={"role": "mentor"}, headers=h)
-    assert r.json()["role"] == "mentor"
-    assert (await client.get("/api/v1/admin/bot", headers=h)).json()["configured"] is False
-    assert (await client.put("/api/v1/admin/bot", json={"token": "not-a-token"}, headers=h)).status_code == 422

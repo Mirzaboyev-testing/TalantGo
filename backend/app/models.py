@@ -4,7 +4,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (BigInteger, Boolean, CheckConstraint, Date, DateTime, Enum, ForeignKey,
                         Index, Integer, String, Text, UniqueConstraint, func)
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .core.db import Base
@@ -41,6 +41,7 @@ class Track(Base):
     icon: Mapped[str] = mapped_column(String(8), default="")
     description: Mapped[str] = mapped_column(Text, default="")
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
     tasks: Mapped[list["Task"]] = relationship(back_populates="track", order_by="Task.sort_order", lazy="raise")
 
@@ -93,6 +94,9 @@ class User(Base):
     last_active_on: Mapped[date | None] = mapped_column(Date)
     cv_slug: Mapped[str] = mapped_column(String(16), unique=True, default=lambda: secrets.token_urlsafe(8))
     cv_public: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_owner: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     track: Mapped[Track | None] = relationship(lazy="selectin")
@@ -154,3 +158,38 @@ class AppSetting(Base):
     ciphertext: Mapped[str] = mapped_column(Text)
     hint: Mapped[str] = mapped_column(String(64))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class AppConfig(Base):
+    """Plain (non-secret) settings the owner can change, such as the review rules."""
+    __tablename__ = "app_config"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[dict] = mapped_column(JSONB)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class AuditLog(Base):
+    """Every management action, so admins are accountable for what they change."""
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    actor: Mapped[str] = mapped_column(String(160))
+    action: Mapped[str] = mapped_column(String(60))
+    target: Mapped[str] = mapped_column(String(200), default="")
+    details: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class Announcement(Base):
+    __tablename__ = "announcements"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    text: Mapped[str] = mapped_column(Text)
+    audience: Mapped[str] = mapped_column(String(200))
+    created_by: Mapped[str] = mapped_column(String(160))
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    sent: Mapped[int] = mapped_column(Integer, default=0)
+    failed: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

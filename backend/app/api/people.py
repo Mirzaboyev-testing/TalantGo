@@ -19,7 +19,7 @@ async def me_out(session: Session, user: User) -> MeOut:
         university=user.university, group_name=user.group_name, bio=user.bio, goals=user.goals,
         github_url=user.github_url, linkedin_url=user.linkedin_url, points=user.points,
         streak=current_streak(user), rank_overall=await rank_of(session, user),
-        cv_slug=user.cv_slug, cv_public=user.cv_public)
+        cv_slug=user.cv_slug, cv_public=user.cv_public, is_owner=user.is_owner)
 
 
 @router.get("/me", response_model=MeOut)
@@ -30,8 +30,10 @@ async def get_me(user: CurrentUser, session: Session) -> MeOut:
 @router.patch("/me", response_model=MeOut)
 async def update_me(body: MeUpdate, user: CurrentUser, session: Session) -> MeOut:
     changes = body.model_dump(exclude_unset=True)
-    if "track_id" in changes and changes["track_id"] is not None and not await session.get(Track, changes["track_id"]):
-        raise HTTPException(404, "Bunday yo'l yo'q")
+    if changes.get("track_id") is not None:
+        track = await session.get(Track, changes["track_id"])
+        if track is None or not track.is_active:
+            raise HTTPException(404, "Bunday yo'l yo'q")
     if "goals" in changes:
         changes["goals"] = list(dict.fromkeys(changes["goals"] or []))
     for field, value in changes.items():
@@ -67,7 +69,7 @@ async def peers(user: CurrentUser, session: Session,
                 track_id: int | None = None) -> list[PeerOut]:
     """Students on the same path by default; a goal search looks across all paths."""
     verified = _verified_count().label("verified")
-    query = select(User, verified).where(User.id != user.id)
+    query = select(User, verified).where(User.id != user.id, User.is_blocked.is_(False))
     if goal:
         query = query.where(User.goals.contains([goal.strip()]))
     else:
@@ -84,8 +86,8 @@ async def peers(user: CurrentUser, session: Session,
 @router.get("/leaderboard", response_model=LeaderboardOut)
 async def leaderboard(user: CurrentUser, session: Session,
                       scope: Literal["all", "track", "group"] = "all") -> LeaderboardOut:
-    query = select(User)
-    rank_query = select(func.count()).select_from(User).where(User.points > user.points)
+    query = select(User).where(User.is_blocked.is_(False))
+    rank_query = select(func.count()).select_from(User).where(User.points > user.points, User.is_blocked.is_(False))
     if scope == "track":
         query = query.where(User.track_id == user.track_id)
         rank_query = rank_query.where(User.track_id == user.track_id)

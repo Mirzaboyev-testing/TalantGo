@@ -9,6 +9,7 @@ interface WebApp {
   openLink(url: string): void;
   openTelegramLink(url: string): void;
   showAlert(message: string): void;
+  showConfirm(message: string, callback: (ok: boolean) => void): void;
   HapticFeedback?: {
     impactOccurred(style: Haptic): void;
     notificationOccurred(type: "success" | "error" | "warning"): void;
@@ -57,4 +58,10 @@ export function backButton(handler: (() => void) | null): () => void {
     app.BackButton.offClick(handler);
     app.BackButton.hide();
   };
+}
+
+/** Telegram's own confirm dialog; window.confirm is unreliable inside some Telegram clients. */
+export function ask(question: string): Promise<boolean> {
+  if (app && insideTelegram) return new Promise((resolve) => app.showConfirm(question, resolve));
+  return Promise.resolve(window.confirm(question));
 }

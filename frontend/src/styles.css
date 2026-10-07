@@ -105,3 +105,8 @@ table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
 th { color: var(--hint); font-weight: 500; }
 .table-wrap { overflow-x: auto; }
+
+.scroll-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 10px; scrollbar-width: none; }
+.scroll-tabs::-webkit-scrollbar { display: none; }
+.scroll-tabs .chip { flex: none; }
+select:disabled, input:disabled { opacity: .7; }

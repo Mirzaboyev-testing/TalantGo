@@ -1,7 +1,7 @@
 """Submissions, reviews, points and streaks: the rules that make the portfolio trustworthy.
 
 A submission earns its task's points only after `peer_approvals_required` peers on the same track
-approve it, and a mentor's sign-off adds a 50% bonus. A mentor's rejection takes awarded points back,
+approve it, and a mentor's sign-off adds a bonus (both tunable by the owner, see rules.py). A mentor's rejection takes awarded points back,
 which is what keeps peers honest. Reviewers earn a small reward per written review.
 """
 from datetime import UTC, date, datetime, timedelta
@@ -11,8 +11,8 @@ from fastapi import HTTPException
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.config import settings
 from ..models import Review, ReviewKind, Role, Status, Submission, Task, User
+from .rules import get_rules
 
 TASHKENT = ZoneInfo("Asia/Tashkent")
 
@@ -44,7 +44,7 @@ async def _add_points(session: AsyncSession, user_id: int, delta: int) -> None:
 
 async def submit(session: AsyncSession, user: User, task_id: int, proof_url: str, note: str) -> Submission:
     task = await session.get(Task, task_id)
-    if not task or not task.is_active:
+    if not task or not task.is_active or not task.track.is_active:
         raise HTTPException(404, "Topshiriq topilmadi")
     if task.track_id != user.track_id:
         raise HTTPException(403, "Bu topshiriq sizning yo'lingizda emas")
@@ -83,18 +83,19 @@ async def review(session: AsyncSession, reviewer: User, submission_id: int, appr
     if any(r.reviewer_id == reviewer.id for r in sub.current_reviews):
         raise HTTPException(409, "Siz bu ishni allaqachon baholagansiz")
 
+    rules = await get_rules(session)
     kind = ReviewKind.mentor if is_mentor else ReviewKind.peer
     peer_votes = [r.approved for r in sub.current_reviews if r.kind is ReviewKind.peer]
     session.add(Review(submission_id=sub.id, reviewer_id=reviewer.id, round=sub.round,
                        kind=kind, approved=approved, comment=comment))
     touch_streak(reviewer)
     if not is_mentor:
-        await _add_points(session, reviewer.id, settings.review_points)
+        await _add_points(session, reviewer.id, rules.review_points)
 
     task_points = sub.task.points
     if is_mentor:
         if approved:
-            gain = (task_points if sub.points_awarded == 0 else 0) + task_points // 2
+            gain = (task_points if sub.points_awarded == 0 else 0) + task_points * rules.mentor_bonus_percent // 100
             sub.status, sub.verified_at = Status.mentor_verified, datetime.now(UTC)
             sub.points_awarded += gain
             await _add_points(session, sub.user_id, gain)
@@ -103,11 +104,11 @@ async def review(session: AsyncSession, reviewer: User, submission_id: int, appr
             sub.status, sub.points_awarded, sub.verified_at = Status.rejected, 0, None
     else:
         votes = peer_votes + [approved]
-        if votes.count(True) >= settings.peer_approvals_required:
+        if votes.count(True) >= rules.peer_approvals_required:
             sub.status, sub.verified_at = Status.peer_verified, datetime.now(UTC)
             sub.points_awarded = task_points
             await _add_points(session, sub.user_id, task_points)
-        elif votes.count(False) >= settings.peer_approvals_required:
+        elif votes.count(False) >= rules.peer_approvals_required:
             sub.status = Status.rejected
 
     await session.commit()
@@ -124,7 +125,8 @@ async def review_queue(session: AsyncSession, reviewer: User, limit: int = 30) -
                .where(Review.submission_id == Submission.id, Review.reviewer_id == reviewer.id,
                       Review.round == Submission.round)
                .exists())
-    query = select(Submission).join(Task).where(Submission.user_id != reviewer.id, ~already)
+    query = (select(Submission).join(Task).join(User, User.id == Submission.user_id)
+             .where(Submission.user_id != reviewer.id, ~already, User.is_blocked.is_(False)))
     if reviewer.role in (Role.mentor, Role.admin):
         query = query.where(Submission.status.in_([Status.pending, Status.peer_verified]))
     elif reviewer.track_id is None:
@@ -135,7 +137,7 @@ async def review_queue(session: AsyncSession, reviewer: User, limit: int = 30) -
 
 
 async def rank_of(session: AsyncSession, user: User, track_id: int | None = None) -> int:
-    query = select(func.count()).select_from(User).where(User.points > user.points)
+    query = select(func.count()).select_from(User).where(User.points > user.points, User.is_blocked.is_(False))
     if track_id is not None:
         query = query.where(User.track_id == track_id)
     return (await session.scalar(query)) + 1

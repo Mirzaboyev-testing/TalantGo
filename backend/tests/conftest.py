@@ -16,6 +16,7 @@ from app.core.security import create_token  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import Role, User  # noqa: E402
 from app.seed import seed  # noqa: E402
+from app.services import rules, settings_store  # noqa: E402
 
 
 async def _ensure_database() -> None:
@@ -37,6 +38,8 @@ async def fresh_db():
         await conn.run_sync(Base.metadata.create_all)
     async with SessionLocal() as session:
         await seed(session)
+    rules._cache = None                      # in-process caches must not leak between tests
+    settings_store._cache.clear()
     yield
 
 

@@ -126,6 +126,7 @@ class MeOut(ORM):
     rank_overall: int
     cv_slug: str
     cv_public: bool
+    is_owner: bool
 
 
 class MeUpdate(BaseModel):
@@ -179,18 +180,92 @@ class BotStatusOut(BaseModel):
     public_url: str
 
 
+class AdminMeOut(BaseModel):
+    name: str
+    is_owner: bool
+
+
 class AdminUserOut(ORM):
     id: int
     full_name: str
     username: str | None
     role: Role
+    is_owner: bool
+    is_blocked: bool
+    track_id: int | None
+    university: str
     group_name: str
     points: int
+    verified_tasks: int = 0
+    last_seen_at: datetime | None
     created_at: datetime
 
 
-class RoleIn(BaseModel):
-    role: Role
+class UserPatch(BaseModel):
+    role: Role | None = None
+    is_owner: bool | None = None
+    is_blocked: bool | None = None
+    group_name: str | None = Field(default=None, max_length=40)
+    university: str | None = Field(default=None, max_length=120)
+
+
+class PointsAdjustIn(BaseModel):
+    delta: int = Field(ge=-1000, le=1000)
+    reason: str = Field(min_length=5, max_length=300)
+
+
+class AdminSubmissionOut(BaseModel):
+    id: int
+    status: Status
+    round: int
+    points_awarded: int
+    proof_url: str
+    note: str
+    task_title: str
+    track_title: str
+    author_id: int
+    author_name: str
+    reviews: list[ReviewOut]
+    updated_at: datetime
+
+
+class AdminTrackOut(ORM):
+    id: int
+    slug: str
+    title: str
+    icon: str
+    description: str
+    sort_order: int
+    is_active: bool
+    student_count: int = 0
+    task_count: int = 0
+
+
+class TrackIn(BaseModel):
+    title: str = Field(min_length=3, max_length=120)
+    icon: str = Field(default="📘", max_length=8)
+    description: str = Field(default="", max_length=600)
+    slug: Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[a-z0-9-]{2,40}$")] | None = None
+
+
+class TrackPatch(BaseModel):
+    title: str | None = Field(default=None, min_length=3, max_length=120)
+    icon: str | None = Field(default=None, max_length=8)
+    description: str | None = Field(default=None, max_length=600)
+    sort_order: int | None = Field(default=None, ge=0, le=1000)
+    is_active: bool | None = None
+
+
+class AdminTaskOut(ORM):
+    id: int
+    track_id: int
+    week: int
+    sort_order: int
+    title: str
+    description: str
+    proof_hint: str
+    points: int
+    is_active: bool
 
 
 class TaskIn(BaseModel):
@@ -203,8 +278,36 @@ class TaskIn(BaseModel):
 
 
 class TaskPatch(BaseModel):
+    week: int | None = Field(default=None, ge=1, le=52)
     title: str | None = Field(default=None, min_length=3, max_length=160)
     description: str | None = Field(default=None, min_length=10)
     proof_hint: str | None = None
     points: int | None = Field(default=None, ge=1, le=200)
     is_active: bool | None = None
+
+
+class AnnouncementIn(BaseModel):
+    text: str = Field(min_length=3, max_length=3500)
+    track_id: int | None = None
+    group_name: str | None = Field(default=None, max_length=40)
+
+
+class AnnouncementOut(ORM):
+    id: int
+    text: str
+    audience: str
+    created_by: str
+    total: int
+    sent: int
+    failed: int
+    created_at: datetime
+    finished_at: datetime | None
+
+
+class AuditOut(ORM):
+    id: int
+    actor: str
+    action: str
+    target: str
+    details: str
+    created_at: datetime

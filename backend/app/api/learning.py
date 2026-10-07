@@ -20,7 +20,7 @@ def submission_out(sub: Submission) -> SubmissionOut:
 
 @router.get("/tracks", response_model=list[TrackOut])
 async def tracks(session: Session) -> list[Track]:
-    return list((await session.execute(select(Track).order_by(Track.sort_order))).scalars())
+    return list((await session.execute(select(Track).where(Track.is_active).order_by(Track.sort_order))).scalars())
 
 
 @router.get("/tracks/{track_id}/tasks", response_model=list[TaskOut])

@@ -8,14 +8,16 @@ import ReviewScreen from "./screens/Review";
 import PeersScreen from "./screens/Peers";
 import LeaderboardScreen from "./screens/Leaderboard";
 import ProfileScreen from "./screens/Profile";
+import AdminPanel from "./screens/admin/AdminPanel";
 
-type Tab = "path" | "review" | "peers" | "top" | "profile";
+type Tab = "path" | "review" | "peers" | "top" | "profile" | "admin";
 const TABS: { id: Tab; icon: string; label: string }[] = [
   { id: "path", icon: "🧭", label: "Yo'l" },
   { id: "review", icon: "✅", label: "Tekshirish" },
   { id: "peers", icon: "🤝", label: "Tengdoshlar" },
   { id: "top", icon: "🏆", label: "Reyting" },
   { id: "profile", icon: "👤", label: "Profil" },
+  { id: "admin", icon: "⚙️", label: "Boshqaruv" },
 ];
 
 type AuthState = { kind: "loading" } | { kind: "outside" } | { kind: "dev" } | { kind: "error"; text: string } | { kind: "ok" };
@@ -75,6 +77,9 @@ export default function App() {
     );
   }
 
+  const isAdmin = me.role === "admin" || me.is_owner;
+  const tabs = TABS.filter((t) => t.id !== "admin" || isAdmin);
+
   return (
     <>
       <div className="app">
@@ -83,10 +88,11 @@ export default function App() {
         {tab === "peers" && <PeersScreen me={me} />}
         {tab === "top" && <LeaderboardScreen />}
         {tab === "profile" && <ProfileScreen me={me} onSaved={setMe} onChangeTrack={() => setChangingTrack(true)} />}
+        {tab === "admin" && isAdmin && <AdminPanel />}
       </div>
       <nav className="tabbar">
         <div className="tabbar-inner">
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <button key={t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}>
               <span>{t.icon}</span>{t.label}
             </button>
