@@ -89,6 +89,7 @@ class TaskOut(ORM):
     description: str
     proof_hint: str
     points: int
+    kind: str = "submission"
     submission: SubmissionOut | None = None
 
 
@@ -163,6 +164,7 @@ class MeOut(ORM):
     show_phone: bool
     invite_code: str
     invited_count: int
+    headline: str
     completeness: dict
 
 
@@ -171,6 +173,7 @@ class MeUpdate(BaseModel):
     university: str | None = Field(default=None, max_length=120)
     group_name: str | None = Field(default=None, max_length=40)
     bio: str | None = Field(default=None, max_length=600)
+    headline: str | None = Field(default=None, max_length=120)
     goals: list[Goal] | None = Field(default=None, max_length=8)
     github_url: Url | None = None
     linkedin_url: Url | None = None

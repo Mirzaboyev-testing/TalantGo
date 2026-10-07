@@ -35,7 +35,7 @@ async def me_out(session: Session, user: User) -> MeOut:
         staff_university=UniversityOut.model_validate(user.staff_university) if user.staff_university else None,
         staff_status=user.staff_status, staff_position=user.staff_position,
         phone=user.phone, phone_verified=user.phone_verified, show_phone=user.show_phone,
-        invite_code=f"r{user.id}",
+        invite_code=f"r{user.id}", headline=user.headline,
         invited_count=await session.scalar(select(func.count()).select_from(User).where(User.referred_by_id == user.id)),
         completeness=completeness(user))
 

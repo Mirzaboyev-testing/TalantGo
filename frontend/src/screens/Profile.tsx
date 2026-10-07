@@ -8,7 +8,7 @@ import InviteCard from "./InviteCard";
 
 export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; onSaved: (m: Me) => void; onChangeTrack: () => void }) {
   const [form, setForm] = useState({
-    group_name: me.group_name, bio: me.bio,
+    group_name: me.group_name, bio: me.bio, headline: me.headline,
     github_url: me.github_url, linkedin_url: me.linkedin_url, goals: me.goals.join(", "),
   });
   const [busy, setBusy] = useState(false);
@@ -79,6 +79,8 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
         <b>Qo'shimcha ma'lumotlar</b>
         <label>Guruh</label>
         <input value={form.group_name} maxLength={40} onChange={set("group_name")} />
+        <label>Sarlavha</label>
+        <input value={form.headline} maxLength={120} placeholder="Iqtisodiyot talabasi | Data Analytics" onChange={set("headline")} />
         <label>O'zim haqimda</label>
         <textarea value={form.bio} maxLength={600} placeholder="2-3 gap: nimani o'rganyapsiz, qanday ishga qiziqasiz" onChange={set("bio")} />
         <label>GitHub</label>

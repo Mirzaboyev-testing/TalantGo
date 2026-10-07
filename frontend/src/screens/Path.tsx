@@ -3,6 +3,7 @@ import { api, type Me, type Task } from "../api";
 import { haptic, openLink } from "../tg";
 import { ErrorText, Sheet, StatusBadge, message } from "../ui";
 import InviteCard from "./InviteCard";
+import ProfileTask from "./ProfileTask";
 
 export default function PathScreen({ me, onChanged, onChangeTrack }: { me: Me; onChanged: () => void; onChangeTrack: () => void }) {
   const [tasks, setTasks] = useState<Task[] | null>(null);
@@ -34,22 +35,24 @@ export default function PathScreen({ me, onChanged, onChangeTrack }: { me: Me; o
         <div key={t.id} className="card tap" onClick={() => setOpen(t)}>
           <div className="row between">
             <span className="hint">{t.week}-hafta · {t.points} ball</span>
-            <StatusBadge status={t.submission?.status ?? null} />
+            {t.kind === "profile" && t.submission ? <span className="badge peer_verified">Bajarildi ✓</span>
+              : <StatusBadge status={t.submission?.status ?? null} />}
           </div>
           <b>{t.title}</b>
         </div>
       ))}
       {open && (
-        <TaskSheet task={open} onClose={() => setOpen(null)}
+        <TaskSheet task={open} me={me} onClose={() => setOpen(null)}
                    onSubmitted={async () => { setOpen(null); await load(); onChanged(); }} />
       )}
     </div>
   );
 }
 
-function TaskSheet({ task, onClose, onSubmitted }: { task: Task; onClose: () => void; onSubmitted: () => void }) {
+function TaskSheet({ task, me, onClose, onSubmitted }: { task: Task; me: Me; onClose: () => void; onSubmitted: () => void }) {
   const sub = task.submission;
-  const canSubmit = !sub || sub.status === "rejected";
+  const isProfile = task.kind === "profile";
+  const canSubmit = !isProfile && (!sub || sub.status === "rejected");
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -78,16 +81,18 @@ function TaskSheet({ task, onClose, onSubmitted }: { task: Task; onClose: () => 
       <h1>{task.title}</h1>
       <div className="card">
         <p style={{ marginTop: 0 }}>{task.description}</p>
-        <div className="hint"><b>Isbot:</b> {task.proof_hint}</div>
+        {!isProfile && <div className="hint"><b>Isbot:</b> {task.proof_hint}</div>}
       </div>
 
-      {sub && (
+      {isProfile && <ProfileTask me={me} task={task} onDone={onSubmitted} />}
+
+      {sub && !isProfile && (
         <div className="card">
           <div className="row between">
             <b>Sizning ishingiz{sub.round > 1 ? ` (${sub.round}-urinish)` : ""}</b>
             <button className="btn small ghost" onClick={() => openLink(sub.proof_url)}>Ochish</button>
           </div>
-          {sub.reviews.length === 0 && <p className="hint">Hali baholanmagan. Ikki tengdosh tasdiqlasa ball beriladi.</p>}
+          {sub.reviews.length === 0 && <p className="hint">Hali baholanmagan. Tengdosh tasdiqlasa ball beriladi.</p>}
           {sub.reviews.map((r, i) => (
             <div key={i} className={`review ${r.approved ? "yes" : "no"}`}>
               <div className="hint">{r.reviewer_name}{r.kind === "mentor" ? " · mentor" : ""} · {r.approved ? "tasdiqladi" : "qaytardi"}</div>

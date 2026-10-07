@@ -96,7 +96,8 @@ async def test_rules_change_scoring_and_delete_revokes_points(client, make_user)
     track = (await client.get("/api/v1/tracks")).json()[0]
     for u in (a, b):
         await client.patch("/api/v1/me", json={"track_id": track["id"]}, headers=u["headers"])
-    task = (await client.get(f"/api/v1/tracks/{track['id']}/tasks", headers=a["headers"])).json()[0]
+    task = next(t for t in (await client.get(f"/api/v1/tracks/{track['id']}/tasks", headers=a["headers"])).json()
+                if t["kind"] == "submission")
     sub = (await client.post(f"/api/v1/tasks/{task['id']}/submit", json=PROOF, headers=a["headers"])).json()
     r = await client.post(f"/api/v1/submissions/{sub['id']}/reviews", json=GOOD, headers=b["headers"])
     assert r.json()["status"] == "peer_verified"                     # one approval is now enough

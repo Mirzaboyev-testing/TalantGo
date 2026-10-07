@@ -104,6 +104,8 @@ class Task(Base):
     proof_hint: Mapped[str] = mapped_column(Text, default="")
     points: Mapped[int] = mapped_column(Integer)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # "submission": a proof link reviewed by peers; "profile": done inside the app, checked by the system
+    kind: Mapped[str] = mapped_column(String(16), default="submission", server_default="submission")
 
     track: Mapped[Track] = relationship(back_populates="tasks", lazy="selectin")
 
@@ -132,6 +134,7 @@ class User(Base):
     university: Mapped[str] = mapped_column(String(120), default="")
     group_name: Mapped[str] = mapped_column(String(40), default="", index=True)
     bio: Mapped[str] = mapped_column(Text, default="")
+    headline: Mapped[str] = mapped_column(String(120), default="", server_default="")   # "Iqtisodiyot talabasi | Data Analytics"
     goals: Mapped[list[str]] = mapped_column(ARRAY(String(40)), default=list, server_default="{}")
     github_url: Mapped[str] = mapped_column(String(256), default="")
     linkedin_url: Mapped[str] = mapped_column(String(256), default="")

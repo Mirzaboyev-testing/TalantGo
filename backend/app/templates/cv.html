@@ -47,6 +47,7 @@
     {% else %}<div class="avatar">{{ cv.full_name[:1] }}</div>{% endif %}
     <div>
       <h1>{{ cv.full_name }}</h1>
+      {% if cv.headline %}<div style="font-weight:600; margin:2px 0 4px">{{ cv.headline }}</div>{% endif %}
       <div class="sub">
         {{ cv.track or "Yo'l tanlanmagan" }}{% if cv.university %} · {{ cv.university }}{% endif %}{% if cv.faculty %} · {{ cv.faculty }}{% endif %}{% if cv.course %} · {{ cv.course }}-kurs{% endif %}
       </div>

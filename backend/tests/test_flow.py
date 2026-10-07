@@ -15,7 +15,7 @@ async def _setup(client, make_user):
                                                    "goals": ["Power BI", "SQL", "SQL"]}, headers=users[name]["headers"])
         assert r.status_code == 200, r.text
     tasks = (await client.get(f"/api/v1/tracks/{track['id']}/tasks", headers=users["Aziza"]["headers"])).json()
-    return track, tasks, users
+    return track, [t for t in tasks if t["kind"] == "submission"], users
 
 
 async def _me(client, user):
@@ -90,7 +90,8 @@ async def test_validation_and_access_rules(client, make_user):
     assert (await client.post(f"/api/v1/tasks/{tasks[0]['id']}/submit", json={"proof_url": "github.com/x/y"},
                               headers=h)).status_code == 422
     other_track = next(t for t in (await client.get("/api/v1/tracks")).json() if t["id"] != track["id"])
-    other_tasks = (await client.get(f"/api/v1/tracks/{other_track['id']}/tasks", headers=h)).json()
+    other_tasks = [t for t in (await client.get(f"/api/v1/tracks/{other_track['id']}/tasks", headers=h)).json()
+                   if t["kind"] == "submission"]
     assert (await client.post(f"/api/v1/tasks/{other_tasks[0]['id']}/submit", json=PROOF, headers=h)).status_code == 403
     sub = (await client.post(f"/api/v1/tasks/{tasks[0]['id']}/submit", json=PROOF, headers=h)).json()
     assert (await client.post(f"/api/v1/submissions/{sub['id']}/reviews", json={"approved": True, "comment": "ok"},

@@ -145,18 +145,24 @@ UNIVERSITIES: list[tuple[str, str, str]] = [
 
 # A first win in 15 minutes, placed before week 1 of every track (sort_order 0).
 STARTER = ("Start: professional profilingiz",
-           "LinkedIn'da profil yarating yoki yangilang: rasm, sarlavha (masalan, «Iqtisodiyot talabasi | Data "
-           "Analytics»), ta'lim va kamida 3 ta ko'nikma. Ish beruvchi sizni birinchi shu yerda ko'radi. 15 daqiqalik ish.",
-           "LinkedIn profilingiz havolasi (https://linkedin.com/in/...)", 5)
+           "CareerFlow'da professional profilingizni to'ldiring: qisqa sarlavha, o'zingiz haqingizda 2-3 gap, "
+           "kamida 3 ta ko'nikma va tillar. CV'ingizni ochiq qiling. Ish beruvchi sizni birinchi shu yerda ko'radi. "
+           "15 daqiqalik ish, shu oynaning o'zida bajariladi.",
+           "Hech narsa yuklash shart emas: profil to'lsa, tizim o'zi tekshiradi va ball beradi.", 5)
+OLD_STARTER_TITLE = "Start: professional profilingiz"
 
 
 async def add_starters(session: AsyncSession) -> None:
-    have = set((await session.execute(select(Task.track_id).where(Task.sort_order == 0))).scalars())
     title, description, proof_hint, points = STARTER
+    # earlier starters asked for a LinkedIn link: turn them into the in-app profile task
+    for task in (await session.execute(select(Task).where(Task.sort_order == 0, Task.kind != "profile",
+                                                          Task.title == OLD_STARTER_TITLE))).scalars():
+        task.kind, task.description, task.proof_hint = "profile", description, proof_hint
+    have = set((await session.execute(select(Task.track_id).where(Task.sort_order == 0))).scalars())
     for track_id in (await session.execute(select(Track.id))).scalars():
         if track_id not in have:
             session.add(Task(track_id=track_id, week=1, sort_order=0, title=title, description=description,
-                             proof_hint=proof_hint, points=points))
+                             proof_hint=proof_hint, points=points, kind="profile"))
     await session.commit()
 
 

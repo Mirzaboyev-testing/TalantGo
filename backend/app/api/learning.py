@@ -38,13 +38,18 @@ async def track_tasks(track_id: int, user: CurrentUser, session: Session) -> lis
         select(Submission).where(Submission.user_id == user.id,
                                  Submission.task_id.in_([t.id for t in tasks])))).scalars()}
     return [TaskOut(id=t.id, track_id=t.track_id, week=t.week, title=t.title, description=t.description,
-                    proof_hint=t.proof_hint, points=t.points,
+                    proof_hint=t.proof_hint, points=t.points, kind=t.kind,
                     submission=submission_out(mine[t.id]) if t.id in mine else None) for t in tasks]
 
 
 @router.post("/tasks/{task_id}/submit", response_model=SubmissionOut, status_code=201)
 async def submit(task_id: int, body: SubmitIn, user: CurrentUser, session: Session) -> SubmissionOut:
     return submission_out(await progress.submit(session, user, task_id, body.proof_url, body.note.strip()))
+
+
+@router.post("/tasks/{task_id}/complete-profile", response_model=SubmissionOut, status_code=201)
+async def complete_profile(task_id: int, user: CurrentUser, session: Session) -> SubmissionOut:
+    return submission_out(await progress.complete_profile_task(session, user, task_id))
 
 
 @router.get("/reviews/queue", response_model=list[QueueItem])

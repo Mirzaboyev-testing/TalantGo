@@ -45,6 +45,7 @@ def anonymous_card(user: User, verified_tasks: int) -> dict:
     return {
         "id": user.id,
         "code": anonymous_code(user),
+        "headline": user.headline,
         "university": user.university_ref.short_name if user.university_ref else None,
         "university_name": user.university_ref.name if user.university_ref else None,
         "faculty": user.faculty,

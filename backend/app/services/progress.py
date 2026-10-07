@@ -55,6 +55,8 @@ async def submit(session: AsyncSession, user: User, task_id: int, proof_url: str
         raise HTTPException(404, "Topshiriq topilmadi")
     if task.track_id != user.track_id:
         raise HTTPException(403, "Bu topshiriq sizning yo'lingizda emas")
+    if task.kind == "profile":
+        raise HTTPException(409, "Bu topshiriq ilovaning o'zida bajariladi: profilni to'ldiring")
     sub = (await session.execute(
         select(Submission).where(Submission.user_id == user.id, Submission.task_id == task_id)
         .with_for_update(of=Submission))).scalar_one_or_none()
@@ -74,6 +76,42 @@ async def submit(session: AsyncSession, user: User, task_id: int, proof_url: str
         User.is_blocked.is_(False)))).scalars().all()
     notify.send(list(peers), f"📝 {user.full_name} «{task.title}» ishini topshirdi. "
                              f"«Tekshirish» bo'limida baholang va +{rules.review_points} ball oling.")
+    return await _reload(session, sub.id)
+
+
+PROFILE_RULES = [
+    ("headline", "qisqa sarlavha (kamida 10 belgi)", lambda u: len(u.headline.strip()) >= 10),
+    ("bio", "o'zingiz haqingizda (kamida 60 belgi)", lambda u: len(u.bio.strip()) >= 60),
+    ("skills", "kamida 3 ta ko'nikma", lambda u: len(u.skills) >= 3),
+    ("languages", "kamida 1 ta til", lambda u: len(u.languages) >= 1),
+    ("cv_public", "CV ochiq bo'lishi", lambda u: u.cv_public),
+]
+
+
+def profile_missing(user: User) -> list[str]:
+    return [label for _, label, ok in PROFILE_RULES if not ok(user)]
+
+
+async def complete_profile_task(session: AsyncSession, user: User, task_id: int) -> Submission:
+    """A 'profile' task is done inside the app: the system checks the profile and awards the points."""
+    task = await session.get(Task, task_id)
+    if not task or task.kind != "profile" or not task.is_active:
+        raise HTTPException(404, "Topshiriq topilmadi")
+    if task.track_id != user.track_id:
+        raise HTTPException(403, "Bu topshiriq sizning yo'lingizda emas")
+    if await session.scalar(select(Submission.id).where(Submission.user_id == user.id, Submission.task_id == task_id)):
+        raise HTTPException(409, "Bu topshiriq bajarilgan")
+    if missing := profile_missing(user):
+        raise HTTPException(422, "Profilda yetishmayapti: " + ", ".join(missing))
+    from ..core.config import settings
+    sub = Submission(user_id=user.id, task_id=task_id, proof_url=f"{settings.public_url}/cv/{user.cv_slug}",
+                     note="Tizim tekshirdi: profil to'liq", status=Status.peer_verified,
+                     points_awarded=task.points, verified_at=datetime.now(UTC))
+    session.add(sub)
+    touch_streak(user)
+    await session.flush()
+    await _add_points(session, user.id, task.points)
+    await session.commit()
     return await _reload(session, sub.id)
 
 
@@ -160,7 +198,8 @@ async def review_queue(session: AsyncSession, reviewer: User, limit: int = 30) -
                       Review.round == Submission.round)
                .exists())
     query = (select(Submission).join(Task).join(User, User.id == Submission.user_id)
-             .where(Submission.user_id != reviewer.id, ~already, User.is_blocked.is_(False)))
+             .where(Submission.user_id != reviewer.id, ~already, User.is_blocked.is_(False),
+                    Task.kind == "submission"))           # system-checked tasks need no human review
     if reviewer.role in (Role.mentor, Role.admin):
         query = query.where(Submission.status.in_([Status.pending, Status.peer_verified]))
     elif reviewer.track_id is None:

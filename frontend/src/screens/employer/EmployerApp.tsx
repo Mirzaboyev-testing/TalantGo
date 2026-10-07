@@ -241,6 +241,7 @@ function Applicants({ job, onBack }: { job: Job; onBack: () => void }) {
 function CardBody({ card }: { card: TalentCard }) {
   return (
     <>
+      {card.headline && <div style={{ fontWeight: 600 }}>{card.headline}</div>}
       <div className="hint">
         {[card.university, card.faculty, card.course && (card.course === 7 ? "magistratura" : `${card.course}-kurs`), card.city].filter(Boolean).join(" · ")}
       </div>

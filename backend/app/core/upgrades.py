@@ -40,6 +40,8 @@ STATEMENTS = [
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS show_phone boolean NOT NULL DEFAULT false",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by_id integer REFERENCES users(id) ON DELETE SET NULL",
     "CREATE INDEX IF NOT EXISTS ix_users_referred_by_id ON users (referred_by_id)",
+    "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS kind varchar(16) NOT NULL DEFAULT 'submission'",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS headline varchar(120) NOT NULL DEFAULT ''",
     "CREATE INDEX IF NOT EXISTS ix_users_university_id ON users (university_id)",
     "CREATE INDEX IF NOT EXISTS ix_users_company_id ON users (company_id)",
     "CREATE INDEX IF NOT EXISTS ix_users_skills ON users USING gin (skills)",

@@ -11,7 +11,7 @@ export interface Submission {
 }
 export interface Task {
   id: number; track_id: number; week: number; title: string; description: string; proof_hint: string;
-  points: number; submission: Submission | null;
+  points: number; kind: "submission" | "profile"; submission: Submission | null;
 }
 export interface Me {
   id: number; full_name: string; username: string | null; photo_url: string | null; role: Role;
@@ -23,7 +23,7 @@ export interface Me {
   student_number: string; skills: string[]; languages: string[]; job_types: JobKind[]; city: string;
   open_to_work: boolean; verification: Verification; verified_by: string; verification_note: string;
   company: Company | null; staff_university: University | null; staff_status: string; staff_position: string;
-  phone: string; phone_verified: boolean; show_phone: boolean; invite_code: string; invited_count: number;
+  phone: string; phone_verified: boolean; show_phone: boolean; invite_code: string; invited_count: number; headline: string;
   completeness: { percent: number; missing: string[] };
 }
 export type AccountType = "student" | "employer" | "university";
@@ -46,7 +46,7 @@ export type JobInput = Pick<Job, "title" | "kind" | "work_mode" | "city" | "is_p
   "hours_per_week" | "description" | "requirements" | "skills" | "track_ids" | "counts_as_practice" | "deadline"> & { rules_accepted: boolean };
 export interface MyApplication { id: number; status: string; note: string; created_at: string; updated_at: string; job: Job }
 export interface TalentCard {
-  id: number; code: string; university: string | null; university_name: string | null; faculty: string;
+  id: number; code: string; headline: string; university: string | null; university_name: string | null; faculty: string;
   course: number | null; graduation_year: number | null; gpa: number | null; gpa_scale: number; track: string | null;
   track_icon: string; skills: string[]; languages: string[]; job_types: string[]; city: string; points: number;
   verified_tasks: number; verification: Verification; verified_by: string; contact_status?: string | null;
@@ -182,6 +182,7 @@ export const api = {
     exportCsv: () => download("/university/export.csv", "talabalar-hisobot.csv"),
   },
   tasks: (trackId: number) => request<Task[]>("GET", `/tracks/${trackId}/tasks`),
+  completeProfile: (taskId: number) => request<Submission>("POST", `/tasks/${taskId}/complete-profile`),
   submit: (taskId: number, proof_url: string, note: string) =>
     request<Submission>("POST", `/tasks/${taskId}/submit`, { proof_url, note }),
   queue: () => request<QueueItem[]>("GET", "/reviews/queue"),
