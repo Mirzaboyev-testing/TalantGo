@@ -6,6 +6,7 @@ import type { AdminCtx } from "./AdminPanel";
 export default function Settings({ ctx }: { ctx: AdminCtx }) {
   return (
     <div>
+      {ctx.isOwner && <PasswordCard />}
       <RulesCard canEdit={ctx.isOwner} />
       <ExportCard />
       {ctx.isOwner && <BotCard />}
@@ -126,6 +127,45 @@ function AuditCard() {
           {e.details && <div className="hint">{e.details}</div>}
         </div>
       ))}
+    </div>
+  );
+}
+
+function PasswordCard() {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [repeat, setRepeat] = useState("");
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    setError("");
+    if (next !== repeat) {
+      setError("Yangi parollar bir xil emas");
+      return;
+    }
+    try {
+      await api.admin.changePassword(current, next);
+      setDone(true);
+      setCurrent(""); setNext(""); setRepeat("");
+    } catch (e) {
+      setError(message(e));
+    }
+  }
+
+  return (
+    <div className="card">
+      <b>Admin paroli</b>
+      <p className="hint">Kompyuterdagi /admin sahifasiga kirish paroli. O'zgartirilgach, eski parol bilan ochilgan barcha oynalar yopiladi.</p>
+      <label>Joriy parol</label>
+      <input type="password" value={current} autoComplete="current-password" onChange={(e) => setCurrent(e.target.value)} />
+      <label>Yangi parol (kamida 10 belgi)</label>
+      <input type="password" value={next} autoComplete="new-password" onChange={(e) => setNext(e.target.value)} />
+      <label>Yangi parolni takrorlang</label>
+      <input type="password" value={repeat} autoComplete="new-password" onChange={(e) => setRepeat(e.target.value)} />
+      <ErrorText error={error} />
+      {done && <p className="notice">Parol o'zgartirildi. Kompyuterda yangi parol bilan qayta kiring.</p>}
+      <button className="btn small" style={{ marginTop: 10 }} disabled={!current || next.length < 10 || !repeat} onClick={save}>Parolni o'zgartirish</button>
     </div>
   );
 }

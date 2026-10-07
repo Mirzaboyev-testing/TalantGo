@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Me, type Peer } from "../api";
+import { api, courseLabel, type Me, type Peer } from "../api";
 import { openLink } from "../tg";
 import { Avatar, ErrorText, message } from "../ui";
 
@@ -41,12 +41,18 @@ export default function PeersScreen({ me }: { me: Me }) {
             <Avatar name={p.full_name} url={p.photo_url} />
             <div className="grow">
               <b>{p.full_name}</b>
-              <div className="hint">{[p.group_name, p.track_title].filter(Boolean).join(" · ")}</div>
+              <div className="hint">
+                {[p.track_title && `${p.track_icon} ${p.track_title.split(":")[0]}`, courseLabel(p.course), p.university].filter(Boolean).join(" · ")}
+              </div>
+              {p.faculty && <div className="hint">🎓 {p.faculty}</div>}
             </div>
             {p.username
               ? <button className="btn small" onClick={() => openLink(`https://t.me/${p.username}`)}>Yozish</button>
               : <span className="hint" title="Telegram'da username o'rnatilmagan">username yo'q</span>}
           </div>
+          {p.phone && (
+            <div style={{ marginTop: 8 }}>📞 <a href={`tel:${p.phone}`}>{p.phone}</a></div>
+          )}
           <div className="hint" style={{ marginTop: 8 }}>
             {p.points} ball · {p.verified_tasks} tasdiqlangan ish{p.streak > 0 ? ` · 🔥 ${p.streak}` : ""}
           </div>

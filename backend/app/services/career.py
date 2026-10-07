@@ -25,6 +25,7 @@ def completeness(user: User) -> dict:
         "languages": bool(user.languages),
         "job_types": bool(user.job_types),
         "verification": user.verification in ("pending", "verified"),
+        "phone": bool(user.phone),
     }
     return {"percent": round(100 * sum(checks.values()) / len(checks)), "missing": [k for k, ok in checks.items() if not ok]}
 
@@ -74,6 +75,7 @@ def identity(user: User) -> dict:
         "cv_url": f"{settings.public_url}/cv/{user.cv_slug}" if user.cv_public else None,
         "github_url": user.github_url,
         "linkedin_url": user.linkedin_url,
+        "phone": user.phone or None,       # the student applied or accepted: contact details are shared
     }
 
 

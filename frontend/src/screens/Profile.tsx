@@ -3,6 +3,7 @@ import { api, type Me } from "../api";
 import { haptic, openLink } from "../tg";
 import { Avatar, ErrorText, message } from "../ui";
 import CareerProfile from "./CareerProfile";
+import PhoneField from "./PhoneField";
 
 export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; onSaved: (m: Me) => void; onChangeTrack: () => void }) {
   const [form, setForm] = useState({
@@ -61,6 +62,11 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
             </div>
           )}
         </div>
+      </div>
+
+      <div className="card">
+        <b>Telefon</b>
+        <div style={{ marginTop: 8 }}><PhoneField me={me} onChanged={onSaved} /></div>
       </div>
 
       <CareerProfile me={me} onSaved={onSaved} />

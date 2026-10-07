@@ -89,11 +89,12 @@ export default function App() {
     return <div className="app"><Welcome me={me} onStudent={() => setChosenStudent(true)} onChanged={setMe} /></div>;
   }
 
-  if (!me.track || changingTrack) {
+  const incomplete = !me.track || !me.university_ref || !me.course || !me.faculty || !me.phone || !me.has_consent;
+  if (incomplete || changingTrack) {
     return (
       <div className="app">
-        <Onboarding me={me} onDone={async () => { await refreshMe(); setChangingTrack(false); setTab("path"); }}
-                    onCancel={me.track ? () => setChangingTrack(false) : undefined} />
+        <Onboarding me={me} onMe={setMe} onDone={async () => { await refreshMe(); setChangingTrack(false); setTab("path"); }}
+                    onCancel={changingTrack && !incomplete ? () => setChangingTrack(false) : undefined} />
       </div>
     );
   }

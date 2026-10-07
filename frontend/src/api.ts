@@ -23,6 +23,7 @@ export interface Me {
   student_number: string; skills: string[]; languages: string[]; job_types: JobKind[]; city: string;
   open_to_work: boolean; verification: Verification; verified_by: string; verification_note: string;
   company: Company | null; staff_university: University | null; staff_status: string; staff_position: string;
+  phone: string; phone_verified: boolean; show_phone: boolean;
   completeness: { percent: number; missing: string[] };
 }
 export type AccountType = "student" | "employer" | "university";
@@ -60,9 +61,13 @@ export interface QueueItem {
 }
 export interface Peer {
   id: number; full_name: string; username: string | null; photo_url: string | null; track_title: string | null;
+  track_icon: string; university: string | null; faculty: string; course: number | null; phone: string | null;
   group_name: string; goals: string[]; points: number; streak: number; verified_tasks: number;
 }
-export interface LeaderRow { rank: number; id: number; full_name: string; group_name: string; track_icon: string; points: number; is_me: boolean }
+export interface LeaderRow {
+  rank: number; id: number; full_name: string; group_name: string; university: string | null; course: number | null;
+  track_icon: string; points: number; is_me: boolean;
+}
 export interface Leaderboard { rows: LeaderRow[]; my_rank: number }
 export interface BotStatus { configured: boolean; hint: string | null; public_url: string }
 export interface AdminUser {
@@ -181,7 +186,7 @@ export const api = {
   review: (submissionId: number, approved: boolean, comment: string) =>
     request<Submission>("POST", `/submissions/${submissionId}/reviews`, { approved, comment }),
   peers: (goal?: string) => request<Peer[]>("GET", `/peers${goal ? `?goal=${encodeURIComponent(goal)}` : ""}`),
-  leaderboard: (scope: "all" | "track" | "group") => request<Leaderboard>("GET", `/leaderboard?scope=${scope}`),
+  leaderboard: (scope: "all" | "track" | "group" | "university") => request<Leaderboard>("GET", `/leaderboard?scope=${scope}`),
 
   admin: {
     login: (password: string) => request<{ token: string }>("POST", "/auth/admin", { password }),
@@ -209,6 +214,8 @@ export const api = {
     testBot: () => request<{ username: string }>("POST", "/admin/bot/test", undefined, true),
     connectBot: () => request<{ username: string }>("POST", "/admin/bot/connect", undefined, true),
     exportUsers: () => download("/admin/export/users.csv", "careerflow-talabalar.csv"),
+    changePassword: (current_password: string, new_password: string) =>
+      request<{ ok: boolean }>("PUT", "/admin/password", { current_password, new_password }, true),
     inbox: () => request<{ verifications: number; companies: number; jobs: number; staff: number }>("GET", "/admin/inbox", undefined, true),
     verifications: () => request<PendingStudent[]>("GET", "/admin/verifications", undefined, true),
     decideVerification: (id: number, approve: boolean, note: string) => request<unknown>("POST", `/admin/verifications/${id}`, { approve, note }, true),
@@ -267,3 +274,5 @@ export function salary(job: Pick<Job, "is_paid" | "salary_from" | "salary_to">):
   if (job.salary_to) return `${f(job.salary_to)} so'mgacha`;
   return "To'lanadi (kelishiladi)";
 }
+
+export const courseLabel = (c: number | null | undefined) => (!c ? "" : c === 7 ? "magistratura" : `${c}-kurs`);

@@ -1,0 +1,80 @@
+"""Admin password change, phone numbers and what the community list shows."""
+
+from sqlalchemy import select
+
+from app.core.db import SessionLocal
+from app.models import University
+from app.services import settings_store, telegram_bot
+
+BOT_TOKEN = "123456:TEST-token-for-unit-tests-only-abcdefghij"
+
+
+async def login(client, password: str):
+    return await client.post("/api/v1/auth/admin", json={"password": password})
+
+
+async def test_owner_changes_admin_password_and_old_sessions_end(client):
+    old = (await login(client, "test-admin-password")).json()["token"]
+    h = {"Authorization": f"Bearer {old}"}
+    r = await client.put("/api/v1/admin/password", json={"current_password": "wrong", "new_password": "yangi-parol-123"}, headers=h)
+    assert r.status_code == 400
+    r = await client.put("/api/v1/admin/password", json={"current_password": "test-admin-password", "new_password": "qisqa"}, headers=h)
+    assert r.status_code == 422
+    r = await client.put("/api/v1/admin/password",
+                         json={"current_password": "test-admin-password", "new_password": "yangi-parol-123"}, headers=h)
+    assert r.status_code == 200
+    # the old session is signed out, the old password stops working, the new one works
+    assert (await client.get("/api/v1/admin/me", headers=h)).status_code == 401
+    assert (await login(client, "test-admin-password")).status_code == 401
+    new = (await login(client, "yangi-parol-123")).json()["token"]
+    assert (await client.get("/api/v1/admin/me", headers={"Authorization": f"Bearer {new}"})).status_code == 200
+
+
+async def test_admin_cannot_change_password(client, make_user):
+    from app.models import Role
+    admin = await make_user("Nodira", Role.admin)
+    r = await client.put("/api/v1/admin/password",
+                         json={"current_password": "test-admin-password", "new_password": "yangi-parol-123"},
+                         headers=admin["headers"])
+    assert r.status_code == 403
+
+
+async def test_phone_typed_by_hand_is_unverified_and_hidden_by_default(client, make_user):
+    a, b = await make_user("Aziza"), await make_user("Bekzod")
+    track = (await client.get("/api/v1/tracks")).json()[0]
+    async with SessionLocal() as s:
+        tdiu = (await s.execute(select(University.id).where(University.short_name == "TDIU"))).scalar_one()
+    for u in (a, b):
+        await client.patch("/api/v1/me", json={"track_id": track["id"], "university_id": tdiu, "course": 2,
+                                               "faculty": "Iqtisodiyot"}, headers=u["headers"])
+    assert (await client.patch("/api/v1/me", json={"phone": "901234567"}, headers=a["headers"])).status_code == 422
+    me = (await client.patch("/api/v1/me", json={"phone": "+998901234567"}, headers=a["headers"])).json()
+    assert me["phone"] == "+998901234567" and me["phone_verified"] is False and me["show_phone"] is False
+
+    peers = (await client.get("/api/v1/peers", headers=b["headers"])).json()
+    assert peers[0]["phone"] is None
+    assert peers[0]["university"] == "TDIU" and peers[0]["course"] == 2 and peers[0]["faculty"] == "Iqtisodiyot"
+
+    await client.patch("/api/v1/me", json={"show_phone": True}, headers=a["headers"])
+    assert (await client.get("/api/v1/peers", headers=b["headers"])).json()[0]["phone"] == "+998901234567"
+
+    board = (await client.get("/api/v1/leaderboard", params={"scope": "university"}, headers=b["headers"])).json()
+    assert {r["university"] for r in board["rows"]} == {"TDIU"}
+
+
+async def test_phone_shared_through_telegram_is_verified(client, make_user):
+    u = await make_user("Sardor", telegram_id=555001)
+    async with SessionLocal() as s:
+        await settings_store.set_value(s, settings_store.BOT_TOKEN, BOT_TOKEN)
+    update = {"message": {"from": {"id": 555001}, "chat": {"id": 555001, "type": "private"},
+                          "contact": {"user_id": 555001, "phone_number": "998935550011"}}}
+    headers = {"X-Telegram-Bot-Api-Secret-Token": telegram_bot.webhook_secret(BOT_TOKEN)}
+    assert (await client.post("/telegram/webhook", json=update, headers=headers)).status_code == 200
+    me = (await client.get("/api/v1/me", headers=u["headers"])).json()
+    assert me["phone"] == "+998935550011" and me["phone_verified"] is True
+
+    # someone else's contact card is ignored
+    forged = {"message": {"from": {"id": 555001}, "chat": {"id": 555001, "type": "private"},
+                          "contact": {"user_id": 999, "phone_number": "998900000000"}}}
+    await client.post("/telegram/webhook", json=forged, headers=headers)
+    assert (await client.get("/api/v1/me", headers=u["headers"])).json()["phone"] == "+998935550011"

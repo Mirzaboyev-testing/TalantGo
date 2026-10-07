@@ -34,6 +34,7 @@ async def me_out(session: Session, user: User) -> MeOut:
         company=CompanyOut.model_validate(user.company) if user.company else None,
         staff_university=UniversityOut.model_validate(user.staff_university) if user.staff_university else None,
         staff_status=user.staff_status, staff_position=user.staff_position,
+        phone=user.phone, phone_verified=user.phone_verified, show_phone=user.show_phone,
         completeness=completeness(user))
 
 
@@ -64,6 +65,8 @@ async def update_me(body: MeUpdate, user: CurrentUser, session: Session) -> MeOu
         user.consent_at = user.consent_at or datetime.now(UTC)
     if (gpa := changes.get("gpa")) is not None and gpa > (changes.get("gpa_scale") or user.gpa_scale):
         raise HTTPException(422, "O'rtacha baho shkaladan katta bo'lishi mumkin emas")
+    if "phone" in changes and changes["phone"] != user.phone:
+        user.phone_verified = False        # typed by hand: only a number shared via Telegram is confirmed
     if user.verification in ("pending", "verified") and any(
             k in changes and changes[k] != getattr(user, k) for k in IDENTITY_FIELDS):
         user.verification, user.verified_by, user.verified_at = "none", "", None
@@ -110,19 +113,25 @@ async def peers(user: CurrentUser, session: Session,
         query = query.where(User.track_id == wanted)
     rows = (await session.execute(query.order_by(User.points.desc(), User.id).limit(100))).all()
     return [PeerOut(id=u.id, full_name=u.full_name, username=u.username, photo_url=u.photo_url,
-                    track_title=u.track.title if u.track else None, group_name=u.group_name, goals=u.goals,
+                    track_title=u.track.title if u.track else None, track_icon=u.track.icon if u.track else "",
+                    university=u.university_ref.short_name if u.university_ref else None, faculty=u.faculty,
+                    course=u.course, phone=u.phone if u.show_phone and u.phone else None,
+                    group_name=u.group_name, goals=u.goals,
                     points=u.points, streak=current_streak(u), verified_tasks=n) for u, n in rows]
 
 
 @router.get("/leaderboard", response_model=LeaderboardOut)
 async def leaderboard(user: CurrentUser, session: Session,
-                      scope: Literal["all", "track", "group"] = "all") -> LeaderboardOut:
+                      scope: Literal["all", "track", "group", "university"] = "all") -> LeaderboardOut:
     query = select(User).where(User.is_blocked.is_(False), User.account_type == "student")
     rank_query = select(func.count()).select_from(User).where(User.points > user.points, User.is_blocked.is_(False),
                                                               User.account_type == "student")
     if scope == "track":
         query = query.where(User.track_id == user.track_id)
         rank_query = rank_query.where(User.track_id == user.track_id)
+    elif scope == "university":
+        query = query.where(User.university_id == user.university_id)
+        rank_query = rank_query.where(User.university_id == user.university_id)
     elif scope == "group":
         query = query.where(User.group_name == user.group_name)
         rank_query = rank_query.where(User.group_name == user.group_name)
@@ -132,6 +141,7 @@ async def leaderboard(user: CurrentUser, session: Session,
         if u.points != previous:          # equal points share a rank
             rank, previous = position, u.points
         rows.append(LeaderRow(rank=rank, id=u.id, full_name=u.full_name, group_name=u.group_name,
+                              university=u.university_ref.short_name if u.university_ref else None, course=u.course,
                               track_icon=u.track.icon if u.track else "", points=u.points, is_me=u.id == user.id))
     return LeaderboardOut(rows=rows, my_rank=(await session.scalar(rank_query)) + 1)
 

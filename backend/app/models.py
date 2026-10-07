@@ -155,6 +155,9 @@ class User(Base):
     languages: Mapped[list[str]] = mapped_column(ARRAY(String(40)), default=list, server_default="{}")
     job_types: Mapped[list[str]] = mapped_column(ARRAY(String(16)), default=list, server_default="{}")
     city: Mapped[str] = mapped_column(String(60), default="", server_default="")
+    phone: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    phone_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")   # shared via Telegram
+    show_phone: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")       # visible to peers
     open_to_work: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     verification: Mapped[str] = mapped_column(String(16), default="none", server_default="none")
     verified_by: Mapped[str] = mapped_column(String(160), default="", server_default="")

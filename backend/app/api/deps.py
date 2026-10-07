@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.db import get_session
 from ..core.security import read_token
 from ..models import Role, User
+from ..services import admin_password
 
 Session = Annotated[AsyncSession, Depends(get_session)]
 
@@ -37,7 +38,10 @@ class Actor:
 
 async def admin_actor(session: Session, authorization: Annotated[str | None, Header()] = None) -> Actor:
     token = _bearer(authorization)
-    if read_token(token, "admin") is not None:
+    admin_sub = read_token(token, "admin")
+    if admin_sub is not None:
+        if admin_sub != f"admin:{await admin_password.fingerprint(session)}":
+            raise HTTPException(401, "Parol o'zgargan. Yangi parol bilan qayta kiring.")
         return Actor(name="Ega (parol orqali)", is_owner=True, user=None)
     user_id = read_token(token, "user")
     user = await session.get(User, int(user_id)) if user_id else None

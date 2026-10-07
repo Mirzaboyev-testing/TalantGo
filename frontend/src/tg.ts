@@ -10,6 +10,8 @@ interface WebApp {
   openTelegramLink(url: string): void;
   showAlert(message: string): void;
   showConfirm(message: string, callback: (ok: boolean) => void): void;
+  requestContact?(callback: (shared: boolean) => void): void;
+  isVersionAtLeast?(version: string): boolean;
   HapticFeedback?: {
     impactOccurred(style: Haptic): void;
     notificationOccurred(type: "success" | "error" | "warning"): void;
@@ -64,4 +66,13 @@ export function backButton(handler: (() => void) | null): () => void {
 export function ask(question: string): Promise<boolean> {
   if (app && insideTelegram) return new Promise((resolve) => app.showConfirm(question, resolve));
   return Promise.resolve(window.confirm(question));
+}
+
+/** Telegram can share the user's own phone number with the bot (Bot API 6.9+). The number then
+ *  arrives at the server through the bot, so it is confirmed by Telegram, not typed by hand. */
+export const canShareContact = Boolean(app && insideTelegram && app.requestContact && app.isVersionAtLeast?.("6.9"));
+
+export function shareContact(): Promise<boolean> {
+  if (!canShareContact) return Promise.resolve(false);
+  return new Promise((resolve) => app!.requestContact!(resolve));
 }

@@ -14,9 +14,9 @@ from ..models import (Announcement, AuditLog, Company, Job, Role, Status, Submis
                       User)
 from ..schemas import (AdminMeOut, AdminSubmissionOut, AdminTaskOut, AdminTrackOut, AdminUserOut,
                        AnnouncementIn, AnnouncementOut, AuditOut, BotStatusOut, BotTokenIn, CompanyOut,
-                       PointsAdjustIn, ReviewDecisionIn, ReviewOut, TaskIn, TaskPatch, TrackIn, TrackPatch,
+                       PasswordChangeIn, PointsAdjustIn, ReviewDecisionIn, ReviewOut, TaskIn, TaskPatch, TrackIn, TrackPatch,
                        UniversityIn, UniversityOut, UniversityPatch, UserPatch)
-from ..services import announcements, notify, settings_store, telegram_bot
+from ..services import admin_password, announcements, notify, settings_store, telegram_bot
 from ..services.career import decide_verification
 from .jobs import company_hr_ids, job_out
 from ..services.rules import Rules, get_rules, save_rules
@@ -283,6 +283,19 @@ async def read_rules(_: AdminActor, session: Session) -> Rules:
 async def update_rules(body: Rules, actor: OwnerActor, session: Session) -> Rules:
     audit(session, actor, "rules.update", "", body.model_dump_json())
     return await save_rules(session, body)
+
+
+@router.put("/password")
+async def change_password(body: PasswordChangeIn, actor: OwnerActor, session: Session) -> dict:
+    """Owner only. Every admin session opened with the old password is signed out."""
+    if not await admin_password.verify(session, body.current_password):
+        raise HTTPException(400, "Joriy parol noto'g'ri")
+    if body.new_password == body.current_password:
+        raise HTTPException(400, "Yangi parol eskisidan farq qilishi kerak")
+    audit(session, actor, "admin.password", "", "admin paroli almashtirildi")
+    await session.flush()
+    await admin_password.change(session, body.new_password)
+    return {"ok": True}
 
 
 @router.get("/bot", response_model=BotStatusOut)

@@ -15,6 +15,8 @@ def _http_url(value: str) -> str:
 Url = Annotated[str, StringConstraints(strip_whitespace=True, max_length=512), AfterValidator(_http_url)]
 Goal = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=40)]
 Tag = Goal
+# Uzbek mobile number in international form, e.g. +998901234567
+Phone = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^(\+998\d{9})?$")]
 JobKind = Literal["internship", "part_time", "junior", "project"]
 WorkMode = Literal["office", "remote", "hybrid"]
 
@@ -37,6 +39,11 @@ class DevAuthIn(BaseModel):
 
 class AdminLoginIn(BaseModel):
     password: str
+
+
+class PasswordChangeIn(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=10, max_length=128)
 
 
 class TokenOut(BaseModel):
@@ -151,6 +158,9 @@ class MeOut(ORM):
     staff_university: "UniversityOut | None"
     staff_status: str
     staff_position: str
+    phone: str
+    phone_verified: bool
+    show_phone: bool
     completeness: dict
 
 
@@ -176,6 +186,8 @@ class MeUpdate(BaseModel):
     job_types: list[JobKind] | None = None
     city: str | None = Field(default=None, max_length=60)
     open_to_work: bool | None = None
+    phone: Phone | None = None
+    show_phone: bool | None = None
 
 
 class UniversityOut(ORM):
@@ -317,6 +329,11 @@ class PeerOut(BaseModel):
     username: str | None
     photo_url: str | None
     track_title: str | None
+    track_icon: str = ""
+    university: str | None = None
+    faculty: str = ""
+    course: int | None = None
+    phone: str | None = None              # only when the student chose to show it
     group_name: str
     goals: list[str]
     points: int
@@ -329,6 +346,8 @@ class LeaderRow(BaseModel):
     id: int
     full_name: str
     group_name: str
+    university: str | None = None
+    course: int | None = None
     track_icon: str
     points: int
     is_me: bool

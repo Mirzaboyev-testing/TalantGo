@@ -5,10 +5,10 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 
 from ..core.config import settings
-from ..core.security import InitDataError, check_admin_password, create_token, validate_init_data
+from ..core.security import InitDataError, create_token, validate_init_data
 from ..models import User
 from ..schemas import AdminLoginIn, DevAuthIn, TelegramAuthIn, TokenOut
-from ..services import settings_store
+from ..services import admin_password, settings_store
 from .deps import Session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -61,8 +61,9 @@ async def dev_login(body: DevAuthIn, session: Session) -> TokenOut:
 
 
 @router.post("/admin", response_model=TokenOut)
-async def admin_login(body: AdminLoginIn) -> TokenOut:
-    if not check_admin_password(body.password):
+async def admin_login(body: AdminLoginIn, session: Session) -> TokenOut:
+    if not await admin_password.verify(session, body.password):
         await asyncio.sleep(1)              # slows down password guessing
         raise HTTPException(401, "Parol noto'g'ri")
-    return TokenOut(token=create_token("admin", "admin", ADMIN_TOKEN_HOURS))
+    fp = await admin_password.fingerprint(session)
+    return TokenOut(token=create_token(f"admin:{fp}", "admin", ADMIN_TOKEN_HOURS))

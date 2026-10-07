@@ -33,6 +33,16 @@ async def webhook(update: dict, session: Session,
     if not token or x_telegram_bot_api_secret_token != telegram_bot.webhook_secret(token):
         raise HTTPException(403)
     message = update.get("message") or {}
+    contact = message.get("contact")
+    sender = (message.get("from") or {}).get("id")
+    if contact and sender and contact.get("user_id") == sender:
+        # The user shared their own number with the bot (WebApp.requestContact): Telegram vouches for it.
+        user = (await session.execute(select(User).where(User.telegram_id == sender))).scalar_one_or_none()
+        if user:
+            phone = "+" + contact.get("phone_number", "").lstrip("+")
+            user.phone, user.phone_verified = phone[:20], True
+            await session.commit()
+        return {"ok": True}
     if message.get("text", "").startswith("/start") and message.get("chat", {}).get("type") == "private":
         try:
             await telegram_bot.send_welcome(token, message["chat"]["id"], settings.public_url)

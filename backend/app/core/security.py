@@ -67,10 +67,6 @@ def read_token(token: str, scope: str) -> str | None:
     return payload["sub"] if payload.get("scope") == scope else None
 
 
-def check_admin_password(candidate: str) -> bool:
-    return bool(settings.admin_password) and hmac.compare_digest(candidate.encode(), settings.admin_password.encode())
-
-
 # --------------------------------------------------------------------------- Telegram
 
 class InitDataError(ValueError):
