@@ -24,7 +24,7 @@ export default function Onboarding({ me, onDone, onCancel, onMe }: {
   const [faculty, setFaculty] = useState(me.faculty);
   const [course, setCourse] = useState(me.course ? String(me.course) : "");
   const [consent, setConsent] = useState(me.has_consent);
-  const [goals, setGoals] = useState<string[]>(me.goals);
+  const [goals, setGoals] = useState<string[]>([...new Set([...me.skills, ...me.goals])]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -43,7 +43,7 @@ export default function Onboarding({ me, onDone, onCancel, onMe }: {
     setError("");
     try {
       await api.updateMe({
-        track_id: trackId, goals, consent: true, university_id: Number(uniId), faculty: faculty.trim(),
+        track_id: trackId, goals, skills: [...new Set([...me.skills, ...goals])].slice(0, 20), consent: true, university_id: Number(uniId), faculty: faculty.trim(),
         course: Number(course),
       });
       onDone();
@@ -97,8 +97,8 @@ export default function Onboarding({ me, onDone, onCancel, onMe }: {
 
       {chosen && suggestions.length > 0 && (
         <>
-          <h2>4. Maqsadlar</h2>
-          <p className="hint">Shu maqsaddagi tengdoshlarni topishga yordam beradi.</p>
+          <h2>4. Qaysi ko'nikmalarni o'rganyapsiz</h2>
+          <p className="hint">Shu ko'nikmadagi tengdoshlarni va mos vakansiyalarni topishga yordam beradi.</p>
           <div className="chips">
             {[...new Set([...suggestions, ...goals])].map((g) => (
               <button key={g} className={`chip ${goals.includes(g) ? "on" : ""}`} onClick={() => toggle(g)}>{g}</button>

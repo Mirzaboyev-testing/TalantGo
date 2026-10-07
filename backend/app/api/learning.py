@@ -4,6 +4,7 @@ from sqlalchemy import select
 from ..models import Submission, Task, Track
 from ..schemas import QueueItem, ReviewIn, ReviewOut, SubmissionOut, SubmitIn, TaskOut, TrackOut
 from ..services import progress
+from ..services.rules import Rules, get_rules
 from .deps import CurrentUser, Session
 
 router = APIRouter(tags=["learning"])
@@ -16,6 +17,12 @@ def submission_out(sub: Submission) -> SubmissionOut:
         verified_at=sub.verified_at,
         reviews=[ReviewOut(reviewer_name=r.reviewer.full_name, kind=r.kind, approved=r.approved,
                            comment=r.comment, created_at=r.created_at) for r in sub.current_reviews])
+
+
+@router.get("/rules", response_model=Rules)
+async def rules(session: Session) -> Rules:
+    """The review rules students see in the app (how many approvals, points per review)."""
+    return await get_rules(session)
 
 
 @router.get("/tracks", response_model=list[TrackOut])

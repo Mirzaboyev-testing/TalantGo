@@ -4,6 +4,7 @@ import { haptic, openLink } from "../tg";
 import { Avatar, ErrorText, message } from "../ui";
 import CareerProfile from "./CareerProfile";
 import PhoneField from "./PhoneField";
+import InviteCard from "./InviteCard";
 
 export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; onSaved: (m: Me) => void; onChangeTrack: () => void }) {
   const [form, setForm] = useState({
@@ -24,8 +25,9 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
     setBusy(true);
     setError("");
     try {
-      const goals = form.goals.split(",").map((g) => g.trim()).filter((g) => g.length >= 2);
-      onSaved(await api.updateMe({ ...form, goals, ...extra }));
+      const { goals: _unused, ...rest } = form;
+      void _unused;
+      onSaved(await api.updateMe({ ...rest, ...extra }));
       haptic("success");
       setSaved(true);
     } catch (e) {
@@ -64,6 +66,8 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
         </div>
       </div>
 
+      <InviteCard me={me} />
+
       <div className="card">
         <b>Telefon</b>
         <div style={{ marginTop: 8 }}><PhoneField me={me} onChanged={onSaved} /></div>
@@ -77,8 +81,6 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
         <input value={form.group_name} maxLength={40} onChange={set("group_name")} />
         <label>O'zim haqimda</label>
         <textarea value={form.bio} maxLength={600} placeholder="2-3 gap: nimani o'rganyapsiz, qanday ishga qiziqasiz" onChange={set("bio")} />
-        <label>Maqsadlar (vergul bilan)</label>
-        <input value={form.goals} onChange={set("goals")} />
         <label>GitHub</label>
         <input value={form.github_url} placeholder="https://github.com/…" inputMode="url" onChange={set("github_url")} />
         <label>LinkedIn</label>

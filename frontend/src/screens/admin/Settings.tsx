@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type AuditEntry, type BotStatus, type Rules } from "../../api";
+import { BOT_URL } from "../../tg";
 import { ErrorText, message } from "../../ui";
 import type { AdminCtx } from "./AdminPanel";
 
@@ -7,6 +8,7 @@ export default function Settings({ ctx }: { ctx: AdminCtx }) {
   return (
     <div>
       {ctx.isOwner && <PasswordCard />}
+      <PartnerLinks />
       <RulesCard canEdit={ctx.isOwner} />
       <ExportCard />
       {ctx.isOwner && <BotCard />}
@@ -166,6 +168,28 @@ function PasswordCard() {
       <ErrorText error={error} />
       {done && <p className="notice">Parol o'zgartirildi. Kompyuterda yangi parol bilan qayta kiring.</p>}
       <button className="btn small" style={{ marginTop: 10 }} disabled={!current || next.length < 10 || !repeat} onClick={save}>Parolni o'zgartirish</button>
+    </div>
+  );
+}
+
+function PartnerLinks() {
+  const links = [
+    ["HR va kompaniyalar uchun", `${BOT_URL}?start=hr`],
+    ["Universitet karyera markazi uchun", `${BOT_URL}?start=uni`],
+  ];
+  return (
+    <div className="card">
+      <b>Hamkor havolalari</b>
+      <p className="hint">Talabalar oddiy havola orqali faqat talaba sifatida kiradi. Kompaniya va universitet xodimlariga shu havolalarni yuboring: ular ochganda tegishli ro'yxatdan o'tish chiqadi.</p>
+      {links.map(([label, url]) => (
+        <div key={url} style={{ marginTop: 8 }}>
+          <div className="hint">{label}</div>
+          <div className="row">
+            <input readOnly value={url} onFocus={(e) => e.target.select()} />
+            <button className="btn small ghost" onClick={() => navigator.clipboard.writeText(url).catch(() => {})}>Nusxa</button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -143,6 +143,23 @@ UNIVERSITIES: list[tuple[str, str, str]] = [
 ]
 
 
+# A first win in 15 minutes, placed before week 1 of every track (sort_order 0).
+STARTER = ("Start: professional profilingiz",
+           "LinkedIn'da profil yarating yoki yangilang: rasm, sarlavha (masalan, «Iqtisodiyot talabasi | Data "
+           "Analytics»), ta'lim va kamida 3 ta ko'nikma. Ish beruvchi sizni birinchi shu yerda ko'radi. 15 daqiqalik ish.",
+           "LinkedIn profilingiz havolasi (https://linkedin.com/in/...)", 5)
+
+
+async def add_starters(session: AsyncSession) -> None:
+    have = set((await session.execute(select(Task.track_id).where(Task.sort_order == 0))).scalars())
+    title, description, proof_hint, points = STARTER
+    for track_id in (await session.execute(select(Track.id))).scalars():
+        if track_id not in have:
+            session.add(Task(track_id=track_id, week=1, sort_order=0, title=title, description=description,
+                             proof_hint=proof_hint, points=points))
+    await session.commit()
+
+
 async def seed(session: AsyncSession) -> None:
     known = set((await session.execute(select(University.name))).scalars())
     session.add_all(University(name=n, short_name=sh, city=c) for n, sh, c in UNIVERSITIES if n not in known)
@@ -158,3 +175,4 @@ async def seed(session: AsyncSession) -> None:
             session.add(Task(track_id=track.id, week=week, sort_order=week, title=title,
                              description=description, proof_hint=proof_hint, points=POINTS_BY_WEEK[week]))
     await session.commit()
+    await add_starters(session)

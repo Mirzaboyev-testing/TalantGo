@@ -23,7 +23,7 @@ export interface Me {
   student_number: string; skills: string[]; languages: string[]; job_types: JobKind[]; city: string;
   open_to_work: boolean; verification: Verification; verified_by: string; verification_note: string;
   company: Company | null; staff_university: University | null; staff_status: string; staff_position: string;
-  phone: string; phone_verified: boolean; show_phone: boolean;
+  phone: string; phone_verified: boolean; show_phone: boolean; invite_code: string; invited_count: number;
   completeness: { percent: number; missing: string[] };
 }
 export type AccountType = "student" | "employer" | "university";
@@ -89,6 +89,7 @@ export interface AdminStats {
   submissions: Record<Status, number>;
   per_track: { icon: string; title: string; students: number }[];
   top: { name: string; group: string; points: number }[];
+  top_inviters: { name: string; count: number }[];
 }
 
 export class ApiError extends Error {
@@ -145,6 +146,7 @@ export const api = {
   updateMe: (changes: Partial<Omit<Me, "track" | "university_ref" | "company" | "staff_university" | "completeness">> &
     { track_id?: number | null; university_id?: number | null; consent?: boolean }) => request<Me>("PATCH", "/me", changes),
   tracks: () => request<Track[]>("GET", "/tracks"),
+  rules: () => request<Rules>("GET", "/rules"),
   universities: () => request<University[]>("GET", "/universities"),
   requestVerification: () => request<Me>("POST", "/me/verification"),
   registerCompany: (c: Omit<Company, "id" | "status" | "review_note">) => request<Me>("POST", "/me/company", c),

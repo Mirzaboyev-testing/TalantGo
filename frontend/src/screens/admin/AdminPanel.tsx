@@ -101,6 +101,13 @@ function Overview() {
         ))}
       </div>
       <div className="card">
+        <b>Eng ko'p odam olib kelganlar</b>
+        {s.top_inviters.length === 0 && <div className="hint">Hali taklif havolasi orqali hech kim kelmagan</div>}
+        {s.top_inviters.map((t, i) => (
+          <div key={i} className="row between" style={{ marginTop: 6 }}><span>{i + 1}. {t.name}</span><b>{t.count}</b></div>
+        ))}
+      </div>
+      <div className="card">
         <b>Top 5</b>
         {s.top.length === 0 && <div className="hint">Hali ball yo'q</div>}
         {s.top.map((t, i) => (

@@ -12,6 +12,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Review, ReviewKind, Role, Status, Submission, Task, User
+from . import notify
 from .rules import get_rules
 
 TASHKENT = ZoneInfo("Asia/Tashkent")
@@ -21,17 +22,23 @@ def today() -> date:
     return datetime.now(TASHKENT).date()
 
 
+def week_start(day: date) -> date:
+    return day - timedelta(days=day.weekday())
+
+
 def touch_streak(user: User) -> None:
+    """Weekly streak: tasks are weekly, so a week with any submission or review keeps it alive."""
     now = today()
-    if user.last_active_on == now:
-        return
-    user.streak_count = user.streak_count + 1 if user.last_active_on == now - timedelta(days=1) else 1
+    this_week = week_start(now)
+    last_week = week_start(user.last_active_on) if user.last_active_on else None
+    if last_week != this_week:
+        user.streak_count = user.streak_count + 1 if last_week == this_week - timedelta(weeks=1) else 1
     user.last_active_on = now
 
 
 def current_streak(user: User) -> int:
-    """A streak shown on Monday that was last extended on Friday is not a streak."""
-    if user.last_active_on and user.last_active_on >= today() - timedelta(days=1):
+    """Alive while the student was active this week or last week (this week is not over yet)."""
+    if user.last_active_on and week_start(user.last_active_on) >= week_start(today()) - timedelta(weeks=1):
         return user.streak_count
     return 0
 
@@ -61,6 +68,12 @@ async def submit(session: AsyncSession, user: User, task_id: int, proof_url: str
         raise HTTPException(409, "Bu topshiriq allaqachon topshirilgan")
     touch_streak(user)
     await session.commit()
+    rules = await get_rules(session)
+    peers = (await session.execute(select(User.telegram_id).where(
+        User.track_id == task.track_id, User.id != user.id, User.account_type == "student",
+        User.is_blocked.is_(False)))).scalars().all()
+    notify.send(list(peers), f"📝 {user.full_name} «{task.title}» ishini topshirdi. "
+                             f"«Tekshirish» bo'limida baholang va +{rules.review_points} ball oling.")
     return await _reload(session, sub.id)
 
 
@@ -84,6 +97,7 @@ async def review(session: AsyncSession, reviewer: User, submission_id: int, appr
         raise HTTPException(409, "Siz bu ishni allaqachon baholagansiz")
 
     rules = await get_rules(session)
+    old_status = sub.status
     kind = ReviewKind.mentor if is_mentor else ReviewKind.peer
     peer_votes = [r.approved for r in sub.current_reviews if r.kind is ReviewKind.peer]
     session.add(Review(submission_id=sub.id, reviewer_id=reviewer.id, round=sub.round,
@@ -112,7 +126,27 @@ async def review(session: AsyncSession, reviewer: User, submission_id: int, appr
             sub.status = Status.rejected
 
     await session.commit()
-    return await _reload(session, submission_id)
+    fresh = await _reload(session, submission_id)
+    await _announce_decision(session, fresh, old_status)
+    return fresh
+
+
+async def _announce_decision(session: AsyncSession, sub: Submission, old_status: Status) -> None:
+    """Tell the author when their work changes state, and mentors when it is ready for them."""
+    if sub.status == old_status:
+        return
+    title = sub.task.title
+    message = {
+        Status.peer_verified: f"🎉 «{title}» ishingiz tasdiqlandi: +{sub.points_awarded} ball. Portfolioingizga qo'shildi.",
+        Status.mentor_verified: f"🏆 Mentor «{title}» ishingizni tasdiqladi. Endi jami {sub.points_awarded} ball.",
+        Status.rejected: f"«{title}» ishingiz qaytarildi. Izohlarni o'qib, tuzating va qayta topshiring.",
+    }.get(sub.status)
+    if message:
+        notify.send([sub.user.telegram_id], message)
+    if sub.status is Status.peer_verified:
+        mentors = (await session.execute(select(User.telegram_id).where(
+            User.role.in_([Role.mentor, Role.admin]), User.is_blocked.is_(False)))).scalars().all()
+        notify.send(list(mentors), f"✅ «{title}» ({sub.user.full_name}) tengdoshlar tasdiqladi. Mentor bahosini kutmoqda.")
 
 
 async def _reload(session: AsyncSession, submission_id: int) -> Submission:

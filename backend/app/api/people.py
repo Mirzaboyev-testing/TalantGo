@@ -35,6 +35,8 @@ async def me_out(session: Session, user: User) -> MeOut:
         staff_university=UniversityOut.model_validate(user.staff_university) if user.staff_university else None,
         staff_status=user.staff_status, staff_position=user.staff_position,
         phone=user.phone, phone_verified=user.phone_verified, show_phone=user.show_phone,
+        invite_code=f"r{user.id}",
+        invited_count=await session.scalar(select(func.count()).select_from(User).where(User.referred_by_id == user.id)),
         completeness=completeness(user))
 
 
@@ -105,7 +107,7 @@ async def peers(user: CurrentUser, session: Session,
     verified = _verified_count().label("verified")
     query = select(User, verified).where(User.id != user.id, User.is_blocked.is_(False), User.account_type == "student")
     if goal:
-        query = query.where(User.goals.contains([goal.strip()]))
+        query = query.where(User.goals.contains([goal.strip()]) | User.skills.contains([goal.strip()]))
     else:
         wanted = track_id or user.track_id
         if wanted is None:

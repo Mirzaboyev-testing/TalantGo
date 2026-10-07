@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type Me, type QueueItem } from "../api";
+import { api, type Me, type QueueItem, type Rules } from "../api";
 import { haptic, openLink } from "../tg";
 import { ErrorText, StatusBadge, message } from "../ui";
 
 export default function ReviewScreen({ me, onChanged }: { me: Me; onChanged: () => void }) {
   const [items, setItems] = useState<QueueItem[] | null>(null);
   const [error, setError] = useState("");
+  const [rules, setRules] = useState<Rules | null>(null);
   const isMentor = me.role !== "student";
+  useEffect(() => { api.rules().then(setRules, () => {}); }, []);
 
   const load = useCallback(() => api.queue().then(setItems, (e) => setError(message(e))), []);
   useEffect(() => { void load(); }, [load]);
@@ -17,7 +19,8 @@ export default function ReviewScreen({ me, onChanged }: { me: Me; onChanged: () 
       <p className="notice">
         {isMentor
           ? "Siz mentorsiz: tasdig'ingiz ishga eng yuqori ishonch darajasini beradi va 50% bonus qo'shadi. Rad etsangiz, berilgan ball qaytarib olinadi."
-          : "Yo'lingizdagi tengdoshlar ishini tekshiring. Har bir yozma baho uchun +2 ball. Ikki tasdiq yig'ilsa, ish portfolioga tushadi."}
+          : `Yo'lingizdagi tengdoshlar ishini tekshiring. Har bir yozma baho uchun +${rules?.review_points ?? 2} ball. ` +
+            `${rules?.peer_approvals_required ?? 1} ta tasdiq yig'ilsa, ish portfolioga tushadi.`}
       </p>
       <ErrorText error={error} />
       {!items && !error && <div className="hint">Yuklanmoqda…</div>}

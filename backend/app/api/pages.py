@@ -43,9 +43,28 @@ async def webhook(update: dict, session: Session,
             user.phone, user.phone_verified = phone[:20], True
             await session.commit()
         return {"ok": True}
-    if message.get("text", "").startswith("/start") and message.get("chat", {}).get("type") == "private":
+    text = message.get("text", "")
+    if text.startswith("/start") and message.get("chat", {}).get("type") == "private" and sender:
+        payload = text.removeprefix("/start").strip()
+        role = {"hr": "employer", "uni": "university"}.get(payload)
+        if payload.startswith("r") and payload[1:].isdigit():
+            await _remember_referral(session, message["from"], int(payload[1:]))
         try:
-            await telegram_bot.send_welcome(token, message["chat"]["id"], settings.public_url)
+            await telegram_bot.send_welcome(token, message["chat"]["id"], settings.public_url, role)
         except telegram_bot.BotError as exc:     # never make Telegram retry the update
             log.warning("welcome message failed: %s", exc)
     return {"ok": True}
+
+
+async def _remember_referral(session: Session, sender: dict, referrer_id: int) -> None:
+    """A friend's invite link (t.me/<bot>?start=r<id>): remember who brought this person.
+    Only for people who are new to CareerFlow; existing accounts are never re-attributed."""
+    if await session.scalar(select(User.id).where(User.telegram_id == sender["id"])):
+        return
+    referrer = await session.get(User, referrer_id)
+    if referrer is None:
+        return
+    name = " ".join(filter(None, [sender.get("first_name"), sender.get("last_name")])) or "Talaba"
+    session.add(User(telegram_id=sender["id"], full_name=name[:128], username=sender.get("username"),
+                     referred_by_id=referrer.id))
+    await session.commit()

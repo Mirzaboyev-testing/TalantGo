@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     static_dir: str = "/app/static"
 
     init_data_max_age: int = 86400          # seconds a Telegram launch stays valid
-    peer_approvals_required: int = 2
+    peer_approvals_required: int = 1          # pilot: small groups; raise it in the admin page as groups grow
     review_points: int = 2                  # reward for reviewing a peer's work
 
 

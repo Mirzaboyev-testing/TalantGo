@@ -161,6 +161,8 @@ class MeOut(ORM):
     phone: str
     phone_verified: bool
     show_phone: bool
+    invite_code: str
+    invited_count: int
     completeness: dict
 
 

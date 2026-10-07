@@ -7,8 +7,10 @@ import CompanyForm from "./employer/CompanyForm";
 type Choice = "student" | "employer" | "university" | null;
 
 /** First screen for a new account: who are you? */
-export default function Welcome({ me, onStudent, onChanged }: { me: Me; onStudent: () => void; onChanged: (m: Me) => void }) {
-  const [choice, setChoice] = useState<Choice>(null);
+export default function Welcome({ me, initial, onStudent, onChanged }: {
+  me: Me; initial: Choice; onStudent: () => void; onChanged: (m: Me) => void;
+}) {
+  const [choice, setChoice] = useState<Choice>(initial);
 
   if (choice === "employer") {
     return (

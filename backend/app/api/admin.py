@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
+from sqlalchemy.orm import aliased
 
 from ..core.config import settings
 from ..models import (Announcement, AuditLog, Company, Job, Role, Status, Submission, Task, Track, University,
@@ -45,6 +46,7 @@ async def admin_me(actor: AdminActor) -> AdminMeOut:
 @router.get("/stats")
 async def stats(_: AdminActor, session: Session) -> dict:
     week_ago = datetime.now(UTC) - timedelta(days=7)
+    inviter = aliased(User)
     by_status = dict((await session.execute(
         select(Submission.status, func.count()).group_by(Submission.status))).all())
     per_track = (await session.execute(
@@ -63,6 +65,9 @@ async def stats(_: AdminActor, session: Session) -> dict:
         "submissions": {s.value: by_status.get(s, 0) for s in Status},
         "per_track": [{"icon": i, "title": t, "students": n} for i, t, n in per_track],
         "top": [{"name": n, "group": g, "points": p} for n, g, p in top],
+        "top_inviters": [{"name": n, "count": c} for n, c in (await session.execute(
+            select(inviter.full_name, func.count(User.id)).join(inviter, User.referred_by_id == inviter.id)
+            .group_by(inviter.id, inviter.full_name).order_by(func.count(User.id).desc()).limit(5))).all()],
     }
 
 

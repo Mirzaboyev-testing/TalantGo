@@ -85,8 +85,10 @@ export default function App() {
       ? <UniversityApp me={me} />
       : <div className="app"><PendingScreen me={me} onChanged={setMe} /></div>;
   }
-  if (!me.track && !me.has_consent && !chosenStudent) {
-    return <div className="app"><Welcome me={me} onStudent={() => setChosenStudent(true)} onChanged={setMe} /></div>;
+  const partnerRole = new URLSearchParams(window.location.search).get("role");
+  if (partnerRole && !me.track && !me.has_consent && !chosenStudent) {
+    return <div className="app"><Welcome me={me} initial={partnerRole === "employer" || partnerRole === "university" ? partnerRole : null}
+                                               onStudent={() => setChosenStudent(true)} onChanged={setMe} /></div>;
   }
 
   const incomplete = !me.track || !me.university_ref || !me.course || !me.faculty || !me.phone || !me.has_consent;

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -11,6 +12,7 @@ from .core.config import settings
 from .core.db import Base, SessionLocal, engine
 from .core.upgrades import upgrade
 from .seed import seed
+from .services import reminders
 
 logging.basicConfig(level=logging.INFO)
 # httpx logs every request URL at INFO, and a Bot API URL contains the bot token
@@ -27,7 +29,10 @@ async def lifespan(_: FastAPI):
         await upgrade(conn)
     async with SessionLocal() as session:
         await seed(session)
+    reminder = asyncio.create_task(reminders.loop()) if settings.app_env == "prod" else None
     yield
+    if reminder:
+        reminder.cancel()
     await engine.dispose()
 
 

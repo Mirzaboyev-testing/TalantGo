@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, type Me, type Task } from "../api";
 import { haptic, openLink } from "../tg";
 import { ErrorText, Sheet, StatusBadge, message } from "../ui";
+import InviteCard from "./InviteCard";
 
 export default function PathScreen({ me, onChanged, onChangeTrack }: { me: Me; onChanged: () => void; onChangeTrack: () => void }) {
   const [tasks, setTasks] = useState<Task[] | null>(null);
@@ -20,12 +21,13 @@ export default function PathScreen({ me, onChanged, onChangeTrack }: { me: Me; o
       </div>
       <div className="stats">
         <div className="stat"><b>{me.points}</b><span>ball</span></div>
-        <div className="stat"><b>{me.streak > 0 ? `🔥 ${me.streak}` : "0"}</b><span>kunlik seriya</span></div>
+        <div className="stat"><b>{me.streak > 0 ? `🔥 ${me.streak}` : "0"}</b><span>haftalik seriya</span></div>
         <div className="stat"><b>#{me.rank_overall}</b><span>umumiy o'rin</span></div>
       </div>
       {tasks && (
         <p className="hint">{done} / {tasks.length} topshiriq tasdiqlangan · <a href="#" onClick={(e) => { e.preventDefault(); onChangeTrack(); }}>yo'lni o'zgartirish</a></p>
       )}
+      {me.invited_count < 3 && <InviteCard me={me} compact />}
       <ErrorText error={error} />
       {!tasks && !error && <div className="hint">Yuklanmoqda…</div>}
       {tasks?.map((t) => (
