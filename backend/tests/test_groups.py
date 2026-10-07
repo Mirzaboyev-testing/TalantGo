@@ -114,3 +114,13 @@ async def test_group_invite_link_opens_the_join_prompt(client, monkeypatch, make
                           "text": "/start gAbCdEfGh12"}}
     await client.post("/telegram/webhook", json=update, headers={"X-Telegram-Bot-Api-Secret-Token": telegram_bot.webhook_secret(token)})
     assert sent == [(900001, None, "AbCdEfGh12")]
+
+
+async def test_people_join_the_community_when_they_sign_in(client, make_user):
+    a, b = await make_user("Aziza"), await make_user("Bekzod")
+    await client.get("/api/v1/me", headers=b["headers"])            # Bekzod never opens Groups
+    community = (await client.get("/api/v1/groups", headers=a["headers"])).json()["mine"][0]
+    assert community["members"] == 2
+    track = await on_track(client, b, 1)                              # a new path joins that path's group
+    mine = (await client.get("/api/v1/groups", headers=b["headers"])).json()["mine"]
+    assert any(track["title"].split(":")[0] in g["name"] for g in mine)

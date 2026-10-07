@@ -70,7 +70,6 @@
   {% if cv.bio %}<h2>O'zim haqimda</h2><p class="bio">{{ cv.bio }}</p>{% endif %}
   {% if cv.skills %}<h2>Ko'nikmalar</h2><div class="tags">{% for g in cv.skills %}<span>{{ g }}</span>{% endfor %}</div>{% endif %}
   {% if cv.languages %}<h2>Tillar</h2><div class="tags">{% for g in cv.languages %}<span>{{ g }}</span>{% endfor %}</div>{% endif %}
-  {% if cv.goals %}<h2>Maqsadlar</h2><div class="tags">{% for g in cv.goals %}<span>{{ g }}</span>{% endfor %}</div>{% endif %}
 
   <h2>Tasdiqlangan ishlar</h2>
   {% for a in cv.achievements %}

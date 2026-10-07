@@ -317,6 +317,8 @@ export function salary(job: Pick<Job, "is_paid" | "salary_from" | "salary_to">):
   return "To'lanadi (kelishiladi)";
 }
 
+/** +998901234567 -> +998 90 123 45 67 */
+export const formatPhone = (p: string) => p.replace(/^\+998(\d{2})(\d{3})(\d{2})(\d{2})$/, "+998 $1 $2 $3 $4");
 export const courseLabel = (c: number | null | undefined) => (!c ? "" : c === 7 ? "magistratura" : `${c}-kurs`);
 
 export interface AdminAccount {

@@ -43,7 +43,8 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
         <Avatar name={me.full_name} url={me.photo_url} />
         <div className="grow">
           <h1 style={{ margin: 0 }}>{me.full_name}</h1>
-          <div className="hint">{me.track?.icon} {me.track?.title}{me.role !== "student" ? ` · ${me.role}` : ""}</div>
+          {me.headline && <div style={{ fontWeight: 600 }}>{me.headline}</div>}
+          <div className="hint">{me.track?.icon} {me.track?.title}{me.role !== "student" ? " · mentor" : ""}</div>
         </div>
       </div>
 

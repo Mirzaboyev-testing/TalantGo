@@ -12,6 +12,7 @@ interface WebApp {
   showConfirm(message: string, callback: (ok: boolean) => void): void;
   requestContact?(callback: (shared: boolean) => void): void;
   isVersionAtLeast?(version: string): boolean;
+  disableVerticalSwipes?(): void;
   HapticFeedback?: {
     impactOccurred(style: Haptic): void;
     notificationOccurred(type: "success" | "error" | "warning"): void;
@@ -34,6 +35,8 @@ export const BOT_URL = "https://t.me/create_carieer_bot";
 export function boot(): void {
   app?.ready();
   app?.expand();
+  // Bot API 7.7+: a downward swipe in a long chat or list should scroll, not close the app
+  if (app?.isVersionAtLeast?.("7.7")) app.disableVerticalSwipes?.();
 }
 
 export function openLink(url: string): void {

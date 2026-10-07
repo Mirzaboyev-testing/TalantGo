@@ -190,8 +190,9 @@ function Chat({ groupId, onBack }: { groupId: number; onBack: () => void }) {
   return (
     <div className="chat">
       <div className="chat-head">
-        <button className="btn small ghost" onClick={onBack}>←</button>
-        <div className="grow" style={{ cursor: "pointer" }} onClick={() => setShowInfo(true)}>
+        <button className="back" onClick={onBack} aria-label="Orqaga">←</button>
+        <div className="avatar" style={{ fontSize: 18 }}>{info?.is_private ? "🔒" : "🌐"}</div>
+        <div className="grow" style={{ cursor: "pointer", minWidth: 0 }} onClick={() => setShowInfo(true)}>
           <b>{info?.name ?? "…"}</b>
           <div className="hint">{info ? `${info.members} a'zo${info.is_private ? " · shaxsiy" : ""} · ma'lumot uchun bosing` : ""}</div>
         </div>
@@ -241,8 +242,11 @@ function GroupInfo({ info, onChanged, onBack, onGone }: { info: GroupDetail; onC
   }
 
   return (
-    <div>
-      <button className="btn small ghost" onClick={onBack}>← Chatga qaytish</button>
+    <div className="chat-page">
+      <div className="chat-head" style={{ marginBottom: 8 }}>
+        <button className="back" onClick={onBack} aria-label="Orqaga">←</button>
+        <b>Guruh haqida</b>
+      </div>
       <h1>{info.name}</h1>
       {info.description && <p className="hint">{info.description}</p>}
       {info.is_private && link && (

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, type Me } from "../api";
+import { api, formatPhone, type Me } from "../api";
 import { canShareContact, haptic, shareContact } from "../tg";
 import { ErrorText, message } from "../ui";
 
@@ -71,7 +71,7 @@ export default function PhoneField({ me, onChanged }: { me: Me; onChanged: (m: M
     <div>
       {me.phone ? (
         <div className="row between">
-          <span><b>{me.phone}</b> {me.phone_verified ? <span className="badge peer_verified">✓ Telegram</span> : <span className="badge todo">qo'lda kiritilgan</span>}</span>
+          <span><b>{formatPhone(me.phone)}</b> {me.phone_verified ? <span className="badge peer_verified">✓ Telegram</span> : <span className="badge todo">qo'lda kiritilgan</span>}</span>
           <button className="btn small ghost" onClick={() => { onChanged({ ...me, phone: "" }); setManual(!canShareContact); }}>O'zgartirish</button>
         </div>
       ) : (

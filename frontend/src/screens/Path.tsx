@@ -34,7 +34,7 @@ export default function PathScreen({ me, onChanged, onChangeTrack }: { me: Me; o
       {tasks?.map((t) => (
         <div key={t.id} className="card tap" onClick={() => setOpen(t)}>
           <div className="row between">
-            <span className="hint">{t.week}-hafta · {t.points} ball</span>
+            <span className="hint">{t.kind === "profile" ? "Start" : `${t.week}-hafta`} · {t.points} ball</span>
             {t.kind === "profile" && t.submission ? <span className="badge peer_verified">Bajarildi ✓</span>
               : <StatusBadge status={t.submission?.status ?? null} />}
           </div>

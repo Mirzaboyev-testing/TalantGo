@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, courseLabel, type Me, type Peer } from "../api";
+import { api, courseLabel, formatPhone, type Me, type Peer } from "../api";
 import { openLink } from "../tg";
 import { Avatar, ErrorText, message } from "../ui";
 
@@ -51,7 +51,7 @@ export default function PeersScreen({ me }: { me: Me }) {
               : <span className="hint" title="Telegram'da username o'rnatilmagan">username yo'q</span>}
           </div>
           {p.phone && (
-            <div style={{ marginTop: 8 }}>📞 <a href={`tel:${p.phone}`}>{p.phone}</a></div>
+            <div style={{ marginTop: 8 }}>📞 <a href={`tel:${p.phone}`}>{formatPhone(p.phone)}</a></div>
           )}
           <div className="hint" style={{ marginTop: 8 }}>
             {p.points} ball · {p.verified_tasks} tasdiqlangan ish{p.streak > 0 ? ` · 🔥 ${p.streak}` : ""}

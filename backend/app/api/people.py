@@ -46,6 +46,8 @@ IDENTITY_FIELDS = ("university_id", "faculty", "course", "student_number")
 
 @router.get("/me", response_model=MeOut)
 async def get_me(user: CurrentUser, session: Session) -> MeOut:
+    from .groups import ensure_official_memberships      # late import: groups imports this module's deps
+    await ensure_official_memberships(session, user)
     return await me_out(session, user)
 
 
@@ -77,6 +79,9 @@ async def update_me(body: MeUpdate, user: CurrentUser, session: Session) -> MeOu
             setattr(user, field, value)
     await session.commit()
     await session.refresh(user)
+    if "track_id" in changes:                            # a new path: join that path's group
+        from .groups import ensure_official_memberships
+        await ensure_official_memberships(session, user)
     return await me_out(session, user)
 
 
