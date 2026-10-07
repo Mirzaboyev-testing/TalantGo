@@ -1,0 +1,49 @@
+# Server override, used together with the main file:
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.server.yml up -d
+#
+# The server is shared with other projects. CareerFlow keeps to itself: its own containers, database,
+# volume and folder (/root/careerflow), memory caps so it can never starve its neighbours, and no
+# published host ports (Docker bypasses ufw). The only shared piece is the existing Caddy proxy,
+# which reaches the app as `careerflow-web:8000` on the proxy network.
+services:
+  db:
+    ports: !reset []
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in /root/careerflow/.env}
+    command: postgres -c shared_buffers=64MB -c max_connections=40 -c jit=off
+    mem_limit: 384m
+
+  api:
+    ports: !reset []
+    # TLS ends at Caddy; trusting its forwarded headers is safe because no port is published.
+    command: >-
+      uvicorn app.main:app --host 0.0.0.0 --port 8000
+      --proxy-headers --forwarded-allow-ips=*
+    mem_limit: 384m
+    networks:
+      default: {}
+      proxy:
+        aliases: [careerflow-web]
+
+  # Daily dump into /root/careerflow/backups, newest 7 kept. Same image as the database.
+  backup:
+    image: postgres:16-alpine
+    entrypoint: ["sh", "/backup.sh"]
+    environment:
+      PGHOST: db
+      PGUSER: careerflow
+      PGDATABASE: careerflow
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups
+      - ./deploy/backup.sh:/backup.sh:ro
+    mem_limit: 128m
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+
+networks:
+  proxy:
+    external: true
+    name: universal_marketplace_default

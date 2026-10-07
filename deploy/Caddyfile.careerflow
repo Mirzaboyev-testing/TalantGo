@@ -1,0 +1,6 @@
+
+# CareerFlow: separate project (/root/careerflow). Only this block was added.
+careerflow.2-28-27-205.sslip.io {
+	encode gzip zstd
+	reverse_proxy careerflow-web:8000
+}
