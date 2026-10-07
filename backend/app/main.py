@@ -40,6 +40,10 @@ for router in (auth.router, people.router, learning.router, jobs.router, employe
 app.include_router(pages.router)
 
 
+# Images the bot sends (the welcome banner); Telegram fetches them from this public URL.
+app.mount("/media", StaticFiles(directory=Path(__file__).resolve().parent / "assets"), name="media")
+
+
 @app.get("/api/health", include_in_schema=False)
 async def health() -> dict:
     return {"ok": True}

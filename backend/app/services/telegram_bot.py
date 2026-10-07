@@ -1,9 +1,32 @@
-"""The few Bot API calls the app needs: check the token, wire the menu button and webhook, reply /start."""
+"""The few Bot API calls the app needs: check the token, wire the menu button, webhook and
+descriptions, and greet /start with the welcome banner."""
 import hashlib
 
 import httpx
 
 API = "https://api.telegram.org/bot{token}/{method}"
+
+# Shown in an empty chat before the user presses Start ("What can this bot do?"), max 512 characters.
+DESCRIPTION = (
+    "🚀 Kelajagingni biz bilan qur!\n\n"
+    "CareerFlow: o'qish davomida haqiqiy tajriba to'playdigan joy.\n\n"
+    "🧭 Yo'nalishingni tanla va har hafta topshiriq bajar\n"
+    "✅ Ishlaring tengdosh va mentor tomonidan tasdiqlanadi\n"
+    "💼 Amaliyot va birinchi ishni top\n\n"
+    "Boshlash uchun «Start» tugmasini bos."
+)
+# Shown on the bot's profile and in shared links, max 120 characters.
+SHORT_DESCRIPTION = "Kelajagingni biz bilan qur: tajriba, amaliyot va birinchi ish talabalar uchun."
+
+WELCOME_CAPTION = (
+    "<b>🚀 Kelajagingni biz bilan qur!</b>\n\n"
+    "CareerFlow: o'qish davomida haqiqiy tajriba to'plab, diplom bilan birga isbotlangan portfolio "
+    "olib chiqadigan joy.\n\n"
+    "🧭 Yo'nalishingni tanla va har hafta topshiriq bajar\n"
+    "✅ Ishlaring tengdosh va mentor tomonidan tasdiqlanadi\n"
+    "💼 Amaliyot va birinchi ishni top\n\n"
+    "Pastdagi tugmani bos 👇"
+)
 
 
 class BotError(RuntimeError):
@@ -33,12 +56,17 @@ async def connect(token: str, public_url: str) -> dict:
                menu_button={"type": "web_app", "text": "CareerFlow", "web_app": {"url": public_url}})
     await call(token, "setWebhook", url=f"{public_url}/telegram/webhook",
                secret_token=webhook_secret(token), allowed_updates=["message"], drop_pending_updates=True)
+    await call(token, "setMyDescription", description=DESCRIPTION)
+    await call(token, "setMyShortDescription", short_description=SHORT_DESCRIPTION)
     return me
 
 
 async def send_welcome(token: str, chat_id: int, public_url: str) -> None:
-    await call(token, "sendMessage", chat_id=chat_id,
-               text=("CareerFlow'ga xush kelibsiz!\n\n"
-                     "Yo'lingizni tanlang, har hafta topshiriq bajaring va tengdoshlar hamda mentor "
-                     "tasdiqlagan portfolio yig'ing."),
-               reply_markup={"inline_keyboard": [[{"text": "Ilovani ochish", "web_app": {"url": public_url}}]]})
+    markup = {"inline_keyboard": [[{"text": "🚀 Ilovani ochish", "web_app": {"url": public_url}}]]}
+    try:
+        await call(token, "sendPhoto", chat_id=chat_id, photo=f"{public_url}/media/welcome.png",
+                   caption=WELCOME_CAPTION, parse_mode="HTML", reply_markup=markup)
+    except BotError:
+        # Telegram could not fetch the picture (e.g. a local address): the text alone still greets
+        await call(token, "sendMessage", chat_id=chat_id, text=WELCOME_CAPTION, parse_mode="HTML",
+                   reply_markup=markup)
