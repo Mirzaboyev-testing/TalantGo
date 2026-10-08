@@ -654,7 +654,7 @@ async def reset_password(account_id: int, actor: OwnerActor, session: Session) -
 
 @router.get("/export/applications.csv")
 async def export_applications(actor: AdminActor, session: Session) -> StreamingResponse:
-    rows = await applications(actor, session)
+    rows = await applications(actor, session, status=None, q=None, date_from=None, date_to=None)
     buf = io.StringIO()
     buf.write("\ufeff")
     out = csv.writer(buf)
