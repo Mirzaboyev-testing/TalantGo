@@ -175,3 +175,30 @@ async def test_admin_ai_settings(client, make_user, monkeypatch):
     assert (await client.post("/api/v1/admin/ai/test", headers=headers)).json()["reply"] == "OK"
     assert (await client.put("/api/v1/admin/ai", json={"enabled": True, "model": "bad model!"},
                              headers=headers)).status_code == 422
+
+
+async def test_careerflow_ai_chat(client, make_user, monkeypatch):
+    track, tasks, u = await _setup(client, make_user)
+    h = u["Aziza"]["headers"]
+    assert (await client.get("/api/v1/assistant/status", headers=h)).json()["available"] is False
+    assert (await client.post("/api/v1/assistant/chat", json={"messages": [{"role": "user", "text": "Salom"}]},
+                              headers=h)).status_code == 503
+
+    seen = {}
+
+    async def fake_generate(key, model, parts, **kwargs):
+        seen.update(kwargs)
+        return "Yo'l bo'limida topshiriqni oching va fayl yuklang."
+    monkeypatch.setattr(ai_review, "generate", fake_generate)
+    async with SessionLocal() as s:
+        await settings_store.set_value(s, settings_store.GEMINI_KEY, "AIza-test-key-0000000000")
+    assert (await client.get("/api/v1/assistant/status", headers=h)).json()["available"] is True
+
+    history = [{"role": "user", "text": "Topshiriqni qanday topshiraman?"}]
+    r = await client.post("/api/v1/assistant/chat", json={"messages": history}, headers=h)
+    assert r.status_code == 200 and "fayl yuklang" in r.json()["reply"]
+    assert seen["contents"][0]["parts"][0]["text"] == "Topshiriqni qanday topshiraman?"
+    # the guide and the student's own state travel with every question
+    assert "Fayl tanlash" in seen["system"] and "Aziza" in seen["system"] and tasks[0]["title"] in seen["system"]
+    assert (await client.post("/api/v1/assistant/chat", json={"messages": [{"role": "model", "text": "Salom"}]},
+                              headers=h)).status_code == 422

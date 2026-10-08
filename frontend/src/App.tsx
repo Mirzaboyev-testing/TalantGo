@@ -13,6 +13,7 @@ import Welcome, { PendingScreen } from "./screens/Welcome";
 import EmployerApp from "./screens/employer/EmployerApp";
 import UniversityApp from "./screens/university/UniversityApp";
 import Groups from "./screens/Groups";
+import Assistant from "./screens/Assistant";
 import Shell, { type ShellTab } from "./screens/Shell";
 import WebLogin from "./screens/WebLogin";
 
@@ -136,6 +137,8 @@ export default function App() {
   const subtitle = me.role === "student" ? me.headline || me.track?.title.split(":")[0] : "Mentor";
 
   return (
+    <>
+    <Assistant key={me.id} />
     <Shell tabs={tabs} active={tab} onChange={setTab} onLogout={logout}
            user={{ name: me.full_name, photo: me.photo_url, subtitle: subtitle ?? undefined }}>
       {tab === "path" && <PathScreen me={me} onChanged={refreshMe} onChangeTrack={() => setChangingTrack(true)} />}
@@ -155,5 +158,6 @@ export default function App() {
       )}
       {tab === "profile" && <ProfileScreen me={me} onSaved={setMe} onChangeTrack={() => setChangingTrack(true)} />}
     </Shell>
+    </>
   );
 }

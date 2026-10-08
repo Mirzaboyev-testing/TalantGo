@@ -333,12 +333,14 @@ async def connect_bot(actor: OwnerActor, session: Session) -> dict:
 
 class AiSettingsIn(BaseModel):
     enabled: bool
+    assistant: bool = True
     model: str
     api_key: str = ""
 
 
 class AiStatusOut(BaseModel):
     enabled: bool
+    assistant: bool
     model: str
     configured: bool
     hint: str | None
@@ -348,7 +350,7 @@ class AiStatusOut(BaseModel):
 async def _ai_status(session: Session) -> AiStatusOut:
     config = await ai_review.get_config(session)
     hint = await settings_store.get_hint(session, settings_store.GEMINI_KEY)
-    return AiStatusOut(enabled=config.enabled, model=config.model, configured=hint is not None, hint=hint,
+    return AiStatusOut(enabled=config.enabled, assistant=config.assistant, model=config.model, configured=hint is not None, hint=hint,
                        models=list(ai_review.MODELS))
 
 
@@ -360,11 +362,11 @@ async def ai_status(_: AdminActor, session: Session) -> AiStatusOut:
 @router.put("/ai", response_model=AiStatusOut)
 async def save_ai(body: AiSettingsIn, actor: OwnerActor, session: Session) -> AiStatusOut:
     try:
-        config = ai_review.AiConfig(enabled=body.enabled, model=body.model.strip())
+        config = ai_review.AiConfig(enabled=body.enabled, assistant=body.assistant, model=body.model.strip())
     except ValueError as exc:
         raise HTTPException(422, "Model nomi noto'g'ri, masalan: gemini-3.8-flash") from exc
     key = body.api_key.strip() or await settings_store.get_value(session, settings_store.GEMINI_KEY)
-    if body.api_key.strip() or config.enabled:
+    if body.api_key.strip() or config.enabled or (config.assistant and key):
         if not key:
             raise HTTPException(400, "Avval Gemini API kalitini kiriting")
         try:
@@ -373,8 +375,9 @@ async def save_ai(body: AiSettingsIn, actor: OwnerActor, session: Session) -> Ai
             raise HTTPException(400, f"Gemini ishlamadi: {exc}") from exc
     if body.api_key.strip():
         await settings_store.set_value(session, settings_store.GEMINI_KEY, key)
-    state = "yoqildi" if config.enabled else "o'chirildi"
-    audit(session, actor, "ai.update", "", f"{state}, {config.model}")
+    state = "tekshiruv yoqildi" if config.enabled else "tekshiruv o'chirildi"
+    chat = "chat yoqildi" if config.assistant else "chat o'chirildi"
+    audit(session, actor, "ai.update", "", f"{state}, {chat}, {config.model}")
     await ai_review.save_config(session, config)
     return await _ai_status(session)
 

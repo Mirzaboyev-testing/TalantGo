@@ -97,12 +97,13 @@ export function BotCard() {
 export function AiCard({ canEdit }: { canEdit: boolean }) {
   const [status, setStatus] = useState<AiStatus | null>(null);
   const [enabled, setEnabled] = useState(false);
+  const [chat, setChat] = useState(true);
   const [model, setModel] = useState("");
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
-  const apply = (s: AiStatus) => { setStatus(s); setEnabled(s.enabled); setModel(s.model); };
+  const apply = (s: AiStatus) => { setStatus(s); setEnabled(s.enabled); setChat(s.assistant); setModel(s.model); };
   useEffect(() => { api.admin.ai().then(apply, (e) => setError(message(e))); }, []);
 
   async function run(action: () => Promise<string>) {
@@ -135,11 +136,15 @@ export function AiCard({ canEdit }: { canEdit: boolean }) {
         <input type="checkbox" checked={enabled} disabled={!canEdit} style={{ width: "auto" }} onChange={(e) => setEnabled(e.target.checked)} />
         Ishlarni AI bilan tekshirish
       </label>
+      <label className="row" style={{ gap: 8, marginTop: 6, cursor: canEdit ? "pointer" : "default" }}>
+        <input type="checkbox" checked={chat} disabled={!canEdit} style={{ width: "auto" }} onChange={(e) => setChat(e.target.checked)} />
+        Talabalar uchun CareerFlow.ai chat (ilova burchagidagi tugma, kuniga 60 ta savolgacha)
+      </label>
       <div className="row wrap" style={{ marginTop: 10 }}>
         {canEdit && (
           <button className="btn small" disabled={busy || !model}
                   onClick={() => run(async () => {
-                    apply(await api.admin.saveAi({ enabled, model, ...(key ? { api_key: key } : {}) }));
+                    apply(await api.admin.saveAi({ enabled, assistant: chat, model, ...(key ? { api_key: key } : {}) }));
                     setKey("");
                     return enabled ? "Saqlandi va tekshirildi: yangi ishlarni AI tekshiradi." : "Saqlandi. AI tekshiruvi o'chiq.";
                   })}>{busy ? "Tekshirilmoqda…" : "Saqlash"}</button>

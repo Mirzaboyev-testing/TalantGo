@@ -30,7 +30,8 @@ _limit = asyncio.Semaphore(2)            # free-tier keys allow only a few reque
 
 
 class AiConfig(BaseModel):
-    enabled: bool = False
+    enabled: bool = False                    # review submissions
+    assistant: bool = True                   # the CareerFlow.ai chat for students
     model: str = Field(default=MODELS[0], pattern=r"^[a-z0-9][a-z0-9.\-]{2,60}$")
 
 
@@ -66,8 +67,10 @@ async def is_active(session: AsyncSession) -> bool:
 # --------------------------------------------------------------------------- Gemini API
 
 async def generate(key: str, model: str, parts: list[dict], *, system: str = "", tools: list | None = None,
-                   json_mode: bool = True, timeout: float = 120) -> str:
-    body: dict = {"contents": [{"role": "user", "parts": parts}], "generationConfig": {"temperature": 0.2}}
+                   json_mode: bool = True, timeout: float = 120, contents: list[dict] | None = None,
+                   temperature: float = 0.2) -> str:
+    body: dict = {"contents": contents or [{"role": "user", "parts": parts}],
+                  "generationConfig": {"temperature": temperature}}
     if system:
         body["systemInstruction"] = {"parts": [{"text": system}]}
     if tools:

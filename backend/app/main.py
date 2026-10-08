@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import admin, admin_auth, auth, challenges, employer, groups, jobs, learning, pages, people, university, work
+from .api import admin, admin_auth, assistant, auth, challenges, employer, groups, jobs, learning, pages, people, university, work
 from .core.config import settings
 from .core.db import Base, SessionLocal, engine
 from .core.upgrades import upgrade
@@ -40,7 +40,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="CareerFlow API", version="0.1.0", lifespan=lifespan,
               docs_url="/api/docs" if settings.app_env == "dev" else None, openapi_url="/api/openapi.json")
 
-for router in (auth.router, admin_auth.router, people.router, learning.router, groups.router, challenges.router, work.router, jobs.router, employer.router, university.router,
+for router in (auth.router, admin_auth.router, people.router, learning.router, groups.router, challenges.router, work.router, assistant.router, jobs.router, employer.router, university.router,
                admin.router):
     app.include_router(router, prefix="/api/v1")
 app.include_router(pages.router)
