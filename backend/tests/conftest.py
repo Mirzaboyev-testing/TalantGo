@@ -4,6 +4,7 @@ import os
 os.environ["APP_ENV"] = "test"
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://careerflow:careerflow_dev@db:5432/careerflow_test")
 os.environ["SECRETS_DIR"] = "/tmp/careerflow-test-secrets"
+os.environ["UPLOADS_DIR"] = "/tmp/careerflow-test-uploads"
 os.environ["ADMIN_PASSWORD"] = "test-admin-password"
 os.environ["PEER_APPROVALS_REQUIRED"] = "2"     # the flow tests exercise the two-peer rule
 

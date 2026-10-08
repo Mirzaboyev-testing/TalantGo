@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type AdminSubmission, type Status } from "../../api";
 import { openLink } from "../../tg";
-import { ErrorText, StatusBadge, message } from "../../ui";
+import { ErrorText, FileList, ReviewList, StatusBadge, message } from "../../ui";
 
 const FILTERS: [Status | "", string][] = [
   ["", "Hammasi"], ["pending", "Tekshiruvda"], ["peer_verified", "Tengdosh tasdig'i"],
@@ -67,14 +67,11 @@ function SubmissionCard({ item, onDeleted }: { item: AdminSubmission; onDeleted:
       <b>{item.task_title}</b>
       <div className="hint">{item.points_awarded} ball · {item.round}-urinish · {new Date(item.updated_at).toLocaleDateString()}</div>
       {item.note && <div style={{ marginTop: 4 }}>«{item.note}»</div>}
-      {item.reviews.map((r, i) => (
-        <div key={i} className={`review ${r.approved ? "yes" : "no"}`}>
-          <div className="hint">{r.reviewer_name}{r.kind === "mentor" ? " · mentor" : ""} · {r.approved ? "tasdiqladi" : "qaytardi"}</div>
-          <div>{r.comment}</div>
-        </div>
-      ))}
+      <FileList files={item.files} />
+      {item.ai_note && <div className="hint" style={{ marginTop: 6 }}>AI izohi: {item.ai_note}</div>}
+      <ReviewList reviews={item.reviews} />
       <div className="row wrap" style={{ marginTop: 8 }}>
-        <button className="btn small ghost" onClick={() => openLink(item.proof_url)}>Isbotni ochish</button>
+        {item.proof_url && <button className="btn small ghost" onClick={() => openLink(item.proof_url)}>Havolani ochish</button>}
         <button className="btn small ghost" onClick={() => setDeleting(!deleting)}>O'chirish</button>
       </div>
       {deleting && (

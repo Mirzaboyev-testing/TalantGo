@@ -94,7 +94,7 @@
     </div>
     <div class="meta">
       {{ a.track }} · {{ a.week }}-hafta · {{ a.points }} ball{% if a.verified_at %} · {{ a.verified_at[:10] }}{% endif %}
-      · <a href="{{ a.proof_url }}" rel="nofollow noopener" target="_blank">Isbotni ko'rish</a>
+      {% if a.proof_url %}· <a href="{{ a.proof_url }}" rel="nofollow noopener" target="_blank">Isbotni ko'rish</a>{% endif %}
     </div>
     <div class="meta">Tasdiqlaganlar: {% for v in a.verified_by %}{{ v.name }}{% if v.kind == "mentor" %} (mentor){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</div>
     {% if a.mentor_comment %}<blockquote>{{ a.mentor_comment }}</blockquote>{% endif %}

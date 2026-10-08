@@ -46,6 +46,12 @@ STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS ix_users_university_id ON users (university_id)",
     "CREATE INDEX IF NOT EXISTS ix_users_company_id ON users (company_id)",
     "CREATE INDEX IF NOT EXISTS ix_users_skills ON users USING gin (skills)",
+    # file submissions, task questions and the AI first pass
+    "ALTER TYPE review_kind ADD VALUE IF NOT EXISTS 'ai'",
+    "ALTER TABLE reviews ALTER COLUMN reviewer_id DROP NOT NULL",
+    "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS criteria text NOT NULL DEFAULT ''",
+    "ALTER TABLE submissions ADD COLUMN IF NOT EXISTS ai_state varchar(16) NOT NULL DEFAULT ''",
+    "ALTER TABLE submissions ADD COLUMN IF NOT EXISTS ai_note text NOT NULL DEFAULT ''",
 ]
 
 

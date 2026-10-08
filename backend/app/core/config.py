@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     admin_password: str = ""
     secrets_dir: str = "/data/secrets"
     static_dir: str = "/app/static"
+    uploads_dir: str = "/data/uploads"      # files students attach to their work
+    max_upload_mb: int = 10
 
     init_data_max_age: int = 86400          # seconds a Telegram launch stays valid
     peer_approvals_required: int = 1          # pilot: small groups; raise it in the admin page as groups grow

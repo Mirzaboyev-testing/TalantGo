@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { STATUS_LABEL, type Status } from "./api";
+import { STATUS_LABEL, absoluteUrl, fileSize, type Review, type Status, type SubmittedFile } from "./api";
+import { openLink } from "./tg";
 
 export function Avatar({ name, url }: { name: string; url?: string | null }) {
   return url ? <img className="avatar" src={url} alt="" /> : <div className="avatar">{name.slice(0, 1).toUpperCase()}</div>;
@@ -19,6 +20,36 @@ export function Sheet({ onClose, children }: { onClose: () => void; children: Re
 
 export function ErrorText({ error }: { error: string }) {
   return error ? <div className="error">{error}</div> : null;
+}
+
+export function FileList({ files }: { files: SubmittedFile[] }) {
+  if (!files.length) return null;
+  return (
+    <div className="files">
+      {files.map((f) => (
+        <button key={f.id} type="button" className="file-chip" onClick={() => openLink(absoluteUrl(f.url))}>
+          <span className="file-ext">{(f.name.split(".").pop() ?? "").slice(0, 4).toUpperCase() || "FAYL"}</span>
+          <span className="file-name">{f.name}</span>
+          <span className="hint">{fileSize(f.size)}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const REVIEWER_KIND: Record<Review["kind"], string> = { peer: "", mentor: " · mentor", ai: "" };
+
+export function ReviewList({ reviews }: { reviews: Review[] }) {
+  return (
+    <>
+      {reviews.map((r, i) => (
+        <div key={i} className={`review ${r.approved ? "yes" : "no"}`}>
+          <div className="hint">{r.reviewer_name}{REVIEWER_KIND[r.kind]} · {r.approved ? "tasdiqladi" : "qaytardi"}</div>
+          <div>{r.comment}</div>
+        </div>
+      ))}
+    </>
+  );
 }
 
 export const message = (e: unknown) => (e instanceof Error ? e.message : "Kutilmagan xato");

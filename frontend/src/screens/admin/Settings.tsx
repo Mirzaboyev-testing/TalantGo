@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type AuditEntry, type BotStatus, type Rules } from "../../api";
+import { api, type AiStatus, type AuditEntry, type BotStatus, type Rules } from "../../api";
 import { BOT_URL } from "../../tg";
 import { ErrorText, message } from "../../ui";
 
@@ -94,11 +94,70 @@ export function BotCard() {
   );
 }
 
+export function AiCard({ canEdit }: { canEdit: boolean }) {
+  const [status, setStatus] = useState<AiStatus | null>(null);
+  const [enabled, setEnabled] = useState(false);
+  const [model, setModel] = useState("");
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState("");
+  const [error, setError] = useState("");
+  const apply = (s: AiStatus) => { setStatus(s); setEnabled(s.enabled); setModel(s.model); };
+  useEffect(() => { api.admin.ai().then(apply, (e) => setError(message(e))); }, []);
+
+  async function run(action: () => Promise<string>) {
+    setBusy(true); setError(""); setResult("");
+    try { setResult(await action()); } catch (e) { setError(message(e)); } finally { setBusy(false); }
+  }
+
+  if (!status) return <ErrorText error={error} />;
+  return (
+    <div className="card">
+      <div className="row between">
+        <b>AI yordamchi (Google Gemini)</b>
+        <span className={`badge ${status.enabled ? "peer_verified" : "todo"}`}>{status.enabled ? "Yoqilgan" : "O'chirilgan"}</span>
+      </div>
+      <p className="hint">
+        Yoqilsa, talaba topshirgan har bir ishni (fayllar, havola, izoh) AI topshiriq sharti va mezonlariga qarab tekshiradi
+        va izoh yozadi. Uning bahosi bitta tengdosh ovozi hisoblanadi: «Nechta tengdosh tasdig'i kerak» 1 bo'lsa, AI o'zi
+        hal qiladi, 2 bo'lsa yana bitta tengdosh kerak. Mentor har doim qarorni o'zgartira oladi.
+      </p>
+      {!canEdit && <p className="hint">Faqat ilova egasi o'zgartira oladi.</p>}
+      {status.hint && <p className="hint">Saqlangan kalit: {status.hint}</p>}
+      <label>API kalit (aistudio.google.com/apikey sahifasidan oling)</label>
+      <input type="password" value={key} disabled={!canEdit} placeholder={status.configured ? "Almashtirish uchun yangisini kiriting" : "AIza…"}
+             autoComplete="off" onChange={(e) => setKey(e.target.value.trim())} />
+      <label>Model</label>
+      <input value={model} list="ai-models" disabled={!canEdit} onChange={(e) => setModel(e.target.value.trim())} />
+      <datalist id="ai-models">{status.models.map((m) => <option key={m} value={m} />)}</datalist>
+      <div className="hint">{status.models[0]}: aniqroq; lite modellar arzonroq va tezroq.</div>
+      <label className="row" style={{ gap: 8, marginTop: 12, cursor: canEdit ? "pointer" : "default" }}>
+        <input type="checkbox" checked={enabled} disabled={!canEdit} style={{ width: "auto" }} onChange={(e) => setEnabled(e.target.checked)} />
+        Ishlarni AI bilan tekshirish
+      </label>
+      <div className="row wrap" style={{ marginTop: 10 }}>
+        {canEdit && (
+          <button className="btn small" disabled={busy || !model}
+                  onClick={() => run(async () => {
+                    apply(await api.admin.saveAi({ enabled, model, ...(key ? { api_key: key } : {}) }));
+                    setKey("");
+                    return enabled ? "Saqlandi va tekshirildi: yangi ishlarni AI tekshiradi." : "Saqlandi. AI tekshiruvi o'chiq.";
+                  })}>{busy ? "Tekshirilmoqda…" : "Saqlash"}</button>
+        )}
+        <button className="btn small ghost" disabled={busy || !status.configured}
+                onClick={() => run(async () => { const r = await api.admin.testAi(); return `Ishlayapti: ${r.model} javob berdi («${r.reply}»).`; })}>Tekshirish</button>
+      </div>
+      {result && <p className="notice" style={{ marginTop: 10 }}>{result}</p>}
+      <ErrorText error={error} />
+    </div>
+  );
+}
+
 const ACTION_LABEL: Record<string, string> = {
   "user.update": "Foydalanuvchi o'zgartirildi", "user.points": "Ball tuzatildi", "submission.delete": "Ish o'chirildi",
   "track.create": "Yo'nalish qo'shildi", "track.update": "Yo'nalish o'zgartirildi", "task.create": "Topshiriq qo'shildi",
   "task.update": "Topshiriq o'zgartirildi", "announcement.send": "E'lon yuborildi", "rules.update": "Qoidalar o'zgartirildi",
-  "bot.token": "Bot tokeni almashtirildi", "bot.connect": "Bot ulandi", "export.users": "Ro'yxat yuklab olindi",
+  "bot.token": "Bot tokeni almashtirildi", "ai.update": "AI sozlamalari o'zgartirildi", "bot.connect": "Bot ulandi", "export.users": "Ro'yxat yuklab olindi",
 };
 
 export function AuditCard() {

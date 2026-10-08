@@ -74,6 +74,14 @@ class ReviewOut(ORM):
     created_at: datetime
 
 
+class FileOut(BaseModel):
+    id: int
+    name: str
+    size: int
+    mime: str
+    url: str                 # a signed link, valid for a few hours
+
+
 class SubmissionOut(ORM):
     id: int
     task_id: int
@@ -85,6 +93,9 @@ class SubmissionOut(ORM):
     created_at: datetime
     verified_at: datetime | None
     reviews: list[ReviewOut] = []
+    files: list[FileOut] = []
+    ai_state: str = ""
+    ai_note: str = ""
 
 
 class TaskOut(ORM):
@@ -97,12 +108,21 @@ class TaskOut(ORM):
     points: int
     kind: str = "submission"
     mentor: str | None = None
+    criteria: str = ""
+    questions: int = 0
     submission: SubmissionOut | None = None
 
 
 class SubmitIn(BaseModel):
-    proof_url: Annotated[Url, StringConstraints(min_length=10)]
+    proof_url: Url = ""
     note: str = Field(default="", max_length=1000)
+    file_ids: list[int] = Field(default_factory=list, max_length=5)
+
+    @model_validator(mode="after")
+    def _has_proof(self):
+        if not self.proof_url and not self.file_ids:
+            raise ValueError("Havola qo'shing yoki kamida bitta fayl yuklang")
+        return self
 
 
 class ReviewIn(BaseModel):
@@ -122,6 +142,8 @@ class QueueItem(BaseModel):
     author_name: str
     peer_reviews: int
     submitted_at: datetime
+    criteria: str = ""
+    files: list[FileOut] = []
 
 
 # --------------------------------------------------------------------------- people
@@ -434,6 +456,8 @@ class AdminSubmissionOut(BaseModel):
     author_name: str
     reviews: list[ReviewOut]
     updated_at: datetime
+    files: list[FileOut] = []
+    ai_note: str = ""
 
 
 class AdminTrackOut(ORM):

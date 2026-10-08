@@ -7,6 +7,7 @@ from ..core.security import decrypt, encrypt, mask
 from ..models import AppSetting
 
 BOT_TOKEN = "telegram_bot_token"
+GEMINI_KEY = "gemini_api_key"
 _cache: dict[str, tuple[float, str | None]] = {}
 _TTL = 30.0
 

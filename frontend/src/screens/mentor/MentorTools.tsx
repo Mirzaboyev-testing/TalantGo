@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, daysLeft, uzDate, type Challenge, type ChallengeEntry, type MentorTask, type Track } from "../../api";
+import { api, daysLeft, uzDate, type Challenge, type ChallengeEntry, type MentorTask, type TaskQuestion, type Track } from "../../api";
 import { Icon } from "../../icons";
 import { haptic, openLink } from "../../tg";
-import { ErrorText, message } from "../../ui";
+import { ErrorText, message, toast } from "../../ui";
 
 const STATE_LABEL = { upcoming: ["Boshlanmagan", "todo"], active: ["Davom etmoqda", "peer_verified"], finished: ["Tugagan", "todo"] } as const;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -56,7 +56,8 @@ export function MentorTasks() {
 function TaskForm({ tracks, task, onDone }: { tracks: Track[]; task?: MentorTask; onDone: () => void }) {
   const [f, setF] = useState({
     track_id: task ? String(task.track_id) : "", week: String(task?.week ?? 1), title: task?.title ?? "",
-    description: task?.description ?? "", proof_hint: task?.proof_hint ?? "", points: String(task?.points ?? 10),
+    description: task?.description ?? "", proof_hint: task?.proof_hint ?? "", criteria: task?.criteria ?? "",
+    points: String(task?.points ?? 10),
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -64,7 +65,7 @@ function TaskForm({ tracks, task, onDone }: { tracks: Track[]; task?: MentorTask
 
   async function save() {
     const body = { track_id: Number(f.track_id), week: Number(f.week), title: f.title.trim(), description: f.description.trim(),
-                   proof_hint: f.proof_hint.trim(), points: Number(f.points) };
+                   proof_hint: f.proof_hint.trim(), criteria: f.criteria.trim(), points: Number(f.points) };
     setBusy(true); setError("");
     try {
       if (task) await api.mentor.editTask(task.id, body);
@@ -96,12 +97,83 @@ function TaskForm({ tracks, task, onDone }: { tracks: Track[]; task?: MentorTask
         <label>Nima qilish kerak</label>
         <textarea value={f.description} maxLength={4000} placeholder="Vazifa, ma'lumot manbasi, natija qanday bo'lishi kerak" onChange={set("description")} />
         <label>Isbot sifatida nima topshiriladi</label>
-        <input value={f.proof_hint} maxLength={500} placeholder="Masalan: GitHub repo yoki Google Drive havolasi" onChange={set("proof_hint")} />
+        <input value={f.proof_hint} maxLength={500} placeholder="Masalan: Excel fayl (formulalar bilan) yoki GitHub havolasi" onChange={set("proof_hint")} />
+        <div className="hint">Talaba fayl (Excel, Word, PDF, rasm, kod) yuklashi yoki havola berishi mumkin.</div>
+        <label>Qanday baholanadi (ixtiyoriy)</label>
+        <textarea value={f.criteria} maxLength={2000} onChange={set("criteria")}
+                  placeholder={"Masalan:\n- SUMIF va pivot jadval ishlatilgan\n- 3 ta xulosa yozilgan\n- grafik bor"} />
+        <div className="hint">Talabalar, tekshiruvchilar va AI yordamchi shu mezonlarga qarab baholaydi. Aniq yozsangiz, AI aniqroq tekshiradi.</div>
         <ErrorText error={error} />
         <button className="btn" style={{ marginTop: 14 }} disabled={busy || !f.track_id || f.title.trim().length < 3 || f.description.trim().length < 10} onClick={save}>
           {busy ? "Saqlanmoqda…" : task ? "Saqlash" : "Qo'shish"}
         </button>
       </div>
+    </div>
+  );
+}
+
+// --------------------------------------------------------------------------- questions
+
+export function MentorQuestions({ onCount }: { onCount: (n: number) => void }) {
+  const [openOnly, setOpenOnly] = useState(true);
+  const [rows, setRows] = useState<TaskQuestion[] | null>(null);
+  const [error, setError] = useState("");
+  const load = useCallback(() => api.mentor.questions(openOnly).then((q) => {
+    setRows(q);
+    if (openOnly) onCount(q.length);
+  }, (e) => setError(message(e))), [openOnly, onCount]);
+  useEffect(() => { void load(); }, [load]);
+
+  return (
+    <div>
+      <div className="page-head">
+        <p className="hint" style={{ margin: 0 }}>Talabalarning topshiriqlar bo'yicha savollari. Javobingiz savol bergan talabaga botda keladi va yo'nalishdagi hammaga ko'rinadi.</p>
+      </div>
+      <div className="segmented">
+        <button className={openOnly ? "on" : ""} onClick={() => setOpenOnly(true)}>Javob kutayotgan</button>
+        <button className={!openOnly ? "on" : ""} onClick={() => setOpenOnly(false)}>Hammasi</button>
+      </div>
+      <ErrorText error={error} />
+      {rows?.length === 0 && <div className="card hint">{openOnly ? "Javob kutayotgan savol yo'q." : "Hali savol yo'q."}</div>}
+      {rows?.map((q) => <QuestionCard key={q.id} q={q} onAnswered={load} />)}
+    </div>
+  );
+}
+
+function QuestionCard({ q, onAnswered }: { q: TaskQuestion; onAnswered: () => void }) {
+  const [answer, setAnswer] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function send() {
+    setBusy(true); setError("");
+    try {
+      await api.mentor.answer(q.id, answer.trim());
+      haptic("success");
+      toast("Javob yuborildi");
+      onAnswered();
+    } catch (e) {
+      setError(message(e));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="hint">{q.track.split(":")[0]} · {q.task_title}</div>
+      <div style={{ marginTop: 4 }}><b>{q.author}:</b> {q.text}</div>
+      <div className="hint">{uzDate(q.created_at)}</div>
+      {q.answer ? (
+        <div className="qa-answer"><div className="hint" style={{ color: "inherit" }}>{q.answered_by ?? "Mentor"}</div>{q.answer}</div>
+      ) : (
+        <>
+          <textarea value={answer} maxLength={2000} placeholder="Javobingiz" onChange={(e) => setAnswer(e.target.value)} />
+          <ErrorText error={error} />
+          <button className="btn small" style={{ marginTop: 8 }} disabled={busy || answer.trim().length < 2} onClick={send}>
+            {busy ? "Yuborilmoqda…" : "Javob berish"}
+          </button>
+        </>
+      )}
     </div>
   );
 }

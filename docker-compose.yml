@@ -29,6 +29,7 @@ services:
       SECRETS_DIR: /data/secrets
     volumes:
       - ./secrets:/data/secrets          # instance key: never in the database, never in git
+      - uploads:/data/uploads            # files students attach to their work
       - ./backend/app:/app/app
       - ./backend/tests:/app/tests
     ports:
@@ -40,3 +41,4 @@ services:
 
 volumes:
   pgdata:
+  uploads:

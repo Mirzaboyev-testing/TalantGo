@@ -7,12 +7,12 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import admin, admin_auth, auth, challenges, employer, groups, jobs, learning, pages, people, university
+from .api import admin, admin_auth, auth, challenges, employer, groups, jobs, learning, pages, people, university, work
 from .core.config import settings
 from .core.db import Base, SessionLocal, engine
 from .core.upgrades import upgrade
 from .seed import seed
-from .services import reminders
+from .services import ai_review, reminders
 
 logging.basicConfig(level=logging.INFO)
 # httpx logs every request URL at INFO, and a Bot API URL contains the bot token
@@ -30,6 +30,7 @@ async def lifespan(_: FastAPI):
     async with SessionLocal() as session:
         await seed(session)
     reminder = asyncio.create_task(reminders.loop()) if settings.app_env == "prod" else None
+    await ai_review.resume()
     yield
     if reminder:
         reminder.cancel()
@@ -39,7 +40,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="CareerFlow API", version="0.1.0", lifespan=lifespan,
               docs_url="/api/docs" if settings.app_env == "dev" else None, openapi_url="/api/openapi.json")
 
-for router in (auth.router, admin_auth.router, people.router, learning.router, groups.router, challenges.router, jobs.router, employer.router, university.router,
+for router in (auth.router, admin_auth.router, people.router, learning.router, groups.router, challenges.router, work.router, jobs.router, employer.router, university.router,
                admin.router):
     app.include_router(router, prefix="/api/v1")
 app.include_router(pages.router)

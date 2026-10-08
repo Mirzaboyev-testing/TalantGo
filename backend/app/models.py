@@ -26,6 +26,10 @@ class Status(str, enum.Enum):
 class ReviewKind(str, enum.Enum):
     peer = "peer"
     mentor = "mentor"
+    ai = "ai"                            # the Gemini first pass: counts as one peer vote
+
+
+AI_REVIEWER_NAME = "AI yordamchi"
 
 
 def _enum(cls: type[enum.Enum], name: str) -> Enum:
@@ -107,6 +111,7 @@ class Task(Base):
     # "submission": a proof link reviewed by peers; "profile": done inside the app, checked by the system
     kind: Mapped[str] = mapped_column(String(16), default="submission", server_default="submission")
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))  # a mentor's task
+    criteria: Mapped[str] = mapped_column(Text, default="", server_default="")   # how the work is judged (people and AI)
 
     track: Mapped[Track] = relationship(back_populates="tasks", lazy="selectin")
     created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_id], lazy="selectin")
@@ -204,15 +209,24 @@ class Submission(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # AI first pass for the current round: "" (off), checking, done, unsure (left to people), failed
+    ai_state: Mapped[str] = mapped_column(String(16), default="", server_default="")
+    ai_note: Mapped[str] = mapped_column(Text, default="", server_default="")    # the AI's remark when unsure
 
     task: Mapped[Task] = relationship(lazy="selectin")
     user: Mapped[User] = relationship(lazy="selectin")
     reviews: Mapped[list["Review"]] = relationship(back_populates="submission", lazy="selectin",
                                                    order_by="Review.created_at", cascade="all, delete-orphan")
+    files: Mapped[list["SubmissionFile"]] = relationship(back_populates="submission", lazy="selectin",
+                                                         order_by="SubmissionFile.id", cascade="all, delete-orphan")
 
     @property
     def current_reviews(self) -> list["Review"]:
         return [r for r in self.reviews if r.round == self.round]
+
+    @property
+    def current_files(self) -> list["SubmissionFile"]:
+        return [f for f in self.files if f.round == self.round]
 
 
 class Review(Base):
@@ -221,7 +235,7 @@ class Review(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     submission_id: Mapped[int] = mapped_column(ForeignKey("submissions.id", ondelete="CASCADE"), index=True)
-    reviewer_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)  # empty: AI
     round: Mapped[int] = mapped_column(Integer)
     kind: Mapped[ReviewKind] = mapped_column(_enum(ReviewKind, "review_kind"))
     approved: Mapped[bool] = mapped_column(Boolean)
@@ -229,7 +243,46 @@ class Review(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     submission: Mapped[Submission] = relationship(back_populates="reviews", lazy="raise")
-    reviewer: Mapped[User] = relationship(lazy="selectin")
+    reviewer: Mapped[User | None] = relationship(lazy="selectin")
+
+    @property
+    def reviewer_name(self) -> str:
+        return self.reviewer.full_name if self.reviewer else AI_REVIEWER_NAME
+
+
+class SubmissionFile(Base):
+    """A file attached to a submission (Excel, PDF, screenshot...). Uploaded first, attached on submit."""
+    __tablename__ = "submission_files"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    submission_id: Mapped[int | None] = mapped_column(ForeignKey("submissions.id", ondelete="CASCADE"), index=True)
+    round: Mapped[int] = mapped_column(Integer, default=1)
+    filename: Mapped[str] = mapped_column(String(200))
+    stored_name: Mapped[str] = mapped_column(String(64), unique=True)       # random name on disk
+    mime: Mapped[str] = mapped_column(String(120))
+    size: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    submission: Mapped[Submission | None] = relationship(back_populates="files", lazy="raise")
+
+
+class TaskQuestion(Base):
+    """A student's question about a task. Answers are visible to everyone on the track, like a FAQ."""
+    __tablename__ = "task_questions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    text: Mapped[str] = mapped_column(Text)
+    answer: Mapped[str] = mapped_column(Text, default="")
+    answered_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    task: Mapped[Task] = relationship(lazy="selectin")
+    user: Mapped[User] = relationship(foreign_keys=[user_id], lazy="selectin")
+    answered_by: Mapped[User | None] = relationship(foreign_keys=[answered_by_id], lazy="selectin")
 
 
 class AppSetting(Base):

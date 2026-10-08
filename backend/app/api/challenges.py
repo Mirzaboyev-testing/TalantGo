@@ -36,6 +36,7 @@ class MentorTaskIn(BaseModel):
     title: str = Field(min_length=3, max_length=160)
     description: str = Field(min_length=10, max_length=4000)
     proof_hint: str = Field(default="", max_length=500)
+    criteria: str = Field(default="", max_length=2000)
     points: int = Field(ge=1, le=MAX_TASK_POINTS)
 
 
@@ -44,13 +45,15 @@ class MentorTaskPatch(BaseModel):
     title: str | None = Field(default=None, min_length=3, max_length=160)
     description: str | None = Field(default=None, min_length=10, max_length=4000)
     proof_hint: str | None = Field(default=None, max_length=500)
+    criteria: str | None = Field(default=None, max_length=2000)
     points: int | None = Field(default=None, ge=1, le=MAX_TASK_POINTS)
     is_active: bool | None = None
 
 
 def task_out(t: Task) -> dict:
     return {"id": t.id, "track_id": t.track_id, "track": t.track.title, "week": t.week, "title": t.title,
-            "description": t.description, "proof_hint": t.proof_hint, "points": t.points, "is_active": t.is_active}
+            "description": t.description, "proof_hint": t.proof_hint, "criteria": t.criteria, "points": t.points,
+            "is_active": t.is_active}
 
 
 @router.get("/mentor/tasks")

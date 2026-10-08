@@ -1,22 +1,30 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type Me, type QueueItem, type Rules } from "../api";
 import { haptic, openLink } from "../tg";
-import { ErrorText, StatusBadge, message } from "../ui";
-import { MentorChallenges, MentorTasks } from "./mentor/MentorTools";
+import { ErrorText, FileList, StatusBadge, message } from "../ui";
+import { MentorChallenges, MentorQuestions, MentorTasks } from "./mentor/MentorTools";
 
 export default function ReviewScreen({ me, onChanged }: { me: Me; onChanged: () => void }) {
-  const [view, setView] = useState<"queue" | "tasks" | "challenges">("queue");
+  const [view, setView] = useState<"queue" | "questions" | "tasks" | "challenges">("queue");
+  const [openQuestions, setOpenQuestions] = useState(0);
   const isMentor = me.role !== "student";
+  useEffect(() => {
+    if (isMentor) api.mentor.questions().then((q) => setOpenQuestions(q.length), () => {});
+  }, [isMentor, view]);
   if (!isMentor) return <Queue me={me} onChanged={onChanged} />;
   return (
     <div>
       <h1>Mentor paneli</h1>
       <div className="segmented">
         <button className={view === "queue" ? "on" : ""} onClick={() => setView("queue")}>Tekshirish</button>
+        <button className={view === "questions" ? "on" : ""} onClick={() => setView("questions")}>
+          Savollar{openQuestions > 0 ? ` (${openQuestions})` : ""}
+        </button>
         <button className={view === "tasks" ? "on" : ""} onClick={() => setView("tasks")}>Topshiriqlar</button>
         <button className={view === "challenges" ? "on" : ""} onClick={() => setView("challenges")}>Chellenjlar</button>
       </div>
       {view === "queue" && <Queue me={me} onChanged={onChanged} embedded />}
+      {view === "questions" && <MentorQuestions onCount={setOpenQuestions} />}
       {view === "tasks" && <MentorTasks />}
       {view === "challenges" && <MentorChallenges />}
     </div>
@@ -79,11 +87,16 @@ function ReviewCard({ item, onDone }: { item: QueueItem; onDone: () => void }) {
         <StatusBadge status={item.status} />
       </div>
       <b>{item.task_title}</b>
-      <div className="hint" style={{ marginTop: 4 }}>Nimani tekshirish kerak: {item.proof_hint}</div>
+      {item.proof_hint && <div className="hint" style={{ marginTop: 4 }}>Nima topshiriladi: {item.proof_hint}</div>}
+      {item.criteria && <div className="hint" style={{ marginTop: 4, whiteSpace: "pre-line" }}>Qanday baholanadi: {item.criteria}</div>}
       {item.note && <div style={{ marginTop: 6 }}>«{item.note}»</div>}
-      <div style={{ margin: "10px 0" }}>
-        <button className="btn ghost" onClick={() => openLink(item.proof_url)}>Isbotni ochish</button>
-      </div>
+      <FileList files={item.files} />
+      {item.proof_url && (
+        <div style={{ marginTop: 8 }}>
+          <button className="btn ghost" onClick={() => openLink(item.proof_url)}>Havolani ochish</button>
+        </div>
+      )}
+      <div style={{ height: 10 }} />
       <textarea value={comment} maxLength={1000} placeholder="Fikringiz: nima yaxshi, nima yetishmaydi (kamida 10 belgi)"
                 onChange={(e) => setComment(e.target.value)} />
       <ErrorText error={error} />

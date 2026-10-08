@@ -21,7 +21,7 @@ from ..schemas import (AdminSubmissionOut, AdminTaskOut, AdminTrackOut, AdminUse
                        AnnouncementOut, AuditOut, BotStatusOut, BotTokenIn, CompanyOut, PointsAdjustIn,
                        ReviewDecisionIn, ReviewOut, TaskIn, TaskPatch, TrackIn, TrackPatch, UniversityIn,
                        UniversityOut, UniversityPatch, UserPatch)
-from ..services import announcements, notify, settings_store, telegram_bot
+from ..services import ai_review, announcements, files, notify, settings_store, telegram_bot
 from ..services.admin_accounts import hash_password
 from ..services.career import decide_verification
 from ..services.rules import Rules, get_rules, save_rules
@@ -132,8 +132,9 @@ def _submission_out(s: Submission) -> AdminSubmissionOut:
     return AdminSubmissionOut(
         id=s.id, status=s.status, round=s.round, points_awarded=s.points_awarded, proof_url=s.proof_url,
         note=s.note, task_title=s.task.title, track_title=s.task.track.title, author_id=s.user_id,
-        author_name=s.user.full_name, updated_at=s.updated_at,
-        reviews=[ReviewOut(reviewer_name=r.reviewer.full_name, kind=r.kind, approved=r.approved,
+        author_name=s.user.full_name, updated_at=s.updated_at, ai_note=s.ai_note,
+        files=[files.file_out(f) for f in s.current_files],
+        reviews=[ReviewOut(reviewer_name=r.reviewer_name, kind=r.kind, approved=r.approved,
                            comment=r.comment, created_at=r.created_at) for r in s.current_reviews])
 
 
@@ -328,6 +329,67 @@ async def connect_bot(actor: OwnerActor, session: Session) -> dict:
     audit(session, actor, "bot.connect", settings.public_url)
     await session.commit()
     return {"ok": True, "username": me.get("username")}
+
+
+class AiSettingsIn(BaseModel):
+    enabled: bool
+    model: str
+    api_key: str = ""
+
+
+class AiStatusOut(BaseModel):
+    enabled: bool
+    model: str
+    configured: bool
+    hint: str | None
+    models: list[str]
+
+
+async def _ai_status(session: Session) -> AiStatusOut:
+    config = await ai_review.get_config(session)
+    hint = await settings_store.get_hint(session, settings_store.GEMINI_KEY)
+    return AiStatusOut(enabled=config.enabled, model=config.model, configured=hint is not None, hint=hint,
+                       models=list(ai_review.MODELS))
+
+
+@router.get("/ai", response_model=AiStatusOut)
+async def ai_status(_: AdminActor, session: Session) -> AiStatusOut:
+    return await _ai_status(session)
+
+
+@router.put("/ai", response_model=AiStatusOut)
+async def save_ai(body: AiSettingsIn, actor: OwnerActor, session: Session) -> AiStatusOut:
+    try:
+        config = ai_review.AiConfig(enabled=body.enabled, model=body.model.strip())
+    except ValueError as exc:
+        raise HTTPException(422, "Model nomi noto'g'ri, masalan: gemini-3.8-flash") from exc
+    key = body.api_key.strip() or await settings_store.get_value(session, settings_store.GEMINI_KEY)
+    if body.api_key.strip() or config.enabled:
+        if not key:
+            raise HTTPException(400, "Avval Gemini API kalitini kiriting")
+        try:
+            await ai_review.ping(key, config.model)
+        except ai_review.AiError as exc:
+            raise HTTPException(400, f"Gemini ishlamadi: {exc}") from exc
+    if body.api_key.strip():
+        await settings_store.set_value(session, settings_store.GEMINI_KEY, key)
+    state = "yoqildi" if config.enabled else "o'chirildi"
+    audit(session, actor, "ai.update", "", f"{state}, {config.model}")
+    await ai_review.save_config(session, config)
+    return await _ai_status(session)
+
+
+@router.post("/ai/test")
+async def test_ai(_: AdminActor, session: Session) -> dict:
+    key = await settings_store.get_value(session, settings_store.GEMINI_KEY)
+    if not key:
+        raise HTTPException(400, "Avval Gemini API kalitini saqlang")
+    config = await ai_review.get_config(session)
+    try:
+        reply = await ai_review.ping(key, config.model)
+    except ai_review.AiError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"ok": True, "model": config.model, "reply": reply[:80]}
 
 
 # --------------------------------------------------------------------------- audit and export

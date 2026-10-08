@@ -11,11 +11,12 @@ from fastapi import HTTPException
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import Review, ReviewKind, Role, Status, Submission, Task, User
-from . import notify
+from ..models import Review, ReviewKind, Role, Status, Submission, SubmissionFile, Task, User
+from . import ai_review, notify
 from .rules import get_rules
 
 TASHKENT = ZoneInfo("Asia/Tashkent")
+PEER_LIKE = (ReviewKind.peer, ReviewKind.ai)          # votes that count toward peer_approvals_required
 
 
 def today() -> date:
@@ -49,7 +50,8 @@ async def _add_points(session: AsyncSession, user_id: int, delta: int) -> None:
                               .values(points=func.greatest(User.points + delta, 0)))
 
 
-async def submit(session: AsyncSession, user: User, task_id: int, proof_url: str, note: str) -> Submission:
+async def submit(session: AsyncSession, user: User, task_id: int, proof_url: str, note: str,
+                 file_ids: list[int] | None = None) -> Submission:
     task = await session.get(Task, task_id)
     if not task or not task.is_active or not task.track.is_active:
         raise HTTPException(404, "Topshiriq topilmadi")
@@ -57,6 +59,15 @@ async def submit(session: AsyncSession, user: User, task_id: int, proof_url: str
         raise HTTPException(403, "Bu topshiriq sizning yo'lingizda emas")
     if task.kind == "profile":
         raise HTTPException(409, "Bu topshiriq ilovaning o'zida bajariladi: profilni to'ldiring")
+    uploads: list[SubmissionFile] = []
+    if file_ids:
+        uploads = list((await session.execute(select(SubmissionFile).where(
+            SubmissionFile.id.in_(file_ids), SubmissionFile.user_id == user.id,
+            SubmissionFile.submission_id.is_(None)))).scalars())
+        if len(uploads) != len(set(file_ids)):
+            raise HTTPException(422, "Fayl topilmadi: uni qayta yuklang")
+    if not proof_url and not uploads:
+        raise HTTPException(422, "Havola qo'shing yoki kamida bitta fayl yuklang")
     sub = (await session.execute(
         select(Submission).where(Submission.user_id == user.id, Submission.task_id == task_id)
         .with_for_update(of=Submission))).scalar_one_or_none()
@@ -68,8 +79,15 @@ async def submit(session: AsyncSession, user: User, task_id: int, proof_url: str
         sub.status, sub.verified_at = Status.pending, None
     else:
         raise HTTPException(409, "Bu topshiriq allaqachon topshirilgan")
+    await session.flush()
+    for f in uploads:
+        f.submission_id, f.round = sub.id, sub.round
+    checking = await ai_review.is_active(session)
+    sub.ai_state, sub.ai_note = ("checking" if checking else ""), ""
     touch_streak(user)
     await session.commit()
+    if checking:
+        ai_review.schedule(sub.id, sub.round)
     rules = await get_rules(session)
     peers = (await session.execute(select(User.telegram_id).where(
         User.track_id == task.track_id, User.id != user.id, User.account_type == "student",
@@ -137,7 +155,7 @@ async def review(session: AsyncSession, reviewer: User, submission_id: int, appr
     rules = await get_rules(session)
     old_status = sub.status
     kind = ReviewKind.mentor if is_mentor else ReviewKind.peer
-    peer_votes = [r.approved for r in sub.current_reviews if r.kind is ReviewKind.peer]
+    peer_votes = [r.approved for r in sub.current_reviews if r.kind in PEER_LIKE]
     session.add(Review(submission_id=sub.id, reviewer_id=reviewer.id, round=sub.round,
                        kind=kind, approved=approved, comment=comment))
     touch_streak(reviewer)
@@ -155,18 +173,48 @@ async def review(session: AsyncSession, reviewer: User, submission_id: int, appr
             await _add_points(session, sub.user_id, -sub.points_awarded)
             sub.status, sub.points_awarded, sub.verified_at = Status.rejected, 0, None
     else:
-        votes = peer_votes + [approved]
-        if votes.count(True) >= rules.peer_approvals_required:
-            sub.status, sub.verified_at = Status.peer_verified, datetime.now(UTC)
-            sub.points_awarded = task_points
-            await _add_points(session, sub.user_id, task_points)
-        elif votes.count(False) >= rules.peer_approvals_required:
-            sub.status = Status.rejected
+        await _count_votes(session, sub, peer_votes + [approved], rules.peer_approvals_required)
 
     await session.commit()
     fresh = await _reload(session, submission_id)
     await _announce_decision(session, fresh, old_status)
     return fresh
+
+
+async def _count_votes(session: AsyncSession, sub: Submission, votes: list[bool], required: int) -> None:
+    if votes.count(True) >= required:
+        sub.status, sub.verified_at = Status.peer_verified, datetime.now(UTC)
+        sub.points_awarded = sub.task.points
+        await _add_points(session, sub.user_id, sub.task.points)
+    elif votes.count(False) >= required:
+        sub.status = Status.rejected
+
+
+async def apply_ai_verdict(session: AsyncSession, submission_id: int, round_: int,
+                           verdict: "ai_review.Verdict | None") -> None:
+    """The AI's verdict is one peer vote; when it is unsure (or failed) the work stays with people."""
+    sub = (await session.execute(select(Submission).where(Submission.id == submission_id)
+                                 .with_for_update(of=Submission))).scalar_one_or_none()
+    if sub is None or sub.round != round_:
+        return
+    if verdict is None or verdict.verdict == "unsure":
+        sub.ai_state = "failed" if verdict is None else "unsure"
+        sub.ai_note = verdict.feedback if verdict else ""
+        await session.commit()
+        return
+    if sub.status is not Status.pending or any(r.kind is ReviewKind.ai for r in sub.current_reviews):
+        sub.ai_state = "done"
+        await session.commit()
+        return
+    old_status = sub.status
+    approved = verdict.verdict == "approve"
+    session.add(Review(submission_id=sub.id, reviewer_id=None, round=sub.round, kind=ReviewKind.ai,
+                       approved=approved, comment=verdict.feedback))
+    sub.ai_state, sub.ai_note = "done", ""
+    votes = [r.approved for r in sub.current_reviews if r.kind in PEER_LIKE] + [approved]
+    await _count_votes(session, sub, votes, (await get_rules(session)).peer_approvals_required)
+    await session.commit()
+    await _announce_decision(session, await _reload(session, submission_id), old_status)
 
 
 async def _announce_decision(session: AsyncSession, sub: Submission, old_status: Status) -> None:
@@ -184,7 +232,7 @@ async def _announce_decision(session: AsyncSession, sub: Submission, old_status:
     if sub.status is Status.peer_verified:
         mentors = (await session.execute(select(User.telegram_id).where(
             User.role.in_([Role.mentor, Role.admin]), User.is_blocked.is_(False)))).scalars().all()
-        notify.send(list(mentors), f"✅ «{title}» ({sub.user.full_name}) tengdoshlar tasdiqladi. Mentor bahosini kutmoqda.")
+        notify.send(list(mentors), f"«{title}» ({sub.user.full_name}) tasdiqlandi. Mentor bahosini kutmoqda.")
 
 
 async def _reload(session: AsyncSession, submission_id: int) -> Submission:
@@ -204,8 +252,9 @@ async def review_queue(session: AsyncSession, reviewer: User, limit: int = 30) -
         query = query.where(Submission.status.in_([Status.pending, Status.peer_verified]))
     elif reviewer.track_id is None:
         return []
-    else:
-        query = query.where(Submission.status == Status.pending, Task.track_id == reviewer.track_id)
+    else:   # while the AI is still looking, peers wait: its answer may settle the work in seconds
+        query = query.where(Submission.status == Status.pending, Task.track_id == reviewer.track_id,
+                            Submission.ai_state != "checking")
     return list((await session.execute(query.order_by(Submission.updated_at).limit(limit))).scalars())
 
 

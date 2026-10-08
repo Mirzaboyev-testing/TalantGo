@@ -4,15 +4,24 @@ export type Role = "student" | "mentor" | "admin";
 export type Status = "pending" | "peer_verified" | "mentor_verified" | "rejected";
 
 export interface Track { id: number; slug: string; title: string; icon: string; description: string }
-export interface Review { reviewer_name: string; kind: "peer" | "mentor"; approved: boolean; comment: string; created_at: string }
+export interface Review { reviewer_name: string; kind: "peer" | "mentor" | "ai"; approved: boolean; comment: string; created_at: string }
+export interface SubmittedFile { id: number; name: string; size: number; mime: string; url: string }
+export type AiState = "" | "checking" | "done" | "unsure" | "failed";
 export interface Submission {
   id: number; task_id: number; proof_url: string; note: string; status: Status; round: number;
   points_awarded: number; created_at: string; verified_at: string | null; reviews: Review[];
+  files: SubmittedFile[]; ai_state: AiState; ai_note: string;
 }
 export interface Task {
   id: number; track_id: number; week: number; title: string; description: string; proof_hint: string;
   points: number; kind: "submission" | "profile"; mentor: string | null; submission: Submission | null;
+  criteria: string; questions: number;
 }
+export interface TaskQuestion {
+  id: number; task_id: number; task_title: string; track: string; text: string; author: string; is_mine: boolean;
+  answer: string; answered_by: string | null; created_at: string; answered_at: string | null;
+}
+export interface AiStatus { enabled: boolean; model: string; configured: boolean; hint: string | null; models: string[] }
 export interface Me {
   id: number; full_name: string; username: string | null; photo_url: string | null; role: Role;
   track: Track | null; university: string; group_name: string; bio: string; goals: string[];
@@ -58,6 +67,7 @@ export interface StudentContact { id: number; company: string; industry: string;
 export interface QueueItem {
   submission_id: number; status: Status; task_title: string; track_title: string; proof_hint: string;
   proof_url: string; note: string; author_name: string; peer_reviews: number; submitted_at: string;
+  criteria: string; files: SubmittedFile[];
 }
 export interface Peer {
   id: number; full_name: string; username: string | null; photo_url: string | null; track_title: string | null;
@@ -79,6 +89,7 @@ export interface AdminUser {
 export interface AdminSubmission {
   id: number; status: Status; round: number; points_awarded: number; proof_url: string; note: string;
   task_title: string; track_title: string; author_id: number; author_name: string; reviews: Review[]; updated_at: string;
+  files: SubmittedFile[]; ai_note: string;
 }
 export interface AdminTrack extends Track { sort_order: number; is_active: boolean; student_count: number; task_count: number }
 export interface AdminTask { id: number; track_id: number; week: number; sort_order: number; title: string; description: string; proof_hint: string; points: number; is_active: boolean }
@@ -132,6 +143,28 @@ async function request<T>(method: string, path: string, body?: unknown, admin = 
   return data as T;
 }
 
+/** Step one of a file submission; the returned id is sent with the work. */
+async function uploadFile(file: File): Promise<SubmittedFile> {
+  const body = new FormData();
+  body.append("file", file);
+  let resp: Response;
+  try {
+    resp = await fetch("/api/v1/uploads", { method: "POST", body, headers: userToken ? { Authorization: `Bearer ${userToken}` } : {} });
+  } catch {
+    throw new ApiError(0, "Internet aloqasi yo'q");
+  }
+  const data = resp.headers.get("content-type")?.includes("json") ? await resp.json() : null;
+  if (!resp.ok) throw new ApiError(resp.status, resp.status === 413 ? "Fayl juda katta" : describe(data?.detail));
+  return data as SubmittedFile;
+}
+
+export const absoluteUrl = (url: string) => new URL(url, window.location.origin).href;
+export function fileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 async function download(path: string, filename: string): Promise<void> {
   const resp = await fetch(`/api/v1${path}`, { headers: { Authorization: `Bearer ${adminToken || userToken}` } });
   if (!resp.ok) throw new ApiError(resp.status, "Yuklab bo'lmadi");
@@ -177,6 +210,8 @@ export const api = {
 
   mentor: {
     tasks: () => request<MentorTask[]>("GET", "/mentor/tasks"),
+    questions: (openOnly = true) => request<TaskQuestion[]>("GET", `/mentor/questions?open_only=${openOnly}`),
+    answer: (id: number, answer: string) => request<TaskQuestion>("POST", `/questions/${id}/answer`, { answer }),
     createTask: (t: Omit<MentorTask, "id" | "track" | "is_active">) => request<MentorTask>("POST", "/mentor/tasks", t),
     editTask: (id: number, changes: Partial<MentorTask>) => request<MentorTask>("PATCH", `/mentor/tasks/${id}`, changes),
     challenges: () => request<Challenge[]>("GET", "/mentor/challenges"),
@@ -234,8 +269,11 @@ export const api = {
   },
   tasks: (trackId: number) => request<Task[]>("GET", `/tracks/${trackId}/tasks`),
   completeProfile: (taskId: number) => request<Submission>("POST", `/tasks/${taskId}/complete-profile`),
-  submit: (taskId: number, proof_url: string, note: string) =>
-    request<Submission>("POST", `/tasks/${taskId}/submit`, { proof_url, note }),
+  upload: uploadFile,
+  submit: (taskId: number, proof_url: string, note: string, file_ids: number[] = []) =>
+    request<Submission>("POST", `/tasks/${taskId}/submit`, { proof_url, note, file_ids }),
+  questions: (taskId: number) => request<TaskQuestion[]>("GET", `/tasks/${taskId}/questions`),
+  ask: (taskId: number, text: string) => request<TaskQuestion>("POST", `/tasks/${taskId}/questions`, { text }),
   queue: () => request<QueueItem[]>("GET", "/reviews/queue"),
   review: (submissionId: number, approved: boolean, comment: string) =>
     request<Submission>("POST", `/submissions/${submissionId}/reviews`, { approved, comment }),
@@ -279,6 +317,9 @@ export const api = {
     saveBot: (token: string) => request<BotStatus>("PUT", "/admin/bot", { token }, true),
     testBot: () => request<{ username: string }>("POST", "/admin/bot/test", undefined, true),
     connectBot: () => request<{ username: string }>("POST", "/admin/bot/connect", undefined, true),
+    ai: () => request<AiStatus>("GET", "/admin/ai", undefined, true),
+    saveAi: (b: { enabled: boolean; model: string; api_key?: string }) => request<AiStatus>("PUT", "/admin/ai", b, true),
+    testAi: () => request<{ model: string; reply: string }>("POST", "/admin/ai/test", undefined, true),
     exportUsers: () => download("/admin/export/users.csv", "careerflow-talabalar.csv"),
     inbox: () => request<{ verifications: number; companies: number; jobs: number; staff: number }>("GET", "/admin/inbox", undefined, true),
     verifications: () => request<PendingStudent[]>("GET", "/admin/verifications", undefined, true),
@@ -384,7 +425,7 @@ export interface AdminGroup {
 
 export interface MentorTask {
   id: number; track_id: number; track: string; week: number; title: string; description: string; proof_hint: string;
-  points: number; is_active: boolean;
+  criteria: string; points: number; is_active: boolean;
 }
 export interface ChallengeEntry {
   id: number; user_id: number; student: string; username: string | null; university: string | null; proof_url: string;
