@@ -59,6 +59,8 @@ export default function App() {
     forgetToken();
     setUserToken("");
     setMe(null);
+    setTab("path");                 // the next person starts on the home screen
+    setCommunityView("groups");
     showLogin();
   }, [showLogin]);
 
@@ -127,7 +129,7 @@ export default function App() {
   const tabs: ShellTab<Tab>[] = [
     { id: "path", icon: "path", label: "Yo'l" },
     { id: "jobs", icon: "briefcase", label: "Vakansiyalar" },
-    { id: "review", icon: "check", label: "Tekshirish" },
+    { id: "review", icon: "check", label: me.role === "student" ? "Tekshirish" : "Mentor" },
     { id: "community", icon: "users", label: "Hamjamiyat", badge: unread },
     { id: "profile", icon: "user", label: "Profil" },
   ];

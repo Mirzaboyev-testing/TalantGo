@@ -3,11 +3,13 @@ import { api, type Me, type Task } from "../api";
 import { haptic, openLink } from "../tg";
 import { ErrorText, Sheet, StatusBadge, message } from "../ui";
 import InviteCard from "./InviteCard";
+import Challenges from "./Challenges";
 import { Icon, TrackMark } from "../icons";
 import ProfileTask from "./ProfileTask";
 
 export default function PathScreen({ me, onChanged, onChangeTrack }: { me: Me; onChanged: () => void; onChangeTrack: () => void }) {
   const [tasks, setTasks] = useState<Task[] | null>(null);
+  const [view, setView] = useState<"tasks" | "challenges">("tasks");
   const [open, setOpen] = useState<Task | null>(null);
   const [error, setError] = useState("");
 
@@ -30,9 +32,14 @@ export default function PathScreen({ me, onChanged, onChangeTrack }: { me: Me; o
         <p className="hint">{done} / {tasks.length} topshiriq tasdiqlangan · <a href="#" onClick={(e) => { e.preventDefault(); onChangeTrack(); }}>yo'lni o'zgartirish</a></p>
       )}
       {me.invited_count < 3 && <InviteCard me={me} compact />}
+      <div className="segmented">
+        <button className={view === "tasks" ? "on" : ""} onClick={() => setView("tasks")}>Topshiriqlar</button>
+        <button className={view === "challenges" ? "on" : ""} onClick={() => setView("challenges")}>Chellenjlar</button>
+      </div>
+      {view === "challenges" && <Challenges />}
       <ErrorText error={error} />
-      {!tasks && !error && <div className="hint">Yuklanmoqda…</div>}
-      {tasks?.map((t) => (
+      {view === "tasks" && !tasks && !error && <div className="hint">Yuklanmoqda…</div>}
+      {view === "tasks" && tasks?.map((t) => (
         <div key={t.id} className="card tap" onClick={() => setOpen(t)}>
           <div className="row between">
             <span className="hint">{t.kind === "profile" ? "Start" : `${t.week}-hafta`} · {t.points} ball</span>
@@ -40,6 +47,7 @@ export default function PathScreen({ me, onChanged, onChangeTrack }: { me: Me; o
               : <StatusBadge status={t.submission?.status ?? null} />}
           </div>
           <b>{t.title}</b>
+          {t.mentor && <div className="hint" style={{ marginTop: 2 }}>Mentor: {t.mentor}</div>}
         </div>
       ))}
       {open && (

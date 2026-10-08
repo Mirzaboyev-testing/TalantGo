@@ -2,8 +2,28 @@ import { useCallback, useEffect, useState } from "react";
 import { api, type Me, type QueueItem, type Rules } from "../api";
 import { haptic, openLink } from "../tg";
 import { ErrorText, StatusBadge, message } from "../ui";
+import { MentorChallenges, MentorTasks } from "./mentor/MentorTools";
 
 export default function ReviewScreen({ me, onChanged }: { me: Me; onChanged: () => void }) {
+  const [view, setView] = useState<"queue" | "tasks" | "challenges">("queue");
+  const isMentor = me.role !== "student";
+  if (!isMentor) return <Queue me={me} onChanged={onChanged} />;
+  return (
+    <div>
+      <h1>Mentor paneli</h1>
+      <div className="segmented">
+        <button className={view === "queue" ? "on" : ""} onClick={() => setView("queue")}>Tekshirish</button>
+        <button className={view === "tasks" ? "on" : ""} onClick={() => setView("tasks")}>Topshiriqlar</button>
+        <button className={view === "challenges" ? "on" : ""} onClick={() => setView("challenges")}>Chellenjlar</button>
+      </div>
+      {view === "queue" && <Queue me={me} onChanged={onChanged} embedded />}
+      {view === "tasks" && <MentorTasks />}
+      {view === "challenges" && <MentorChallenges />}
+    </div>
+  );
+}
+
+function Queue({ me, onChanged, embedded = false }: { me: Me; onChanged: () => void; embedded?: boolean }) {
   const [items, setItems] = useState<QueueItem[] | null>(null);
   const [error, setError] = useState("");
   const [rules, setRules] = useState<Rules | null>(null);
@@ -15,7 +35,7 @@ export default function ReviewScreen({ me, onChanged }: { me: Me; onChanged: () 
 
   return (
     <div>
-      <h1>Tekshirish</h1>
+      {!embedded && <h1>Tekshirish</h1>}
       <p className="notice">
         {isMentor
           ? "Siz mentorsiz: tasdig'ingiz ishga eng yuqori ishonch darajasini beradi va 50% bonus qo'shadi. Rad etsangiz, berilgan ball qaytarib olinadi."

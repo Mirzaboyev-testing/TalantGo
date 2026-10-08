@@ -7,6 +7,7 @@ import Announcements from "./Announcements";
 import AuthScreen from "./AuthScreen";
 import Dashboard from "./Dashboard";
 import GroupsAdmin from "./GroupsAdmin";
+import ChallengesAdmin from "./ChallengesAdmin";
 import { Applications, Companies, Jobs } from "./Market";
 import Queue from "./Queue";
 import { AuditCard, BotCard, ExportCard, PartnerLinks, RulesCard } from "./Settings";
@@ -27,6 +28,7 @@ const MENU: { group: string; pages: Page[] }[] = [
     { id: "users", label: "Talabalar va mentorlar", icon: "school" },
     { id: "submissions", label: "Topshirilgan ishlar", icon: "check" },
     { id: "tracks", label: "Yo'nalishlar va topshiriqlar", icon: "path" },
+    { id: "challenges", label: "Chellenjlar", icon: "flag" },
   ] },
   { group: "Ish bozori", pages: [
     { id: "companies", label: "Kompaniyalar", icon: "building" },
@@ -129,6 +131,7 @@ export default function AdminSite() {
             {current.id === "applications" && <Applications />}
             {current.id === "universities" && <div className="narrow"><Universities /></div>}
             {current.id === "groups" && <GroupsAdmin />}
+            {current.id === "challenges" && <ChallengesAdmin />}
             {current.id === "announcements" && <div className="narrow"><Announcements /></div>}
             {current.id === "bot" && <div className="narrow"><BotCard /></div>}
             {current.id === "reports" && <div className="narrow"><ExportCard /></div>}

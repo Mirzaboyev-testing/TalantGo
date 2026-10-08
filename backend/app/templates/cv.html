@@ -71,6 +71,20 @@
   {% if cv.skills %}<h2>Ko'nikmalar</h2><div class="tags">{% for g in cv.skills %}<span>{{ g }}</span>{% endfor %}</div>{% endif %}
   {% if cv.languages %}<h2>Tillar</h2><div class="tags">{% for g in cv.languages %}<span>{{ g }}</span>{% endfor %}</div>{% endif %}
 
+  {% if cv.challenges %}
+  <h2>Chellenjlar</h2>
+  {% for c in cv.challenges %}
+  <article class="item">
+    <div class="item-head">
+      <h3>{{ c.title }}</h3>
+      <span class="badge mentor_verified">{% if c.place %}{{ c.place }}-o'rin{% else %}Qabul qilingan{% endif %}</span>
+    </div>
+    <div class="meta">{% if c.score is not none %}{{ c.score }}/100 · {% endif %}{{ c.points }} ball{% if c.mentor %} · baholagan: {{ c.mentor }} (mentor){% endif %}{% if c.date %} · {{ c.date[:10] }}{% endif %}
+      · <a href="{{ c.proof_url }}" rel="nofollow noopener" target="_blank">Ishni ko'rish</a></div>
+  </article>
+  {% endfor %}
+  {% endif %}
+
   <h2>Tasdiqlangan ishlar</h2>
   {% for a in cv.achievements %}
   <article class="item">

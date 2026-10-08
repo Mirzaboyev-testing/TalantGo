@@ -11,7 +11,7 @@ export interface Submission {
 }
 export interface Task {
   id: number; track_id: number; week: number; title: string; description: string; proof_hint: string;
-  points: number; kind: "submission" | "profile"; submission: Submission | null;
+  points: number; kind: "submission" | "profile"; mentor: string | null; submission: Submission | null;
 }
 export interface Me {
   id: number; full_name: string; username: string | null; photo_url: string | null; role: Role;
@@ -174,6 +174,24 @@ export const api = {
       request<{ token: string }>("PUT", "/admin-auth/password", { current_password, new_password }, true),
   },
 
+  mentor: {
+    tasks: () => request<MentorTask[]>("GET", "/mentor/tasks"),
+    createTask: (t: Omit<MentorTask, "id" | "track" | "is_active">) => request<MentorTask>("POST", "/mentor/tasks", t),
+    editTask: (id: number, changes: Partial<MentorTask>) => request<MentorTask>("PATCH", `/mentor/tasks/${id}`, changes),
+    challenges: () => request<Challenge[]>("GET", "/mentor/challenges"),
+    createChallenge: (c: ChallengeInput) => request<Challenge>("POST", "/mentor/challenges", c),
+    editChallenge: (id: number, changes: Partial<ChallengeInput> & { is_archived?: boolean }) =>
+      request<Challenge>("PATCH", `/mentor/challenges/${id}`, changes),
+    entries: (id: number) => request<ChallengeEntry[]>("GET", `/mentor/challenges/${id}/entries`),
+    review: (id: number, entryId: number, r: { accept: boolean; score?: number | null; place?: 1 | 2 | 3 | null; comment: string }) =>
+      request<ChallengeEntry>("POST", `/mentor/challenges/${id}/entries/${entryId}/review`, r),
+  },
+  challenges: {
+    list: () => request<Challenge[]>("GET", "/challenges"),
+    detail: (id: number) => request<Challenge>("GET", `/challenges/${id}`),
+    enter: (id: number, proof_url: string, note: string) => request<ChallengeEntry>("POST", `/challenges/${id}/enter`, { proof_url, note }),
+  },
+
   groups: {
     list: () => request<{ mine: GroupCard[]; discover: GroupCard[] }>("GET", "/groups"),
     unread: () => request<{ unread: number }>("GET", "/groups/unread"),
@@ -235,6 +253,8 @@ export const api = {
     groupMessages: (id: number) => request<{ id: number; author: string; text: string; deleted: boolean; created_at: string }[]>("GET", `/admin/groups/${id}/messages`, undefined, true),
     deleteGroupMessage: (messageId: number) => request<null>("DELETE", `/admin/group-messages/${messageId}`, undefined, true),
     archiveGroup: (id: number) => request<{ is_archived: boolean }>("POST", `/admin/groups/${id}/archive`, undefined, true),
+    challenges: () => request<AdminChallenge[]>("GET", "/admin/challenges", undefined, true),
+    archiveChallenge: (id: number) => request<{ is_archived: boolean }>("POST", `/admin/challenges/${id}/archive`, undefined, true),
     exportApplications: () => download("/admin/export/applications.csv", "careerflow-arizalar.csv"),
     stats: () => request<AdminStats>("GET", "/admin/stats", undefined, true),
     users: (params: Record<string, string>) => request<AdminUser[]>("GET", `/admin/users?${new URLSearchParams(params)}`, undefined, true),
@@ -360,3 +380,35 @@ export interface AdminGroup {
   id: number; name: string; is_private: boolean; is_official: boolean; is_archived: boolean; members: number;
   messages: number; created_at: string;
 }
+
+export interface MentorTask {
+  id: number; track_id: number; track: string; week: number; title: string; description: string; proof_hint: string;
+  points: number; is_active: boolean;
+}
+export interface ChallengeEntry {
+  id: number; user_id: number; student: string; username: string | null; university: string | null; proof_url: string;
+  note: string; status: "submitted" | "accepted" | "rejected"; score: number | null; place: 1 | 2 | 3 | null;
+  comment: string; points_awarded: number; created_at: string;
+}
+export interface Challenge {
+  id: number; title: string; description: string; track_id: number | null; track: string | null; prize: string;
+  points: number; starts_at: string; ends_at: string; state: "upcoming" | "active" | "finished"; is_archived: boolean;
+  mentor: string | null; entries: number; to_review?: number; my_entry?: ChallengeEntry | null;
+  results?: { student: string; place: number | null; score: number | null }[];
+}
+export interface ChallengeInput {
+  title: string; description: string; track_id: number | null; prize: string; points: number; starts_on?: string | null; ends_on: string;
+}
+export interface AdminChallenge {
+  id: number; title: string; track: string; prize: string; points: number; mentor: string | null; entries: number;
+  starts_at: string; ends_at: string; is_archived: boolean;
+}
+
+const UZ_MONTHS = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr"];
+/** 2026-10-15T18:59Z -> "15-oktabr" (Tashkent time; browsers often lack Uzbek month names). */
+export const uzDate = (iso: string) => {
+  const d = new Date(new Date(iso).toLocaleString("en-US", { timeZone: "Asia/Tashkent" }));
+  return `${d.getDate()}-${UZ_MONTHS[d.getMonth()]}`;
+};
+/** Days left until a deadline, for "3 kun qoldi". */
+export const daysLeft = (iso: string) => Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000));

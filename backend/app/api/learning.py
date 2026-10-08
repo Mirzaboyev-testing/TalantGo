@@ -39,6 +39,7 @@ async def track_tasks(track_id: int, user: CurrentUser, session: Session) -> lis
                                  Submission.task_id.in_([t.id for t in tasks])))).scalars()}
     return [TaskOut(id=t.id, track_id=t.track_id, week=t.week, title=t.title, description=t.description,
                     proof_hint=t.proof_hint, points=t.points, kind=t.kind,
+                    mentor=t.created_by.full_name if t.created_by else None,
                     submission=submission_out(mine[t.id]) if t.id in mine else None) for t in tasks]
 
 

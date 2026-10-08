@@ -106,8 +106,10 @@ class Task(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # "submission": a proof link reviewed by peers; "profile": done inside the app, checked by the system
     kind: Mapped[str] = mapped_column(String(16), default="submission", server_default="submission")
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))  # a mentor's task
 
     track: Mapped[Track] = relationship(back_populates="tasks", lazy="selectin")
+    created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_id], lazy="selectin")
 
 
 class User(Base):
@@ -411,3 +413,49 @@ class GroupMessage(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User | None] = relationship(lazy="selectin")
+
+
+class Challenge(Base):
+    """A time-boxed contest a mentor runs: students submit work, the mentor scores it and names winners."""
+    __tablename__ = "challenges"
+    __table_args__ = (CheckConstraint("points >= 0", name="challenge_points_nonnegative"),
+                      CheckConstraint("ends_at > starts_at", name="challenge_dates_order"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(160))
+    description: Mapped[str] = mapped_column(Text)
+    track_id: Mapped[int | None] = mapped_column(ForeignKey("tracks.id", ondelete="SET NULL"))   # None: everyone
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    prize: Mapped[str] = mapped_column(String(300), default="")
+    points: Mapped[int] = mapped_column(Integer, default=20)          # for every accepted entry
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    track: Mapped[Track | None] = relationship(lazy="selectin")
+    created_by: Mapped[User | None] = relationship(lazy="selectin")
+
+
+class ChallengeEntry(Base):
+    __tablename__ = "challenge_entries"
+    __table_args__ = (UniqueConstraint("challenge_id", "user_id"),
+                      _in("status", ("submitted", "accepted", "rejected"), "challenge_entry_status_valid"),
+                      CheckConstraint("place IS NULL OR place BETWEEN 1 AND 3", name="challenge_entry_place_range"),
+                      CheckConstraint("score IS NULL OR score BETWEEN 0 AND 100", name="challenge_entry_score_range"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    challenge_id: Mapped[int] = mapped_column(ForeignKey("challenges.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    proof_url: Mapped[str] = mapped_column(String(512))
+    note: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16), default="submitted")
+    score: Mapped[int | None] = mapped_column(Integer)
+    place: Mapped[int | None] = mapped_column(Integer)
+    comment: Mapped[str] = mapped_column(Text, default="")
+    points_awarded: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    challenge: Mapped[Challenge] = relationship(lazy="selectin")
+    user: Mapped[User] = relationship(lazy="selectin")

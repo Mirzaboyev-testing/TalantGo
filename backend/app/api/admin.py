@@ -15,8 +15,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import aliased
 
 from ..core.config import settings
-from ..models import (AdminAccount, Announcement, Application, AuditLog, Company, Group, GroupMember, GroupMessage, Job,
-                      Role, Status, Submission, Task, Track, University, User)
+from ..models import (AdminAccount, Announcement, Application, AuditLog, Challenge, ChallengeEntry, Company, Group,
+                      GroupMember, GroupMessage, Job, Role, Status, Submission, Task, Track, University, User)
 from ..schemas import (AdminSubmissionOut, AdminTaskOut, AdminTrackOut, AdminUserOut, AnnouncementIn,
                        AnnouncementOut, AuditOut, BotStatusOut, BotTokenIn, CompanyOut, PointsAdjustIn,
                        ReviewDecisionIn, ReviewOut, TaskIn, TaskPatch, TrackIn, TrackPatch, UniversityIn,
@@ -713,3 +713,25 @@ async def archive_group(group_id: int, actor: AdminActor, session: Session) -> d
     audit(session, actor, "group.archive" if group.is_archived else "group.restore", group.name)
     await session.commit()
     return {"is_archived": group.is_archived}
+
+
+# --------------------------------------------------------------------------- challenges
+
+@router.get("/challenges")
+async def admin_challenges(_: AdminActor, session: Session) -> list[dict]:
+    entries = select(func.count()).where(ChallengeEntry.challenge_id == Challenge.id).correlate(Challenge).scalar_subquery()
+    rows = (await session.execute(select(Challenge, entries).order_by(Challenge.created_at.desc()).limit(300))).all()
+    return [{"id": c.id, "title": c.title, "track": c.track.title if c.track else "Hamma", "prize": c.prize,
+             "points": c.points, "mentor": c.created_by.full_name if c.created_by else None, "entries": n,
+             "starts_at": c.starts_at, "ends_at": c.ends_at, "is_archived": c.is_archived} for c, n in rows]
+
+
+@router.post("/challenges/{challenge_id}/archive")
+async def archive_challenge(challenge_id: int, actor: AdminActor, session: Session) -> dict:
+    c = await session.get(Challenge, challenge_id)
+    if c is None:
+        raise HTTPException(404, "Chellenj topilmadi")
+    c.is_archived = not c.is_archived
+    audit(session, actor, "challenge.archive" if c.is_archived else "challenge.restore", c.title)
+    await session.commit()
+    return {"is_archived": c.is_archived}

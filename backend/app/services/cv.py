@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
-from ..models import ReviewKind, Status, Submission, Task, User
+from ..models import ChallengeEntry, ReviewKind, Status, Submission, Task, User
 from .progress import current_streak, rank_of
 
 VERIFIED = (Status.peer_verified, Status.mentor_verified)
@@ -33,7 +33,16 @@ async def build_cv(session: AsyncSession, user: User) -> dict:
             "mentor_comment": next((r.comment for r in approvers if r.kind is ReviewKind.mentor), None),
         })
 
+    wins = (await session.execute(select(ChallengeEntry).where(
+        ChallengeEntry.user_id == user.id, ChallengeEntry.status == "accepted")
+        .order_by(ChallengeEntry.place.nulls_last(), ChallengeEntry.reviewed_at.desc()))).scalars().all()
+    challenges = [{"title": e.challenge.title, "place": e.place, "score": e.score, "points": e.points_awarded,
+                   "mentor": e.challenge.created_by.full_name if e.challenge.created_by else None,
+                   "proof_url": e.proof_url, "date": e.reviewed_at.isoformat() if e.reviewed_at else None}
+                  for e in wins]
+
     return {
+        "challenges": challenges,
         "full_name": user.full_name,
         "headline": user.headline,
         "username": user.username,

@@ -5,7 +5,7 @@ PAGES = ["/admin/stats", "/admin/dashboard", "/admin/inbox", "/admin/users", "/a
          "/admin/submissions", "/admin/tracks", "/admin/tasks", "/admin/companies?status=pending",
          "/admin/companies", "/admin/jobs", "/admin/jobs?status=approved", "/admin/applications",
          "/admin/applications?status=new&q=a", "/admin/verifications", "/admin/staff", "/admin/universities",
-         "/admin/announcements", "/admin/rules", "/admin/bot", "/admin/audit", "/admin/accounts", "/admin/groups",
+         "/admin/announcements", "/admin/rules", "/admin/bot", "/admin/audit", "/admin/accounts", "/admin/groups", "/admin/challenges",
          "/admin/export/users.csv", "/admin/export/applications.csv", "/admin-auth/me"]
 
 

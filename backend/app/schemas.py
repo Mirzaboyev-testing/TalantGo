@@ -90,6 +90,7 @@ class TaskOut(ORM):
     proof_hint: str
     points: int
     kind: str = "submission"
+    mentor: str | None = None
     submission: SubmissionOut | None = None
 
 
