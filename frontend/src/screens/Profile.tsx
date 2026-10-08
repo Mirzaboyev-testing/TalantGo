@@ -1,19 +1,20 @@
 import { useState } from "react";
 import { api, type Me } from "../api";
 import { haptic, openLink } from "../tg";
-import { Avatar, ErrorText, message, toast } from "../ui";
+import { Avatar, ErrorText, focusField, isFullName, message, toast } from "../ui";
 import CareerProfile from "./CareerProfile";
 import PhoneField from "./PhoneField";
 import InviteCard from "./InviteCard";
 
 export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; onSaved: (m: Me) => void; onChangeTrack: () => void }) {
   const [form, setForm] = useState({
-    group_name: me.group_name, bio: me.bio, headline: me.headline,
+    full_name: me.full_name, group_name: me.group_name, bio: me.bio, headline: me.headline,
     github_url: me.github_url, linkedin_url: me.linkedin_url, goals: me.goals.join(", "),
   });
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [tried, setTried] = useState(false);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setSaved(false);
     setForm({ ...form, [k]: e.target.value });
@@ -21,13 +22,24 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
 
   const cvUrl = `${window.location.origin}/cv/${me.cv_slug}`;
 
+  // the name and the field are required; everything else here is optional
+  const nameOk = isFullName(form.full_name);
+  const headlineOk = form.headline.trim().length >= 5;
+
   async function save(extra: Partial<Me> = {}) {
+    const isCvToggle = "cv_public" in extra;
+    if (!isCvToggle && (!nameOk || !headlineOk)) {
+      setTried(true);
+      toast(!nameOk ? "Ism va familiyani to'liq yozing" : "Sohangizni yozing", "error");
+      focusField(!nameOk ? "pf-name" : "pf-headline");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
       const { goals: _unused, ...rest } = form;
       void _unused;
-      onSaved(await api.updateMe({ ...rest, ...extra }));
+      onSaved(await api.updateMe(isCvToggle ? extra : { ...rest, full_name: rest.full_name.trim(), ...extra }));
       haptic("success");
       setSaved(true);
       toast("cv_public" in extra ? (extra.cv_public ? "CV ochiq qilindi" : "CV yopildi") : "Ma'lumotlar saqlandi");
@@ -78,12 +90,19 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
       <CareerProfile me={me} onSaved={onSaved} />
 
       <div className="card">
-        <b>Qo'shimcha ma'lumotlar</b>
-        <label>Guruh</label>
+        <b>Asosiy ma'lumotlar</b>
+        <p className="hint" style={{ marginTop: 4 }}>* belgili maydonlar majburiy.</p>
+        <label htmlFor="pf-name">Ism va familiya *</label>
+        <input id="pf-name" className={tried && !nameOk ? "invalid" : ""} value={form.full_name} maxLength={128}
+               autoComplete="name" placeholder="Masalan: Nodira Ergasheva" onChange={set("full_name")} />
+        {tried && !nameOk && <div className="field-error">Ism va familiyani to'liq yozing</div>}
+        <label htmlFor="pf-headline">Soha yoki sarlavha *</label>
+        <input id="pf-headline" className={tried && !headlineOk ? "invalid" : ""} value={form.headline} maxLength={120}
+               placeholder="Iqtisodiyot talabasi | Data Analytics" onChange={set("headline")} />
+        {tried && !headlineOk && <div className="field-error">Sohangizni yozing, masalan: Data analitik</div>}
+        <label>Guruh (ixtiyoriy)</label>
         <input value={form.group_name} maxLength={40} onChange={set("group_name")} />
-        <label>Sarlavha</label>
-        <input value={form.headline} maxLength={120} placeholder="Iqtisodiyot talabasi | Data Analytics" onChange={set("headline")} />
-        <label>O'zim haqimda</label>
+        <label>O'zim haqimda (ixtiyoriy)</label>
         <textarea value={form.bio} maxLength={600} placeholder="2-3 gap: nimani o'rganyapsiz, qanday ishga qiziqasiz" onChange={set("bio")} />
         <label>GitHub (ixtiyoriy)</label>
         <input value={form.github_url} placeholder="github.com/ismingiz" inputMode="url" onChange={set("github_url")} />

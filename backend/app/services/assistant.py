@@ -40,8 +40,8 @@ Mentor tasdiqlasa yana {bonus}% bonus qo'shiladi va ish eng yuqori ishonch daraj
 Qaytarilgan ishni izohlarga qarab tuzatib, qayta topshirish mumkin.
 Mentorga savol: topshiriq ichidagi "Mentorga savol" bo'limida; javob shu yerda chiqadi va botga keladi, savol-javobni yo'nalishdagi hamma ko'radi.
 Tengdoshni tekshirish: "Tekshirish" bo'limida faqat o'z yo'nalishingizdagi ishlar; kamida 10 belgili yozma izoh kerak; har bir baho uchun +{review_points} ball.
-Start topshirig'i: ilovaning o'zida bajariladi, profil to'liq bo'lishi kerak: qisqa sarlavha (10+ belgi), o'zingiz haqingizda (60+ belgi),
-kamida 3 ko'nikma, kamida 1 til va CV ochiq bo'lishi.
+Start topshirig'i: ilovaning o'zida bajariladi. Kerak: ism va familiya, soha yoki sarlavha (5+ belgi), o'zingiz haqingizda (30+ belgi),
+kamida 1 ko'nikma va kamida 1 til. CV'ni ochiq qilish, GitHub va LinkedIn ixtiyoriy.
 Haftalik seriya: har hafta kamida bitta ish topshirsangiz yoki baholasangiz, seriya davom etadi.
 Chellenjlar: Yo'l -> "Chellenjlar". Mentor tashkil qilgan muddatli musobaqa; ish topshirasiz, mentor baholaydi; 1-3-o'rinlar +30, +20, +10 bonus ball oladi, natija CV'ga tushadi.
 Talabalikni tasdiqlash: Profil -> universitet, fakultet va kurs to'ldiriladi -> "Talabalikni tasdiqlashga yuborish" -> admin tasdiqlagach

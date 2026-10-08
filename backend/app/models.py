@@ -141,6 +141,7 @@ class User(Base):
     university: Mapped[str] = mapped_column(String(120), default="")
     group_name: Mapped[str] = mapped_column(String(40), default="", index=True)
     bio: Mapped[str] = mapped_column(Text, default="")
+    name_set_by_user: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     headline: Mapped[str] = mapped_column(String(120), default="", server_default="")   # "Iqtisodiyot talabasi | Data Analytics"
     goals: Mapped[list[str]] = mapped_column(ARRAY(String(40)), default=list, server_default="{}")
     github_url: Mapped[str] = mapped_column(String(256), default="")

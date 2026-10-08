@@ -85,8 +85,10 @@ function TaskSheet({ task, me, onClose, onSubmitted }: { task: Task; me: Me; onC
   return (
     <Sheet onClose={onClose}>
       <div className="row between">
-        <span className="hint">{task.week}-hafta · {task.points} ball</span>
-        {sub?.ai_state === "checking" ? <span className="badge pending">Tekshirilmoqda</span> : <StatusBadge status={sub?.status ?? null} />}
+        <span className="hint">{isProfile ? "Start" : `${task.week}-hafta`} · {task.points} ball</span>
+        {isProfile && sub ? <span className="badge peer_verified">Bajarildi</span>
+          : sub?.ai_state === "checking" ? <span className="badge pending">Tekshirilmoqda</span>
+          : <StatusBadge status={sub?.status ?? null} />}
       </div>
       <h1>{task.title}</h1>
       <div className="card">

@@ -41,7 +41,7 @@ async def me_out(session: Session, user: User) -> MeOut:
 
 
 # Changing any of these after verification means the old check no longer covers the profile.
-IDENTITY_FIELDS = ("university_id", "faculty", "course", "student_number")
+IDENTITY_FIELDS = ("full_name", "university_id", "faculty", "course", "student_number")
 
 
 @router.get("/me", response_model=MeOut)
@@ -65,6 +65,9 @@ async def update_me(body: MeUpdate, user: CurrentUser, session: Session) -> MeOu
     for key in ("goals", "skills", "languages", "job_types"):
         if changes.get(key) is not None:
             changes[key] = list(dict.fromkeys(changes[key]))
+    if changes.get("full_name"):
+        changes["full_name"] = " ".join(changes["full_name"].split())
+        user.name_set_by_user = True        # Telegram sign-in no longer overwrites it
     if changes.pop("consent", None):
         user.consent_at = user.consent_at or datetime.now(UTC)
     if (gpa := changes.get("gpa")) is not None and gpa > (changes.get("gpa_scale") or user.gpa_scale):

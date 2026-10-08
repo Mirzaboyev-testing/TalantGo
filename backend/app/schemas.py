@@ -198,6 +198,7 @@ class MeOut(ORM):
 
 
 class MeUpdate(BaseModel):
+    full_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=128)] | None = None
     track_id: int | None = None
     university: str | None = Field(default=None, max_length=120)
     group_name: str | None = Field(default=None, max_length=40)

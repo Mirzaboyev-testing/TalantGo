@@ -144,10 +144,13 @@ UNIVERSITIES: list[tuple[str, str, str]] = [
 
 
 # A first win in 15 minutes, placed before week 1 of every track (sort_order 0).
+OLD_STARTER_DESCRIPTION = ("CareerFlow'da professional profilingizni to'ldiring: qisqa sarlavha, o'zingiz haqingizda 2-3 gap, "
+                           "kamida 3 ta ko'nikma va tillar. CV'ingizni ochiq qiling. Ish beruvchi sizni birinchi shu yerda ko'radi. "
+                           "15 daqiqalik ish, shu oynaning o'zida bajariladi.")
 STARTER = ("Start: professional profilingiz",
-           "CareerFlow'da professional profilingizni to'ldiring: qisqa sarlavha, o'zingiz haqingizda 2-3 gap, "
-           "kamida 3 ta ko'nikma va tillar. CV'ingizni ochiq qiling. Ish beruvchi sizni birinchi shu yerda ko'radi. "
-           "15 daqiqalik ish, shu oynaning o'zida bajariladi.",
+           "CareerFlow'da professional profilingizni to'ldiring: ism va familiya, sohangiz, o'zingiz haqingizda 1-2 gap, "
+           "ko'nikmalar va tillar. Ish beruvchi sizni birinchi shu yerda ko'radi. "
+           "5 daqiqalik ish, shu oynaning o'zida bajariladi.",
            "Hech narsa yuklash shart emas: profil to'lsa, tizim o'zi tekshiradi va ball beradi.", 5)
 OLD_STARTER_TITLE = "Start: professional profilingiz"
 
@@ -158,6 +161,9 @@ async def add_starters(session: AsyncSession) -> None:
     for task in (await session.execute(select(Task).where(Task.sort_order == 0, Task.kind != "profile",
                                                           Task.title == OLD_STARTER_TITLE))).scalars():
         task.kind, task.description, task.proof_hint = "profile", description, proof_hint
+    for task in (await session.execute(select(Task).where(Task.kind == "profile",
+                                                          Task.description == OLD_STARTER_DESCRIPTION))).scalars():
+        task.description = description
     have = set((await session.execute(select(Task.track_id).where(Task.sort_order == 0))).scalars())
     for track_id in (await session.execute(select(Track.id))).scalars():
         if track_id not in have:

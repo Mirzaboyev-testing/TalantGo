@@ -97,12 +97,19 @@ async def submit(session: AsyncSession, user: User, task_id: int, proof_url: str
     return await _reload(session, sub.id)
 
 
+def _full_name(name: str) -> bool:
+    words = [w for w in name.split() if len(w) >= 2]
+    return len(words) >= 2
+
+
+# Only what every student has: a name, a field, a few words about themselves, one skill, one language.
+# An open CV and links (GitHub, LinkedIn) stay optional.
 PROFILE_RULES = [
-    ("headline", "qisqa sarlavha (kamida 10 belgi)", lambda u: len(u.headline.strip()) >= 10),
-    ("bio", "o'zingiz haqingizda (kamida 60 belgi)", lambda u: len(u.bio.strip()) >= 60),
-    ("skills", "kamida 3 ta ko'nikma", lambda u: len(u.skills) >= 3),
+    ("full_name", "ism va familiya", lambda u: _full_name(u.full_name)),
+    ("headline", "soha yoki sarlavha (kamida 5 belgi)", lambda u: len(u.headline.strip()) >= 5),
+    ("bio", "o'zingiz haqingizda (kamida 30 belgi)", lambda u: len(u.bio.strip()) >= 30),
+    ("skills", "kamida 1 ta ko'nikma", lambda u: len(u.skills) >= 1),
     ("languages", "kamida 1 ta til", lambda u: len(u.languages) >= 1),
-    ("cv_public", "CV ochiq bo'lishi", lambda u: u.cv_public),
 ]
 
 

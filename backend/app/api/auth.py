@@ -23,8 +23,10 @@ async def _upsert(session: Session, telegram_id: int, full_name: str, username: 
         user = User(telegram_id=telegram_id, full_name=full_name, username=username, photo_url=photo_url)
         session.add(user)
     else:
-        # Telegram is the source of truth for name, username and photo: they change there
-        user.full_name, user.username, user.photo_url = full_name, username, photo_url
+        # Telegram is the source of truth for username and photo, and for the name until the person edits it
+        user.username, user.photo_url = username, photo_url
+        if not user.name_set_by_user:
+            user.full_name = full_name
     user.last_seen_at = datetime.now(UTC)
     await session.commit()
     return user

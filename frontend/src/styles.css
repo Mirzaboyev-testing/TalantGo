@@ -240,3 +240,9 @@ select:disabled, input:disabled { opacity: .7; }
 .segmented button { white-space: nowrap; flex: 1 0 auto; padding: 8px 10px; }
 .seg-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 5px; padding: 0 5px; border-radius: 9px; background: var(--brand); color: #fff; font-size: 11px; font-weight: 700; vertical-align: 1px; }
 @media (max-width: 400px) { .segmented button { font-size: 13px; padding: 8px 7px; } }
+
+/* ------------------------------------------------------------------ required fields that are still empty */
+input.invalid, textarea.invalid, select.invalid { border-color: var(--bad) !important; box-shadow: 0 0 0 3px rgba(220, 53, 69, .12); }
+.invalid-group { outline: 1.5px solid var(--bad); outline-offset: 4px; border-radius: 12px; }
+.field-error { color: var(--bad); font-size: 13px; margin-top: 4px; }
+.check-line { display: block; border: 0; background: none; padding: 2px 0; font: inherit; font-size: 14px; color: var(--hint); cursor: pointer; text-align: left; }

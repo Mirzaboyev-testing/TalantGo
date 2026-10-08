@@ -89,3 +89,15 @@ export function autoGrow(el: HTMLTextAreaElement): void {
   el.style.height = "auto";
   el.style.height = `${el.scrollHeight}px`;
 }
+
+/** Name and surname: at least two words of two or more letters. Mirrors the server's rule. */
+export const isFullName = (name: string) => name.split(/\s+/).filter((w) => w.length >= 2).length >= 2;
+
+/** Brings a form field into view and puts the cursor in it (used to lead the person to what is missing). */
+export function focusField(id: string): void {
+  const el = document.getElementById(id);
+  if (!el) return;
+  // an instant jump: smooth scrolling silently does nothing in some Telegram webviews
+  el.scrollIntoView({ block: "center" });
+  el.focus({ preventScroll: true });
+}
