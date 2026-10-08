@@ -23,7 +23,8 @@ from . import files, settings_store
 
 log = logging.getLogger("careerflow.ai")
 CONFIG_KEY = "ai_review"
-MODELS = ("gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite")
+MODELS = ("gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite")
+FALLBACK_MODEL = "gemini-3.5-flash"          # fast; used when the chosen model is overloaded
 API = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 _running: set[asyncio.Task] = set()
 _limit = asyncio.Semaphore(2)            # free-tier keys allow only a few requests a minute
@@ -42,7 +43,9 @@ class Verdict(BaseModel):
 
 
 class AiError(Exception):
-    pass
+    def __init__(self, text: str, retryable: bool = False):
+        super().__init__(text)
+        self.retryable = retryable
 
 
 async def get_config(session: AsyncSession) -> AiConfig:
@@ -77,19 +80,28 @@ async def generate(key: str, model: str, parts: list[dict], *, system: str = "",
         body["tools"] = tools
     elif json_mode:
         body["generationConfig"]["responseMimeType"] = "application/json"
-    for attempt in range(2):
+    # a busy or slow model falls back to a fast, widely available one instead of failing the student
+    models = list(dict.fromkeys([model, FALLBACK_MODEL]))
+    for i, name in enumerate(models):
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                resp = await client.post(API.format(model=model), json=body, headers={"x-goog-api-key": key})
-        except httpx.HTTPError as exc:
-            raise AiError(f"Gemini bilan aloqa bo'lmadi ({exc.__class__.__name__})") from exc
-        if resp.status_code in (429, 500, 503) and attempt == 0:
-            await asyncio.sleep(20)
-            continue
-        break
+            return await _post(key, name, body, timeout)
+        except AiError as exc:
+            if not exc.retryable or i == len(models) - 1:
+                raise
+            log.info("Gemini %s unavailable (%s), falling back to %s", name, exc, models[i + 1])
+    raise AssertionError("unreachable")
+
+
+async def _post(key: str, model: str, body: dict, timeout: float) -> str:
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(API.format(model=model), json=body, headers={"x-goog-api-key": key})
+    except httpx.HTTPError as exc:
+        raise AiError(f"Gemini bilan aloqa bo'lmadi ({exc.__class__.__name__})", retryable=True) from exc
     data = resp.json() if "json" in resp.headers.get("content-type", "") else {}
     if resp.status_code != 200:
-        raise AiError((data.get("error") or {}).get("message") or f"Gemini xatosi: HTTP {resp.status_code}")
+        raise AiError((data.get("error") or {}).get("message") or f"Gemini xatosi: HTTP {resp.status_code}",
+                      retryable=resp.status_code in (429, 500, 503, 504))
     try:
         content = data["candidates"][0]["content"]["parts"]
     except (KeyError, IndexError) as exc:

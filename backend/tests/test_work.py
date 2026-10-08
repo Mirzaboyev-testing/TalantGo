@@ -202,3 +202,26 @@ async def test_careerflow_ai_chat(client, make_user, monkeypatch):
     assert "Fayl tanlash" in seen["system"] and "Aziza" in seen["system"] and tasks[0]["title"] in seen["system"]
     assert (await client.post("/api/v1/assistant/chat", json={"messages": [{"role": "model", "text": "Salom"}]},
                               headers=h)).status_code == 422
+
+
+async def test_busy_model_falls_back(monkeypatch):
+    tried = []
+
+    async def fake_post(key, model, body, timeout):
+        tried.append(model)
+        if model == "gemini-3.8-flash":
+            raise ai_review.AiError("high demand", retryable=True)
+        return "OK"
+    monkeypatch.setattr(ai_review, "_post", fake_post)
+    assert await ai_review.generate("k", "gemini-3.8-flash", [{"text": "hi"}]) == "OK"
+    assert tried == ["gemini-3.8-flash", ai_review.FALLBACK_MODEL]
+
+    async def bad_key(key, model, body, timeout):
+        raise ai_review.AiError("API key not valid")
+    monkeypatch.setattr(ai_review, "_post", bad_key)
+    try:
+        await ai_review.generate("k", "gemini-3.8-flash", [{"text": "hi"}])
+    except ai_review.AiError as exc:
+        assert "not valid" in str(exc)
+    else:
+        raise AssertionError("a bad key must not be hidden by the fallback")

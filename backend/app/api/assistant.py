@@ -22,7 +22,8 @@ class ChatIn(BaseModel):
 async def _key_if_available(session: Session) -> tuple[str, str] | None:
     config = await ai_review.get_config(session)
     key = await settings_store.get_value(session, settings_store.GEMINI_KEY)
-    return (key, config.model) if key and config.assistant else None
+    # the chat always uses the fast model: students wait for it, unlike the background review
+    return (key, ai_review.FALLBACK_MODEL) if key and config.assistant else None
 
 
 @router.get("/assistant/status")
@@ -44,7 +45,7 @@ async def chat(body: ChatIn, user: CurrentUser, session: Session) -> dict:
     contents = [{"role": m.role, "parts": [{"text": m.text}]} for m in body.messages]
     try:
         reply = await ai_review.generate(key, model, [], contents=contents, system=system, json_mode=False,
-                                         temperature=0.5, timeout=60)
+                                         temperature=0.5, timeout=30)
     except ai_review.AiError as exc:
         raise HTTPException(502, f"CareerFlow.ai javob bera olmadi: {exc}") from exc
     return {"reply": reply.strip() or "Kechirasiz, javob tayyorlay olmadim. Savolni boshqacharoq yozib ko'ring."}

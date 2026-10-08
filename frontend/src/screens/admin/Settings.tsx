@@ -131,7 +131,7 @@ export function AiCard({ canEdit }: { canEdit: boolean }) {
       <label>Model</label>
       <input value={model} list="ai-models" disabled={!canEdit} onChange={(e) => setModel(e.target.value.trim())} />
       <datalist id="ai-models">{status.models.map((m) => <option key={m} value={m} />)}</datalist>
-      <div className="hint">{status.models[0]}: aniqroq; lite modellar arzonroq va tezroq.</div>
+      <div className="hint">Ishlarni tekshirish uchun. gemini-3.5-flash tez va barqaror (tavsiya etiladi); gemini-3.8-flash aniqroq, lekin sekin va ba'zan band bo'ladi. Tanlangan model band bo'lsa, avtomatik gemini-3.5-flash ishlatiladi. CareerFlow.ai chat doim tezkor gemini-3.5-flash'da ishlaydi.</div>
       <label className="row" style={{ gap: 8, marginTop: 12, cursor: canEdit ? "pointer" : "default" }}>
         <input type="checkbox" checked={enabled} disabled={!canEdit} style={{ width: "auto" }} onChange={(e) => setEnabled(e.target.checked)} />
         Ishlarni AI bilan tekshirish

@@ -69,7 +69,7 @@ export default function Assistant() {
             </div>
           </div>
         )}
-        {messages.map((m, i) => <div key={i} className={`ai-msg ${m.role === "user" ? "me" : "bot"}`}>{m.text}</div>)}
+        {messages.map((m, i) => <div key={i} className={`ai-msg ${m.role === "user" ? "me" : "bot"}`}>{m.role === "model" ? <Rich text={m.text} /> : m.text}</div>)}
         {busy && <div className="ai-msg bot typing"><span /><span /><span /></div>}
         {error && <div className="error" style={{ alignSelf: "stretch" }}>{error}</div>}
         <div ref={end} />
@@ -82,4 +82,10 @@ export default function Assistant() {
       </form>
     </div>
   );
+}
+
+/** The model sometimes marks words with **bold** despite being asked for plain text: show it as bold, never as stars. */
+function Rich({ text }: { text: string }) {
+  const clean = text.replace(/^#{1,6}\s*/gm, "").replace(/^\s*\*\s+/gm, "- ");
+  return <>{clean.split(/\*\*(.+?)\*\*/g).map((part, i) => (i % 2 ? <b key={i}>{part}</b> : part))}</>;
 }
