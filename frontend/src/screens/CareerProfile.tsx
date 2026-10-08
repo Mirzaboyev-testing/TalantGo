@@ -58,7 +58,7 @@ export default function CareerProfile({ me, onSaved }: { me: Me; onSaved: (m: Me
         <div className="row between">
           <b>Ish beruvchilar uchun profil</b>
           <span className={`badge ${me.verification === "verified" ? "peer_verified" : me.verification === "pending" ? "pending" : me.verification === "rejected" ? "rejected" : "todo"}`}>
-            {me.verification === "verified" ? "✓ " : ""}{VERIFICATION_LABEL[me.verification]}
+            {VERIFICATION_LABEL[me.verification]}
           </span>
         </div>
         <div className="progress" style={{ margin: "10px 0 6px" }}><div style={{ width: `${pct}%` }} /></div>
@@ -134,7 +134,7 @@ export default function CareerProfile({ me, onSaved }: { me: Me; onSaved: (m: Me
         <input value={f.city} maxLength={60} placeholder="Toshkent" onChange={set("city")} />
         <ErrorText error={error} />
         <div className="stack" style={{ marginTop: 12 }}>
-          <button className="btn" disabled={busy} onClick={save}>{saved ? "Saqlandi ✓" : "Saqlash"}</button>
+          <button className="btn" disabled={busy} onClick={save}>{saved ? "Saqlandi" : "Saqlash"}</button>
           {(me.verification === "none" || me.verification === "rejected") && (
             <button className="btn ok" disabled={busy} onClick={() => run(api.requestVerification)}>Talabalikni tasdiqlashga yuborish</button>
           )}
@@ -158,12 +158,12 @@ function AnonymousPreview({ me }: { me: Me }) {
       <div className="card" style={{ background: "var(--bg2)", marginBottom: 0 }}>
         <div className="row between">
           <b>Talaba T-{String(me.id).padStart(5, "0")}</b>
-          {me.verification === "verified" && <span className="badge peer_verified">✓ Tasdiqlangan</span>}
+          {me.verification === "verified" && <span className="badge peer_verified">Tasdiqlangan</span>}
         </div>
         <div className="hint">
           {[me.university_ref?.short_name, me.faculty, me.course && `${me.course}-kurs`].filter(Boolean).join(" · ") || "Universitet ko'rsatilmagan"}
         </div>
-        <div className="hint">{me.track?.icon} {me.track?.title} · {me.points} ball</div>
+        <div className="hint">{me.track?.title} · {me.points} ball</div>
         {me.skills.length > 0 && <div className="chips" style={{ marginTop: 6 }}>{me.skills.map((s) => <span key={s} className="chip">{s}</span>)}</div>}
       </div>
     </div>

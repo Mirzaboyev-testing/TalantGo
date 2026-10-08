@@ -99,3 +99,25 @@ def validate_init_data(init_data: str, bot_token: str, max_age: int, now: float 
     if not isinstance(user, dict) or "id" not in user:
         raise InitDataError("foydalanuvchi yo'q")
     return user
+
+
+def validate_login_widget(fields: dict, bot_token: str, max_age: int, now: float | None = None) -> dict:
+    """Verify data from the Telegram Login Widget used on the website.
+
+    https://core.telegram.org/widgets/login#checking-authorization
+    secret = SHA256(bot_token); hash = hex(HMAC_SHA256(secret, sorted "k=v" lines without `hash`))
+    """
+    data = {k: str(v) for k, v in fields.items() if v is not None}
+    received = data.pop("hash", "")
+    check_string = "\n".join(f"{k}={v}" for k, v in sorted(data.items()))
+    expected = hmac.new(hashlib.sha256(bot_token.encode()).digest(), check_string.encode(), hashlib.sha256).hexdigest()
+    if not received or not hmac.compare_digest(expected, received):
+        raise InitDataError("imzo noto'g'ri")
+    try:
+        auth_date = int(data["auth_date"])
+        int(data["id"])
+    except (KeyError, ValueError) as exc:
+        raise InitDataError("ma'lumot to'liq emas") from exc
+    if (now or time.time()) - auth_date > max_age:
+        raise InitDataError("kirish eskirgan, qayta urinib ko'ring")
+    return data

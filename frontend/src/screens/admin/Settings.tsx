@@ -36,7 +36,7 @@ export function RulesCard({ canEdit }: { canEdit: boolean }) {
       {field("review_points", "Bitta baho uchun ball (0–20)", "Tengdosh ishini yozma baholagan talabaga beriladi.")}
       {field("mentor_bonus_percent", "Mentor tasdig'i bonusi, % (0–200)", "Topshiriq ballidan foiz hisobida qo'shiladi.")}
       <ErrorText error={error} />
-      {canEdit && <button className="btn small" style={{ marginTop: 10 }} onClick={save}>{saved ? "Saqlandi ✓" : "Saqlash"}</button>}
+      {canEdit && <button className="btn small" style={{ marginTop: 10 }} onClick={save}>{saved ? "Saqlandi" : "Saqlash"}</button>}
     </div>
   );
 }

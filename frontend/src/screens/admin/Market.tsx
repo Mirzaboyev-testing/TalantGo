@@ -35,7 +35,7 @@ export function Companies() {
     <div className="panel">
       <div className="panel-head">
         <Tabs value={status} onChange={setStatus} items={[["pending", "Kutilmoqda"], ["approved", "Tasdiqlangan"], ["rejected", "Rad etilgan"], ["", "Hammasi"]]} />
-        <button className="btn small ghost" onClick={() => openLink("https://module.stat.uz/egrpo/")}>STIR reyestri ↗</button>
+        <button className="btn small ghost" onClick={() => openLink("https://module.stat.uz/egrpo/")}>STIR reyestri</button>
       </div>
       <p className="hint">STIR'ni davlat reyestrida (module.stat.uz/egrpo) va soliq holatini my.soliq.uz'da tekshiring. MLM va talabadan pul oladiganlarni rad eting.</p>
       <ErrorText error={error} />

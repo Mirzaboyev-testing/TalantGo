@@ -24,7 +24,7 @@ export default function ReviewScreen({ me, onChanged }: { me: Me; onChanged: () 
       </p>
       <ErrorText error={error} />
       {!items && !error && <div className="hint">Yuklanmoqda…</div>}
-      {items?.length === 0 && <div className="center hint">Hozircha tekshiriladigan ish yo'q 🎉</div>}
+      {items?.length === 0 && <div className="center hint">Hozircha tekshiriladigan ish yo'q</div>}
       {items?.map((it) => (
         <ReviewCard key={it.submission_id} item={it} onDone={async () => { await load(); onChanged(); }} />
       ))}
@@ -62,7 +62,7 @@ function ReviewCard({ item, onDone }: { item: QueueItem; onDone: () => void }) {
       <div className="hint" style={{ marginTop: 4 }}>Nimani tekshirish kerak: {item.proof_hint}</div>
       {item.note && <div style={{ marginTop: 6 }}>«{item.note}»</div>}
       <div style={{ margin: "10px 0" }}>
-        <button className="btn ghost" onClick={() => openLink(item.proof_url)}>Isbotni ochish ↗</button>
+        <button className="btn ghost" onClick={() => openLink(item.proof_url)}>Isbotni ochish</button>
       </div>
       <textarea value={comment} maxLength={1000} placeholder="Fikringiz: nima yaxshi, nima yetishmaydi (kamida 10 belgi)"
                 onChange={(e) => setComment(e.target.value)} />

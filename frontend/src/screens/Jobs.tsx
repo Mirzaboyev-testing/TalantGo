@@ -50,7 +50,7 @@ export default function JobsScreen({ me, onOpenProfile }: { me: Me; onOpenProfil
       {notReady && (
         <div className="notice" style={{ marginBottom: 10 }}>
           Ariza topshirish uchun talabaligingizni tasdiqlashga yuboring. Ish beruvchilar faqat haqiqiy talabalarni ko'radi.{" "}
-          <a href="#" onClick={(e) => { e.preventDefault(); onOpenProfile(); }}>Profilni to'ldirish →</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); onOpenProfile(); }}>Profilni to'ldirish</a>
         </div>
       )}
 
@@ -62,8 +62,8 @@ export default function JobsScreen({ me, onOpenProfile }: { me: Me; onOpenProfil
           </form>
           <div className="scroll-tabs" style={{ marginTop: 8 }}>
             {KINDS.map(([id, label]) => <button key={id} className={`chip ${kind === id ? "on" : ""}`} onClick={() => setKind(id)}>{label}</button>)}
-            <button className={`chip ${paidOnly ? "on" : ""}`} onClick={() => setPaidOnly(!paidOnly)}>💰 To'lanadigan</button>
-            <button className={`chip ${practiceOnly ? "on" : ""}`} onClick={() => setPracticeOnly(!practiceOnly)}>🎓 Malakaviy amaliyot</button>
+            <button className={`chip ${paidOnly ? "on" : ""}`} onClick={() => setPaidOnly(!paidOnly)}>To'lanadigan</button>
+            <button className={`chip ${practiceOnly ? "on" : ""}`} onClick={() => setPracticeOnly(!practiceOnly)}>Malakaviy amaliyot</button>
           </div>
           <ErrorText error={error} />
           {!jobs && !error && <div className="hint">Yuklanmoqda…</div>}
@@ -108,9 +108,9 @@ function JobCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
         <span className="chip">{JOB_KIND[job.kind]}</span>
         <span className="chip">{WORK_MODE[job.work_mode]}{job.city ? ` · ${job.city}` : ""}</span>
         <span className="chip">{salary(job)}</span>
-        {job.counts_as_practice && <span className="chip">🎓 Amaliyotga o'tadi</span>}
+        {job.counts_as_practice && <span className="chip">Amaliyotga o'tadi</span>}
       </div>
-      {job.applied && <div className="hint" style={{ marginTop: 6 }}>✓ Ariza topshirilgan: {APPLICATION_STATUS[job.application_status ?? "new"]}</div>}
+      {job.applied && <div className="hint" style={{ marginTop: 6 }}>Ariza topshirilgan: {APPLICATION_STATUS[job.application_status ?? "new"]}</div>}
     </div>
   );
 }
@@ -144,7 +144,7 @@ function JobSheet({ job, canApply, onClose, onApplied }: { job: Job; canApply: b
         {job.hours_per_week && <span className="chip">haftasiga {job.hours_per_week} soat</span>}
         {job.deadline && <span className="chip">muddat: {job.deadline}</span>}
       </div>
-      {job.counts_as_practice && <p className="notice">🎓 Kompaniya bu o'rinni universitetdagi malakaviy amaliyot sifatida rasmiylashtirishga tayyor.</p>}
+      {job.counts_as_practice && <p className="notice">Kompaniya bu o'rinni universitetdagi malakaviy amaliyot sifatida rasmiylashtirishga tayyor.</p>}
       {!job.is_paid && <p className="hint">Bu amaliyot to'lanmaydi. Mehnat kodeksiga ko'ra, bo'sh lavozimga muddatli shartnoma bilan qabul qilingan stajyorga haq to'lanadi.</p>}
       <div className="card">
         <b>Vazifalar</b>
@@ -160,7 +160,7 @@ function JobSheet({ job, canApply, onClose, onApplied }: { job: Job; canApply: b
         <div className="chips" style={{ marginBottom: 10 }}>{job.skills.map((s) => <span key={s} className="chip">{s}</span>)}</div>
       )}
       {job.applied ? (
-        <p className="notice">✓ Ariza topshirgansiz: {APPLICATION_STATUS[job.application_status ?? "new"]}</p>
+        <p className="notice">Ariza topshirgansiz: {APPLICATION_STATUS[job.application_status ?? "new"]}</p>
       ) : (
         <div className="card">
           <b>Ariza topshirish</b>
@@ -190,7 +190,7 @@ function ContactCard({ contact, onAnswered }: { contact: StudentContact; onAnswe
   }
   return (
     <div className="card" style={{ border: "2px solid var(--btn)" }}>
-      <b>💼 {contact.company} siz bilan bog'lanmoqchi</b>
+      <b>{contact.company} siz bilan bog'lanmoqchi</b>
       <div className="hint">{contact.industry}{contact.job_title ? ` · ${contact.job_title}` : ""}</div>
       <p style={{ whiteSpace: "pre-line" }}>{contact.message}</p>
       <p className="hint">Rozilik bersangiz, ismingiz, Telegram'ingiz va CV'ingiz shu kompaniyaga ochiladi.</p>

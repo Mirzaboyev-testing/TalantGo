@@ -59,3 +59,28 @@ async def test_login_endpoint_creates_user(client):
     me = await client.get("/api/v1/me", headers={"Authorization": f"Bearer {resp.json()['token']}"})
     assert me.json()["full_name"] == "Aziza Karimova"
     assert me.json()["username"] == "aziza_k"
+
+
+
+def widget_fields(user_id: int, auth_date: int, token: str = BOT_TOKEN) -> dict:
+    fields = {"id": user_id, "first_name": "Aziza", "username": "aziza_k", "auth_date": auth_date}
+    check = "\n".join(f"{k}={v}" for k, v in sorted(fields.items()))
+    fields["hash"] = hmac.new(hashlib.sha256(token.encode()).digest(), check.encode(), hashlib.sha256).hexdigest()
+    return fields
+
+
+async def test_website_login_with_the_telegram_widget(client):
+    from app.core.db import SessionLocal
+    from app.services import settings_store
+
+    async with SessionLocal() as session:
+        await settings_store.set_value(session, settings_store.BOT_TOKEN, BOT_TOKEN)
+    good = widget_fields(777, int(time.time()))
+    r = await client.post("/api/v1/auth/telegram-web", json=good)
+    assert r.status_code == 200, r.text
+    me = await client.get("/api/v1/me", headers={"Authorization": f"Bearer {r.json()['token']}"})
+    assert me.json()["username"] == "aziza_k"
+    # tampered, foreign or stale data is refused
+    assert (await client.post("/api/v1/auth/telegram-web", json={**good, "id": 778})).status_code == 401
+    assert (await client.post("/api/v1/auth/telegram-web", json=widget_fields(777, int(time.time()), "9:other-token-xxxxxxxxxxxxxxxxxxxxx"))).status_code == 401
+    assert (await client.post("/api/v1/auth/telegram-web", json=widget_fields(777, int(time.time()) - 200000))).status_code == 401

@@ -71,13 +71,13 @@ export default function PhoneField({ me, onChanged }: { me: Me; onChanged: (m: M
     <div>
       {me.phone ? (
         <div className="row between">
-          <span><b>{formatPhone(me.phone)}</b> {me.phone_verified ? <span className="badge peer_verified">✓ Telegram</span> : <span className="badge todo">qo'lda kiritilgan</span>}</span>
+          <span><b>{formatPhone(me.phone)}</b> {me.phone_verified ? <span className="badge peer_verified">Telegram orqali</span> : <span className="badge todo">qo'lda kiritilgan</span>}</span>
           <button className="btn small ghost" onClick={() => { onChanged({ ...me, phone: "" }); setManual(!canShareContact); }}>O'zgartirish</button>
         </div>
       ) : (
         <>
           {canShareContact && !manual && (
-            <button className="btn" disabled={busy} onClick={viaTelegram}>{busy ? "Kutilmoqda…" : "📱 Telegram raqamimni ulashish"}</button>
+            <button className="btn" disabled={busy} onClick={viaTelegram}>{busy ? "Kutilmoqda…" : "Telegram raqamimni ulashish"}</button>
           )}
           {manual && (
             <div className="row">

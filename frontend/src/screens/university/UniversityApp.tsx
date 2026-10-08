@@ -2,30 +2,26 @@ import { useCallback, useEffect, useState } from "react";
 import { api, APPLICATION_STATUS, VERIFICATION_LABEL, type Me, type UniversityDashboard, type UniversityStudent } from "../../api";
 import { ErrorText, message } from "../../ui";
 import Groups from "../Groups";
+import Shell, { type ShellTab } from "../Shell";
 
 type Tab = "dashboard" | "verify" | "students" | "groups";
-const TABS: { id: Tab; icon: string; label: string }[] = [
-  { id: "dashboard", icon: "📊", label: "Ko'rsatkichlar" },
-  { id: "verify", icon: "✅", label: "Tasdiqlash" },
-  { id: "students", icon: "🎓", label: "Talabalar" },
-  { id: "groups", icon: "💬", label: "Guruhlar" },
+const TABS: ShellTab<Tab>[] = [
+  { id: "dashboard", icon: "chart", label: "Ko'rsatkichlar" },
+  { id: "verify", icon: "verified", label: "Tasdiqlash" },
+  { id: "students", icon: "school", label: "Talabalar" },
+  { id: "groups", icon: "chat", label: "Guruhlar" },
 ];
 
-export default function UniversityApp({ me }: { me: Me }) {
+export default function UniversityApp({ me, onLogout }: { me: Me; onLogout: () => void }) {
   const [tab, setTab] = useState<Tab>("dashboard");
   return (
-    <>
-      <div className="app">
-        <div className="hint" style={{ marginBottom: 4 }}>🏛️ {me.staff_university?.name} · karyera markazi</div>
+    <Shell tabs={TABS} active={tab} onChange={setTab} onLogout={onLogout}
+           user={{ name: me.full_name, photo: me.photo_url, subtitle: `${me.staff_university?.short_name ?? ""} karyera markazi` }}>
         {tab === "dashboard" && <Dashboard />}
         {tab === "verify" && <StudentList mode="verify" />}
         {tab === "students" && <StudentList mode="all" />}
         {tab === "groups" && <Groups />}
-      </div>
-      <nav className="tabbar"><div className="tabbar-inner">
-        {TABS.map((t) => <button key={t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}><span>{t.icon}</span>{t.label}</button>)}
-      </div></nav>
-    </>
+    </Shell>
   );
 }
 
@@ -117,7 +113,7 @@ function StudentList({ mode }: { mode: "verify" | "all" }) {
       </form>
       <ErrorText error={error} />
       {!rows && !error && <div className="hint" style={{ marginTop: 8 }}>Yuklanmoqda…</div>}
-      {rows?.length === 0 && <div className="center hint">{mode === "verify" ? "Navbat bo'sh 🎉" : "Hali talaba yo'q"}</div>}
+      {rows?.length === 0 && <div className="center hint">{mode === "verify" ? "Navbat bo'sh" : "Hali talaba yo'q"}</div>}
       {rows?.map((s) => <StudentRow key={s.id} s={s} onDone={load} />)}
     </div>
   );

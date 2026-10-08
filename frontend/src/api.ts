@@ -142,6 +142,7 @@ async function download(path: string, filename: string): Promise<void> {
 
 export const api = {
   mode: () => request<{ dev: boolean }>("GET", "/auth/mode"),
+  telegramWebLogin: (user: object) => request<{ token: string }>("POST", "/auth/telegram-web", user),
   telegramLogin: (init_data: string) => request<{ token: string }>("POST", "/auth/telegram", { init_data }),
   devLogin: (telegram_id: number, full_name: string) =>
     request<{ token: string }>("POST", "/auth/dev", { telegram_id, full_name }),

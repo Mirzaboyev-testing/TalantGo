@@ -13,6 +13,9 @@ interface WebApp {
   requestContact?(callback: (shared: boolean) => void): void;
   isVersionAtLeast?(version: string): boolean;
   disableVerticalSwipes?(): void;
+  setHeaderColor?(color: string): void;
+  setBackgroundColor?(color: string): void;
+  setBottomBarColor?(color: string): void;
   HapticFeedback?: {
     impactOccurred(style: Haptic): void;
     notificationOccurred(type: "success" | "error" | "warning"): void;
@@ -30,13 +33,20 @@ const app: WebApp | undefined = window.Telegram?.WebApp;
 
 export const insideTelegram = Boolean(app?.initData);
 export const initData = app?.initData ?? "";
-export const BOT_URL = "https://t.me/create_carieer_bot";
+export const BOT_USERNAME = "create_carieer_bot";
+export const BOT_URL = `https://t.me/${BOT_USERNAME}`;
 
 export function boot(): void {
   app?.ready();
   app?.expand();
   // Bot API 7.7+: a downward swipe in a long chat or list should scroll, not close the app
   if (app?.isVersionAtLeast?.("7.7")) app.disableVerticalSwipes?.();
+  // the app has its own light look, whatever the Telegram theme is
+  if (app?.isVersionAtLeast?.("6.1")) {
+    app.setHeaderColor?.("#ffffff");
+    app.setBackgroundColor?.("#f4f8f5");
+  }
+  if (app?.isVersionAtLeast?.("7.10")) app.setBottomBarColor?.("#ffffff");
 }
 
 export function openLink(url: string): void {

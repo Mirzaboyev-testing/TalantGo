@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, courseLabel, formatPhone, type Me, type Peer } from "../api";
 import { openLink } from "../tg";
 import { Avatar, ErrorText, message } from "../ui";
+import { Icon } from "../icons";
 
 export default function PeersScreen({ me }: { me: Me }) {
   const [goal, setGoal] = useState("");
@@ -42,19 +43,19 @@ export default function PeersScreen({ me }: { me: Me }) {
             <div className="grow">
               <b>{p.full_name}</b>
               <div className="hint">
-                {[p.track_title && `${p.track_icon} ${p.track_title.split(":")[0]}`, courseLabel(p.course), p.university].filter(Boolean).join(" · ")}
+                {[p.track_title?.split(":")[0], courseLabel(p.course), p.university].filter(Boolean).join(" · ")}
               </div>
-              {p.faculty && <div className="hint">🎓 {p.faculty}</div>}
+              {p.faculty && <div className="hint">{p.faculty}</div>}
             </div>
             {p.username
               ? <button className="btn small" onClick={() => openLink(`https://t.me/${p.username}`)}>Yozish</button>
               : <span className="hint" title="Telegram'da username o'rnatilmagan">username yo'q</span>}
           </div>
           {p.phone && (
-            <div style={{ marginTop: 8 }}>📞 <a href={`tel:${p.phone}`}>{formatPhone(p.phone)}</a></div>
+            <div className="row" style={{ marginTop: 8 }}><Icon name="phone" size={16} /><a href={`tel:${p.phone}`}>{formatPhone(p.phone)}</a></div>
           )}
           <div className="hint" style={{ marginTop: 8 }}>
-            {p.points} ball · {p.verified_tasks} tasdiqlangan ish{p.streak > 0 ? ` · 🔥 ${p.streak}` : ""}
+            {p.points} ball · {p.verified_tasks} tasdiqlangan ish{p.streak > 0 ? ` · ${p.streak} hafta ketma-ket` : ""}
           </div>
           {p.goals.length > 0 && (
             <div className="chips" style={{ marginTop: 6 }}>{p.goals.map((g) => <span key={g} className="chip">{g}</span>)}</div>

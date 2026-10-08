@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, setAdminUnauthorizedHandler } from "../../api";
 import "./admin.css";
+import { Icon, type IconName } from "../../icons";
 import { Accounts, MyAccount } from "./Accounts";
 import Announcements from "./Announcements";
 import AuthScreen from "./AuthScreen";
@@ -18,32 +19,32 @@ import { clearToken, loadToken, saveToken } from "./session";
 export interface AdminCtx { isOwner: boolean; name: string }
 type Me = { id: number; name: string; email: string; role: string; is_owner: boolean };
 
-type Page = { id: string; label: string; icon: string; ownerOnly?: boolean };
+type Page = { id: string; label: string; icon: IconName; ownerOnly?: boolean };
 const MENU: { group: string; pages: Page[] }[] = [
-  { group: "", pages: [{ id: "dashboard", label: "Bosh sahifa", icon: "📊" }] },
-  { group: "Moderatsiya", pages: [{ id: "queue", label: "Tasdiqlash navbati", icon: "⏳" }] },
+  { group: "", pages: [{ id: "dashboard", label: "Bosh sahifa", icon: "chart" }] },
+  { group: "Moderatsiya", pages: [{ id: "queue", label: "Tasdiqlash navbati", icon: "inbox" }] },
   { group: "Talabalar", pages: [
-    { id: "users", label: "Talabalar va mentorlar", icon: "🎓" },
-    { id: "submissions", label: "Topshirilgan ishlar", icon: "📝" },
-    { id: "tracks", label: "Yo'nalishlar va topshiriqlar", icon: "🧭" },
+    { id: "users", label: "Talabalar va mentorlar", icon: "school" },
+    { id: "submissions", label: "Topshirilgan ishlar", icon: "check" },
+    { id: "tracks", label: "Yo'nalishlar va topshiriqlar", icon: "path" },
   ] },
   { group: "Ish bozori", pages: [
-    { id: "companies", label: "Kompaniyalar", icon: "🏢" },
-    { id: "jobs", label: "Vakansiyalar", icon: "💼" },
-    { id: "applications", label: "Arizalar", icon: "📨" },
+    { id: "companies", label: "Kompaniyalar", icon: "building" },
+    { id: "jobs", label: "Vakansiyalar", icon: "briefcase" },
+    { id: "applications", label: "Arizalar", icon: "inbox" },
   ] },
-  { group: "Ta'lim", pages: [{ id: "universities", label: "Universitetlar", icon: "🏛️" }] },
+  { group: "Ta'lim", pages: [{ id: "universities", label: "Universitetlar", icon: "building" }] },
   { group: "Aloqa", pages: [
-    { id: "groups", label: "Guruhlar", icon: "💬" },
-    { id: "announcements", label: "E'lonlar (bot)", icon: "📣" },
-    { id: "bot", label: "Telegram bot", icon: "🤖", ownerOnly: true },
+    { id: "groups", label: "Guruhlar", icon: "chat" },
+    { id: "announcements", label: "E'lonlar (bot)", icon: "send" },
+    { id: "bot", label: "Telegram bot", icon: "chat", ownerOnly: true },
   ] },
   { group: "Tizim", pages: [
-    { id: "reports", label: "Hisobotlar", icon: "📁" },
-    { id: "settings", label: "Sozlamalar", icon: "⚙️" },
-    { id: "accounts", label: "Adminlar", icon: "🛡️", ownerOnly: true },
-    { id: "audit", label: "Audit jurnali", icon: "🧾" },
-    { id: "me", label: "Profilim", icon: "👤" },
+    { id: "reports", label: "Hisobotlar", icon: "copy" },
+    { id: "settings", label: "Sozlamalar", icon: "lock" },
+    { id: "accounts", label: "Adminlar", icon: "verified", ownerOnly: true },
+    { id: "audit", label: "Audit jurnali", icon: "copy" },
+    { id: "me", label: "Profilim", icon: "user" },
   ] },
 ];
 const ALL = MENU.flatMap((g) => g.pages);
@@ -99,7 +100,7 @@ export default function AdminSite() {
                 {g.group && <div className="admin-group">{g.group}</div>}
                 {pages.map((p) => (
                   <button key={p.id} className={`admin-link ${current.id === p.id ? "on" : ""}`} onClick={() => go(p.id)}>
-                    <span className="ico">{p.icon}</span>{p.label}
+                    <Icon name={p.icon} size={18} />{p.label}
                     {p.id === "queue" && queue > 0 && <span className="dot">{queue}</span>}
                   </button>
                 ))}
@@ -109,7 +110,7 @@ export default function AdminSite() {
         </aside>
         <main className="admin-main">
           <header className="admin-top">
-            <button className="admin-burger" aria-label="Menyu" onClick={() => setMenuOpen(true)}>☰</button>
+            <button className="admin-burger" aria-label="Menyu" onClick={() => setMenuOpen(true)}><Icon name="menu" size={18} /></button>
             <h1>{current.label}</h1>
             <div className="who">
               <b>{me.name}</b> · {me.is_owner ? "Ega" : "Admin"}

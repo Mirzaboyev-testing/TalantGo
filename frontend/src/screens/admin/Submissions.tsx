@@ -74,7 +74,7 @@ function SubmissionCard({ item, onDeleted }: { item: AdminSubmission; onDeleted:
         </div>
       ))}
       <div className="row wrap" style={{ marginTop: 8 }}>
-        <button className="btn small ghost" onClick={() => openLink(item.proof_url)}>Isbotni ochish ↗</button>
+        <button className="btn small ghost" onClick={() => openLink(item.proof_url)}>Isbotni ochish</button>
         <button className="btn small ghost" onClick={() => setDeleting(!deleting)}>O'chirish</button>
       </div>
       {deleting && (

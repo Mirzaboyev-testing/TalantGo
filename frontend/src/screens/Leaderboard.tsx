@@ -8,7 +8,6 @@ const SCOPES = [
   { id: "all", label: "Hammasi" },
 ] as const;
 type Scope = (typeof SCOPES)[number]["id"];
-const MEDAL: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" };
 
 export default function LeaderboardScreen() {
   const [scope, setScope] = useState<Scope>("university");
@@ -33,8 +32,8 @@ export default function LeaderboardScreen() {
           <p className="hint" style={{ marginTop: 0 }}>Sizning o'rningiz: #{data.my_rank}. Ball faqat tasdiqlangan ishlar va yozilgan baholar uchun beriladi.</p>
           {data.rows.map((r) => (
             <div key={r.id} className={`lb-row ${r.is_me ? "me" : ""}`}>
-              <div className="lb-rank">{MEDAL[r.rank] ?? r.rank}</div>
-              <div className="grow">{r.track_icon} {r.full_name}{r.is_me ? " (siz)" : ""}<div className="hint">{[r.university, courseLabel(r.course)].filter(Boolean).join(" · ")}</div></div>
+              <div className={`lb-rank ${r.rank <= 3 ? "top" : ""}`}>{r.rank}</div>
+              <div className="grow">{r.full_name}{r.is_me ? " (siz)" : ""}<div className="hint">{[r.university, courseLabel(r.course)].filter(Boolean).join(" · ")}</div></div>
               <b>{r.points}</b>
             </div>
           ))}

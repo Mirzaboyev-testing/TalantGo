@@ -51,7 +51,7 @@ export default function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
         <div className="admin-brand" style={{ justifyContent: "center" }}><i>C</i>CareerFlow admin</div>
         {pending ? (
           <div className="panel">
-            <h3 style={{ marginTop: 0 }}>So'rov yuborildi ⏳</h3>
+            <h3 style={{ marginTop: 0 }}>So'rov yuborildi</h3>
             <p>Ilova egasi hisobingizni tasdiqlagach, shu email va parol bilan kira olasiz.</p>
             <button className="btn ghost" onClick={() => { setPending(false); setMode("login"); }}>Kirish sahifasiga qaytish</button>
           </div>

@@ -1,13 +1,13 @@
-/* Admin website: a desktop dashboard (sidebar + content), independent of the Telegram theme. */
+/* Admin website: a desktop dashboard (sidebar + content) in the same light green-and-white look as the app. */
 .admin-site {
   --side-bg: #ffffff;
   --side-ink: #2b2f36;
   --side-muted: #7a808a;
-  --side-active: #eaf1fd;
-  --side-active-ink: #1f5fc9;
-  --page-bg: #f4f5f7;
+  --side-active: #eaf7ef;
+  --side-active-ink: #15803d;
+  --page-bg: #f4f8f5;
   --panel: #ffffff;
-  --border: #e4e7ec;
+  --border: #e1ebe4;
   --series-1: #2a78d6;
   --series-2: #eb6834;
   --series-3: #1baf7a;
@@ -16,52 +16,27 @@
   --bg2: var(--page-bg);
   --text: #16181d;
   --hint: #6b717c;
-  --btn: #2f6fde;
+  --btn: #16a34a;
   --btn-text: #fff;
-  --link: #2f6fde;
+  --link: #15803d;
   color-scheme: light;
   min-height: 100vh;
   background: var(--page-bg);
   color: var(--text);
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .admin-site {
-    --side-bg: #15171b;
-    --side-ink: #e3e6ea;
-    --side-muted: #8d939c;
-    --side-active: #1e2a40;
-    --side-active-ink: #8ab4ff;
-    --page-bg: #0f1113;
-    --panel: #181a1f;
-    --border: #2a2e35;
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --series-3: #199e70;
-    --grid: #262a31;
-    --text: #eceef1;
-    --hint: #8d939c;
-    --btn: #3b7cf0;
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] .admin-site {
-  --side-bg: #15171b; --side-ink: #e3e6ea; --side-muted: #8d939c; --side-active: #1e2a40; --side-active-ink: #8ab4ff;
-  --page-bg: #0f1113; --panel: #181a1f; --border: #2a2e35; --series-1: #3987e5; --series-2: #d95926;
-  --series-3: #199e70; --grid: #262a31; --text: #eceef1; --hint: #8d939c; --btn: #3b7cf0; color-scheme: dark;
-}
-
 .admin-site .card { border: 1px solid var(--border); border-radius: 12px; }
 .admin-shell { display: grid; grid-template-columns: 248px 1fr; min-height: 100vh; }
 
 /* sidebar */
 .admin-side { background: var(--side-bg); border-right: 1px solid var(--border); padding: 18px 12px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
 .admin-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; padding: 4px 10px 18px; color: var(--side-ink); }
-.admin-brand i { width: 32px; height: 32px; border-radius: 9px; background: #ffd166; color: #0c1634; display: grid; place-items: center; font-style: normal; font-weight: 900; }
+.admin-brand i { width: 32px; height: 32px; border-radius: 9px; background: #16a34a; color: #fff; display: grid; place-items: center; font-style: normal; font-weight: 900; }
 .admin-group { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--side-muted); padding: 14px 10px 6px; }
 .admin-link { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; color: var(--side-ink); padding: 9px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; text-align: left; }
 .admin-link:hover { background: var(--page-bg); }
 .admin-link.on { background: var(--side-active); color: var(--side-active-ink); font-weight: 600; }
-.admin-link span.ico { width: 20px; text-align: center; }
+.admin-link svg { color: var(--side-muted); }
+.admin-link.on svg { color: var(--side-active-ink); }
 .admin-link .dot { margin-left: auto; }
 
 /* top bar + content */

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, setUserToken, type Me } from "./api";
-import { BOT_URL, initData, insideTelegram } from "./tg";
+import { initData, insideTelegram } from "./tg";
 import { message } from "./ui";
 import Onboarding from "./screens/Onboarding";
 import PathScreen from "./screens/Path";
@@ -13,20 +13,20 @@ import Welcome, { PendingScreen } from "./screens/Welcome";
 import EmployerApp from "./screens/employer/EmployerApp";
 import UniversityApp from "./screens/university/UniversityApp";
 import Groups from "./screens/Groups";
+import Shell, { type ShellTab } from "./screens/Shell";
+import WebLogin from "./screens/WebLogin";
 
 // A group invite (t.me/<bot>?start=g<code>) opens the app with ?join=<code>.
 const joinCode = new URLSearchParams(window.location.search).get("join");
 
-type Tab = "path" | "jobs" | "review" | "community" | "profile";
-const TABS: { id: Tab; icon: string; label: string }[] = [
-  { id: "path", icon: "🧭", label: "Yo'l" },
-  { id: "jobs", icon: "💼", label: "Vakansiyalar" },
-  { id: "review", icon: "✅", label: "Tekshirish" },
-  { id: "community", icon: "🤝", label: "Hamjamiyat" },
-  { id: "profile", icon: "👤", label: "Profil" },
-];
+// On the website (outside Telegram) the session survives a page reload.
+const TOKEN_KEY = "cf_user_token";
+const storeToken = (t: string) => { try { localStorage.setItem(TOKEN_KEY, t); } catch { /* storage blocked */ } };
+const storedToken = () => { try { return localStorage.getItem(TOKEN_KEY) ?? ""; } catch { return ""; } };
+const forgetToken = () => { try { localStorage.removeItem(TOKEN_KEY); } catch { /* storage blocked */ } };
 
-type AuthState = { kind: "loading" } | { kind: "outside" } | { kind: "dev" } | { kind: "error"; text: string } | { kind: "ok" };
+type Tab = "path" | "jobs" | "review" | "community" | "profile";
+type AuthState = { kind: "loading" } | { kind: "login"; dev: boolean } | { kind: "error"; text: string } | { kind: "ok" };
 
 export default function App() {
   const [auth, setAuth] = useState<AuthState>({ kind: "loading" });
@@ -37,12 +37,17 @@ export default function App() {
   const [chosenStudent, setChosenStudent] = useState(false);
   const [communityView, setCommunityView] = useState<"groups" | "peers" | "top">("groups");
   const refreshUnread = useCallback(() => api.groups.unread().then((r) => setUnread(r.unread), () => {}), []);
-
   const refreshMe = useCallback(async () => setMe(await api.me()), []);
+
+  const showLogin = useCallback(() => {
+    api.mode().then((m) => setAuth({ kind: "login", dev: m.dev }), () => setAuth({ kind: "login", dev: false }));
+  }, []);
 
   const signIn = useCallback(async (getToken: () => Promise<{ token: string }>) => {
     try {
-      setUserToken((await getToken()).token);
+      const { token } = await getToken();
+      setUserToken(token);
+      if (!insideTelegram) storeToken(token);
       await refreshMe();
       setAuth({ kind: "ok" });
     } catch (e) {
@@ -50,19 +55,25 @@ export default function App() {
     }
   }, [refreshMe]);
 
+  const logout = useCallback(() => {
+    forgetToken();
+    setUserToken("");
+    setMe(null);
+    showLogin();
+  }, [showLogin]);
+
   useEffect(() => {
     if (insideTelegram) {
       void signIn(() => api.telegramLogin(initData));
       return;
     }
-    // Outside Telegram: the dev sign-in exists only when the server runs with APP_ENV=dev
-    api.mode().then(
-      (m) => setAuth({ kind: m.dev ? "dev" : "outside" }),
-      (e) => setAuth({ kind: "error", text: message(e) }),
-    );
-  }, [signIn]);
+    const saved = storedToken();
+    if (!saved) return showLogin();
+    setUserToken(saved);
+    refreshMe().then(() => setAuth({ kind: "ok" }), () => { forgetToken(); showLogin(); });
+  }, [signIn, refreshMe, showLogin]);
 
-  // unread group messages on the Hamjamiyat tab, refreshed every 30 seconds
+  // unread group messages on the community tab, refreshed every 30 seconds
   useEffect(() => {
     if (auth.kind !== "ok") return;
     void refreshUnread();
@@ -71,30 +82,30 @@ export default function App() {
   }, [auth.kind, refreshUnread]);
 
   if (auth.kind === "loading") return <div className="center hint">Yuklanmoqda…</div>;
-  if (auth.kind === "outside") {
+  if (auth.kind === "login") {
+    return <WebLogin dev={auth.dev} onTelegram={(u) => signIn(() => api.telegramWebLogin(u))}
+                     onDev={(id, name) => signIn(() => api.devLogin(id, name))} />;
+  }
+  if (auth.kind === "error") {
     return (
-      <div className="center">
-        <div className="stack">
-          <h1>CareerFlow</h1>
-          <p className="hint">Ilova Telegram ichida ishlaydi.</p>
-          <a className="btn" href={BOT_URL}>Telegram'da ochish</a>
-        </div>
-      </div>
+      <div className="center"><div className="stack" style={{ maxWidth: 360 }}>
+        <h1>Kirib bo'lmadi</h1>
+        <p className="error">{auth.text}</p>
+        <button className="btn ghost" onClick={() => (insideTelegram ? window.location.reload() : logout())}>Qayta urinish</button>
+      </div></div>
     );
   }
-  if (auth.kind === "error") return <div className="center"><div><h1>Kirib bo'lmadi</h1><p className="error">{auth.text}</p></div></div>;
-  if (auth.kind === "dev") return <DevLogin onLogin={(id, name) => signIn(() => api.devLogin(id, name))} />;
   if (!me) return null;
 
   // Employers and university staff get their own apps once an admin has checked them.
   if (me.account_type === "employer") {
     return me.company?.status === "approved"
-      ? <EmployerApp me={me} onChanged={setMe} />
+      ? <EmployerApp me={me} onChanged={setMe} onLogout={logout} />
       : <div className="app"><PendingScreen me={me} onChanged={setMe} /></div>;
   }
   if (me.account_type === "university") {
     return me.staff_status === "approved"
-      ? <UniversityApp me={me} />
+      ? <UniversityApp me={me} onLogout={logout} />
       : <div className="app"><PendingScreen me={me} onChanged={setMe} /></div>;
   }
   const partnerRole = new URLSearchParams(window.location.search).get("role");
@@ -113,56 +124,34 @@ export default function App() {
     );
   }
 
+  const tabs: ShellTab<Tab>[] = [
+    { id: "path", icon: "path", label: "Yo'l" },
+    { id: "jobs", icon: "briefcase", label: "Vakansiyalar" },
+    { id: "review", icon: "check", label: "Tekshirish" },
+    { id: "community", icon: "users", label: "Hamjamiyat", badge: unread },
+    { id: "profile", icon: "user", label: "Profil" },
+  ];
+  const subtitle = me.role === "student" ? me.headline || me.track?.title.split(":")[0] : "Mentor";
 
   return (
-    <>
-      <div className="app">
-        {tab === "path" && <PathScreen me={me} onChanged={refreshMe} onChangeTrack={() => setChangingTrack(true)} />}
-        {tab === "review" && <ReviewScreen me={me} onChanged={refreshMe} />}
-        {tab === "jobs" && <JobsScreen me={me} onOpenProfile={() => setTab("profile")} />}
-        {tab === "community" && (
-          <>
-            <div className="segmented" style={{ marginTop: 4 }}>
-              <button className={communityView === "groups" ? "on" : ""} onClick={() => setCommunityView("groups")}>Guruhlar</button>
-              <button className={communityView === "peers" ? "on" : ""} onClick={() => setCommunityView("peers")}>Tengdoshlar</button>
-              <button className={communityView === "top" ? "on" : ""} onClick={() => setCommunityView("top")}>Reyting</button>
-            </div>
-            {communityView === "groups" && <Groups joinCode={joinCode} onUnreadChange={refreshUnread} />}
-            {communityView === "peers" && <PeersScreen me={me} />}
-            {communityView === "top" && <LeaderboardScreen />}
-          </>
-        )}
-        {tab === "profile" && <ProfileScreen me={me} onSaved={setMe} onChangeTrack={() => setChangingTrack(true)} />}
-      </div>
-      <nav className="tabbar">
-        <div className="tabbar-inner">
-          {TABS.map((t) => (
-            <button key={t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}>
-              <span>{t.icon}</span>{t.label}{t.id === "community" && unread > 0 && <span className="dot">{unread}</span>}
-            </button>
-          ))}
-        </div>
-      </nav>
-    </>
-  );
-}
-
-function DevLogin({ onLogin }: { onLogin: (id: number, name: string) => void }) {
-  const [name, setName] = useState("Aziza Karimova");
-  const [id, setId] = useState("1001");
-  return (
-    <div className="app">
-      <h1>Sinov rejimi</h1>
-      <p className="notice">Bu oyna faqat kompyuterda sinash uchun. Telegram ichida kirish avtomatik bo'ladi.</p>
-      <div className="card">
-        <label>Ism</label>
-        <input value={name} onChange={(e) => setName(e.target.value)} />
-        <label>Sinov ID (har xil odam uchun har xil raqam)</label>
-        <input value={id} inputMode="numeric" onChange={(e) => setId(e.target.value.replace(/\D/g, ""))} />
-        <div style={{ marginTop: 12 }}>
-          <button className="btn" disabled={!name.trim() || !id} onClick={() => onLogin(Number(id), name.trim())}>Kirish</button>
-        </div>
-      </div>
-    </div>
+    <Shell tabs={tabs} active={tab} onChange={setTab} onLogout={logout}
+           user={{ name: me.full_name, photo: me.photo_url, subtitle: subtitle ?? undefined }}>
+      {tab === "path" && <PathScreen me={me} onChanged={refreshMe} onChangeTrack={() => setChangingTrack(true)} />}
+      {tab === "review" && <ReviewScreen me={me} onChanged={refreshMe} />}
+      {tab === "jobs" && <JobsScreen me={me} onOpenProfile={() => setTab("profile")} />}
+      {tab === "community" && (
+        <>
+          <div className="segmented">
+            <button className={communityView === "groups" ? "on" : ""} onClick={() => setCommunityView("groups")}>Guruhlar</button>
+            <button className={communityView === "peers" ? "on" : ""} onClick={() => setCommunityView("peers")}>Tengdoshlar</button>
+            <button className={communityView === "top" ? "on" : ""} onClick={() => setCommunityView("top")}>Reyting</button>
+          </div>
+          {communityView === "groups" && <Groups joinCode={joinCode} onUnreadChange={refreshUnread} />}
+          {communityView === "peers" && <PeersScreen me={me} />}
+          {communityView === "top" && <LeaderboardScreen />}
+        </>
+      )}
+      {tab === "profile" && <ProfileScreen me={me} onSaved={setMe} onChangeTrack={() => setChangingTrack(true)} />}
+    </Shell>
   );
 }

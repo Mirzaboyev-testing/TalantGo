@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type Me, type University } from "../api";
 import { ErrorText, message } from "../ui";
 import { Consent } from "./Consent";
+import { Icon } from "../icons";
 import CompanyForm from "./employer/CompanyForm";
 
 type Choice = "student" | "employer" | "university" | null;
@@ -15,7 +16,7 @@ export default function Welcome({ me, initial, onStudent, onChanged }: {
   if (choice === "employer") {
     return (
       <div>
-        <button className="btn small ghost" onClick={() => setChoice(null)}>← Orqaga</button>
+        <button className="btn small ghost" onClick={() => setChoice(null)}>Orqaga</button>
         <h1>Kompaniyani ro'yxatdan o'tkazish</h1>
         <p className="hint">Kompaniya STIR orqali tekshiriladi. Tasdiqlangach vakansiya joylaysiz va talabalarni qidirasiz. Talabalar uchun bepul, kompaniyalar uchun asosiy imkoniyatlar ham hozircha bepul.</p>
         <CompanyForm submitLabel="Yuborish" onSubmit={async (c) => onChanged(await api.registerCompany(c))} requireConsent />
@@ -26,16 +27,16 @@ export default function Welcome({ me, initial, onStudent, onChanged }: {
 
   return (
     <div>
-      <h1>Salom, {me.full_name.split(" ")[0]}! 👋</h1>
+      <h1>Salom, {me.full_name.split(" ")[0]}!</h1>
       <p className="hint">CareerFlow: talabalar tasdiqlangan ko'nikmalar bilan amaliyot va birinchi ishni topadigan joy. Siz kimsiz?</p>
       <div className="card tap" onClick={onStudent}>
-        <div className="row"><span style={{ fontSize: 28 }}>🎓</span><div><b>Talabaman</b><div className="hint">Yo'l tanlayman, portfolio yig'aman, amaliyot va ish topaman</div></div></div>
+        <div className="row"><span className="avatar"><Icon name="school" /></span><div><b>Talabaman</b><div className="hint">Yo'l tanlayman, portfolio yig'aman, amaliyot va ish topaman</div></div></div>
       </div>
       <div className="card tap" onClick={() => setChoice("employer")}>
-        <div className="row"><span style={{ fontSize: 28 }}>💼</span><div><b>Ish beruvchiman (HR)</b><div className="hint">Stajyor va yosh mutaxassislarni qidiraman</div></div></div>
+        <div className="row"><span className="avatar"><Icon name="briefcase" /></span><div><b>Ish beruvchiman (HR)</b><div className="hint">Stajyor va yosh mutaxassislarni qidiraman</div></div></div>
       </div>
       <div className="card tap" onClick={() => setChoice("university")}>
-        <div className="row"><span style={{ fontSize: 28 }}>🏛️</span><div><b>Universitet xodimiman</b><div className="hint">Karyera markazi: talabalarni tasdiqlash va hisobotlar</div></div></div>
+        <div className="row"><span className="avatar"><Icon name="building" /></span><div><b>Universitet xodimiman</b><div className="hint">Karyera markazi: talabalarni tasdiqlash va hisobotlar</div></div></div>
       </div>
     </div>
   );
@@ -59,7 +60,7 @@ function StaffForm({ onBack, onChanged }: { onBack: () => void; onChanged: (m: M
 
   return (
     <div>
-      <button className="btn small ghost" onClick={onBack}>← Orqaga</button>
+      <button className="btn small ghost" onClick={onBack}>Orqaga</button>
       <h1>Universitet xodimi</h1>
       <p className="hint">Karyera markazi xodimlari o'z talabalarining talabaligini tasdiqlaydi va bandlik hisobotlarini ko'radi. So'rovingizni ilova egasi universitet bilan bog'lanib tekshiradi.</p>
       <div className="card">
@@ -87,7 +88,7 @@ export function PendingScreen({ me, onChanged }: { me: Me; onChanged: (m: Me) =>
 
   return (
     <div>
-      <h1>{rejected ? "So'rov tasdiqlanmadi" : "Tekshirilmoqda ⏳"}</h1>
+      <h1>{rejected ? "So'rov tasdiqlanmadi" : "Tekshirilmoqda"}</h1>
       <div className="card">
         {isEmployer ? <b>{me.company?.name}</b> : <b>{me.staff_university?.name}</b>}
         <p className="hint">

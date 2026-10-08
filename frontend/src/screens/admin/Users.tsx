@@ -46,7 +46,7 @@ export default function Users({ ctx, onShowWork }: { ctx: AdminCtx; onShowWork: 
         {[["", "Hammasi"], ["student", "Talabalar"], ["mentor", "Mentorlar"], ["blocked", "Bloklangan"]].map(([id, label]) => (
           <button key={id} className={`chip ${role === id ? "on" : ""}`} onClick={() => setRole(id)}>{label}</button>
         ))}
-        <button className="chip" onClick={load}>↻ Yangilash</button>
+        <button className="chip" onClick={load}>Yangilash</button>
       </div>
       <p className="hint">
         Mentorlar tengdoshlar tasdiqlagan ishlarni yakuniy tasdiqlaydi.

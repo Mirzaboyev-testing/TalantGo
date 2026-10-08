@@ -5,26 +5,27 @@ import { ask, haptic, openLink } from "../../tg";
 import { ErrorText, Sheet, message } from "../../ui";
 import CompanyForm from "./CompanyForm";
 import Groups from "../Groups";
+import Shell, { type ShellTab } from "../Shell";
+import { Icon } from "../../icons";
 
 type Tab = "jobs" | "talent" | "contacts" | "groups" | "company";
-const TABS: { id: Tab; icon: string; label: string }[] = [
-  { id: "jobs", icon: "📋", label: "Vakansiyalar" },
-  { id: "talent", icon: "🔎", label: "Talantlar" },
-  { id: "contacts", icon: "🤝", label: "Kontaktlar" },
-  { id: "groups", icon: "💬", label: "Guruhlar" },
-  { id: "company", icon: "🏢", label: "Kompaniya" },
+const TABS: ShellTab<Tab>[] = [
+  { id: "jobs", icon: "briefcase", label: "Vakansiyalar" },
+  { id: "talent", icon: "search", label: "Talantlar" },
+  { id: "contacts", icon: "inbox", label: "Kontaktlar" },
+  { id: "groups", icon: "chat", label: "Guruhlar" },
+  { id: "company", icon: "building", label: "Kompaniya" },
 ];
 const JOB_STATUS: Record<string, [string, string]> = {
   pending: ["Tekshiruvda", "pending"], approved: ["E'lon qilingan", "peer_verified"],
   rejected: ["Qaytarilgan", "rejected"], closed: ["Yopilgan", "todo"],
 };
 
-export default function EmployerApp({ me, onChanged }: { me: Me; onChanged: (m: Me) => void }) {
+export default function EmployerApp({ me, onChanged, onLogout }: { me: Me; onChanged: (m: Me) => void; onLogout: () => void }) {
   const [tab, setTab] = useState<Tab>("jobs");
   return (
-    <>
-      <div className="app">
-        <div className="hint" style={{ marginBottom: 4 }}>🏢 {me.company?.name}</div>
+    <Shell tabs={TABS} active={tab} onChange={setTab} onLogout={onLogout}
+           user={{ name: me.full_name, photo: me.photo_url, subtitle: me.company?.name }}>
         {tab === "jobs" && <JobsTab />}
         {tab === "talent" && <TalentTab />}
         {tab === "contacts" && <ContactsTab />}
@@ -39,11 +40,7 @@ export default function EmployerApp({ me, onChanged }: { me: Me; onChanged: (m: 
             <p className="hint">Nom yoki STIR o'zgarsa, kompaniya qayta tekshiriladi.</p>
           </div>
         )}
-      </div>
-      <nav className="tabbar"><div className="tabbar-inner">
-        {TABS.map((t) => <button key={t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}><span>{t.icon}</span>{t.label}</button>)}
-      </div></nav>
-    </>
+    </Shell>
   );
 }
 
@@ -131,7 +128,7 @@ function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
 
   return (
     <div>
-      <button className="btn small ghost" onClick={onDone}>← Orqaga</button>
+      <button className="btn small ghost" onClick={onDone}><Icon name="back" size={16} />Orqaga</button>
       <h1>{job ? "Vakansiyani tahrirlash" : "Yangi vakansiya"}</h1>
       {job?.status === "approved" && <p className="notice">O'zgartirilgan e'lon qayta tekshiruvga yuboriladi.</p>}
       <div className="card">
@@ -172,7 +169,7 @@ function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
           {tracks.map((t) => (
             <button key={t.id} className={`chip ${f.track_ids.includes(t.id) ? "on" : ""}`}
                     onClick={() => setF({ ...f, track_ids: f.track_ids.includes(t.id) ? f.track_ids.filter((x) => x !== t.id) : [...f.track_ids, t.id] })}>
-              {t.icon} {t.title.split(":")[0]}
+              {t.title.split(":")[0]}
             </button>
           ))}
         </div>
@@ -213,7 +210,7 @@ function Applicants({ job, onBack }: { job: Job; onBack: () => void }) {
 
   return (
     <div>
-      <button className="btn small ghost" onClick={onBack}>← Vakansiyalar</button>
+      <button className="btn small ghost" onClick={onBack}><Icon name="back" size={16} />Vakansiyalar</button>
       <h1>{job.title}</h1>
       <p className="hint">Talaba o'zi ariza topshirgani uchun ismi va CV'si sizga ochiq. Holatni o'zgartirsangiz, talabaga bot orqali xabar boradi.</p>
       <ErrorText error={error} />
@@ -249,13 +246,13 @@ function CardBody({ card }: { card: TalentCard }) {
         {[card.university, card.faculty, card.course && (card.course === 7 ? "magistratura" : `${card.course}-kurs`), card.city].filter(Boolean).join(" · ")}
       </div>
       <div className="hint">
-        {card.track_icon} {card.track ?? "yo'nalish yo'q"} · {card.points} ball · {card.verified_tasks} tasdiqlangan ish
+        {card.track ?? "yo'nalish yo'q"} · {card.points} ball · {card.verified_tasks} tasdiqlangan ish
         {card.gpa != null ? ` · GPA ${card.gpa}/${card.gpa_scale}` : ""}
       </div>
       {(card.skills.length > 0 || card.languages.length > 0) && (
         <div className="chips" style={{ marginTop: 6 }}>
           {card.skills.map((s) => <span key={s} className="chip">{s}</span>)}
-          {card.languages.map((s) => <span key={s} className="chip">🗣 {s}</span>)}
+          {card.languages.map((s) => <span key={s} className="chip">{s}</span>)}
         </div>
       )}
     </>
@@ -297,7 +294,7 @@ function TalentTab() {
           </select>
           <select className="grow" value={filters.track_id} onChange={set("track_id")}>
             <option value="">Barcha yo'nalishlar</option>
-            {tracks.map((t) => <option key={t.id} value={t.id}>{t.icon} {t.title.split(":")[0]}</option>)}
+            {tracks.map((t) => <option key={t.id} value={t.id}>{t.title.split(":")[0]}</option>)}
           </select>
         </div>
         <div className="row" style={{ marginTop: 8 }}>
@@ -326,13 +323,13 @@ function TalentTab() {
         <div key={c.id} className="card">
           <div className="row between">
             <b>Talaba {c.code}</b>
-            {c.verification === "verified" ? <span className="badge peer_verified">✓ {c.verified_by || "Tasdiqlangan"}</span>
+            {c.verification === "verified" ? <span className="badge peer_verified">{c.verified_by || "Tasdiqlangan"}</span>
               : <span className="badge todo">Tasdiq kutilmoqda</span>}
           </div>
           <CardBody card={c} />
           <div style={{ marginTop: 8 }}>
             {c.contact_status ? (
-              <span className="hint">So'rov yuborilgan: {c.contact_status === "accepted" ? "rozi bo'ldi ✓" : c.contact_status === "declined" ? "rad etdi" : "javob kutilmoqda"}</span>
+              <span className="hint">So'rov yuborilgan: {c.contact_status === "accepted" ? "rozi bo'ldi" : c.contact_status === "declined" ? "rad etdi" : "javob kutilmoqda"}</span>
             ) : (
               <button className="btn small" onClick={() => setContacting(c)}>Bog'lanish so'rovi</button>
             )}

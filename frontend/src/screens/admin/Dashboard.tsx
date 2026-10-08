@@ -7,12 +7,12 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 const daysAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
 const when = (s: string) => new Date(s).toLocaleString("uz", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
-const APP_TILES: [keyof Data["applications"], string, string, string][] = [
-  ["new", "Yangi", "📄", "accent-new"],
-  ["viewed", "Ko'rildi", "🔄", "accent-progress"],
-  ["shortlisted", "Keyingi bosqich", "⭐", "accent-progress"],
-  ["hired", "Qabul qilindi", "✅", "accent-good"],
-  ["rejected", "Rad etildi", "✖", "accent-bad"],
+const APP_TILES: [keyof Data["applications"], string, string][] = [
+  ["new", "Yangi", "accent-new"],
+  ["viewed", "Ko'rildi", "accent-progress"],
+  ["shortlisted", "Keyingi bosqich", "accent-progress"],
+  ["hired", "Qabul qilindi", "accent-good"],
+  ["rejected", "Rad etildi", "accent-bad"],
 ];
 
 export default function Dashboard({ go }: { go: (page: string) => void }) {
@@ -35,7 +35,7 @@ export default function Dashboard({ go }: { go: (page: string) => void }) {
         <div className="filters">
           <div><label>Dan</label><input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></div>
           <div><label>Gacha</label><input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} /></div>
-          <button className="btn small" onClick={load}>↻ Yangilash</button>
+          <button className="btn small" onClick={load}>Yangilash</button>
           <button className="btn small ghost" onClick={() => preset(7)}>7 kun</button>
           <button className="btn small ghost" onClick={() => preset(30)}>30 kun</button>
           <button className="btn small ghost" onClick={() => preset(90)}>90 kun</button>
@@ -47,20 +47,20 @@ export default function Dashboard({ go }: { go: (page: string) => void }) {
       {d && (
         <>
           <div className="kpis">
-            <Kpi label="👥 Talabalar" value={d.kpis.students} sub={`+${d.kpis.new_students} shu davrda`} />
-            <Kpi label="🟢 7 kunda faol" value={d.kpis.active_7d} sub={pct(d.kpis.active_7d, d.kpis.students)} />
-            <Kpi label="🎓 Talabaligi tasdiqlangan" value={d.kpis.verified_students} sub={pct(d.kpis.verified_students, d.kpis.students)} />
-            <Kpi label="📝 Topshirilgan ishlar" value={d.kpis.submissions} sub={`${d.kpis.awaiting_review} ta tekshiruvda`} />
-            <Kpi label="🏢 Kompaniyalar" value={d.kpis.companies} sub={`${d.kpis.live_jobs} ta faol vakansiya`} />
-            <Kpi label="⏳ Moderatsiya navbati" value={d.kpis.queue} sub={d.kpis.queue ? "ko'rib chiqing →" : "bo'sh"}
+            <Kpi label="Talabalar" value={d.kpis.students} sub={`+${d.kpis.new_students} shu davrda`} />
+            <Kpi label="7 kunda faol" value={d.kpis.active_7d} sub={pct(d.kpis.active_7d, d.kpis.students)} />
+            <Kpi label="Talabaligi tasdiqlangan" value={d.kpis.verified_students} sub={pct(d.kpis.verified_students, d.kpis.students)} />
+            <Kpi label="Topshirilgan ishlar" value={d.kpis.submissions} sub={`${d.kpis.awaiting_review} ta tekshiruvda`} />
+            <Kpi label="Kompaniyalar" value={d.kpis.companies} sub={`${d.kpis.live_jobs} ta faol vakansiya`} />
+            <Kpi label="Moderatsiya navbati" value={d.kpis.queue} sub={d.kpis.queue ? "ko'rib chiqing" : "bo'sh"}
                  onClick={d.kpis.queue ? () => go("queue") : undefined} />
           </div>
 
           <div className="panel">
-            <div className="panel-head"><h3>Arizalar holati</h3><button className="btn small ghost" onClick={() => go("applications")}>Barchasi →</button></div>
+            <div className="panel-head"><h3>Arizalar holati</h3><button className="btn small ghost" onClick={() => go("applications")}>Barchasi</button></div>
             <div className="kpis" style={{ marginBottom: 0 }}>
-              {APP_TILES.map(([key, label, icon, accent]) => (
-                <div key={key} className={`kpi ${accent}`}><div className="label">{icon} {label}</div><div className="value">{d.applications[key]}</div></div>
+              {APP_TILES.map(([key, label, accent]) => (
+                <div key={key} className={`kpi ${accent}`}><div className="label">{label}</div><div className="value">{d.applications[key]}</div></div>
               ))}
             </div>
           </div>
@@ -87,7 +87,7 @@ export default function Dashboard({ go }: { go: (page: string) => void }) {
               )}
             </div>
             <div className="panel">
-              <div className="panel-head"><h3>Oxirgi topshirilgan ishlar</h3><button className="btn small ghost" onClick={() => go("submissions")}>Barchasi →</button></div>
+              <div className="panel-head"><h3>Oxirgi topshirilgan ishlar</h3><button className="btn small ghost" onClick={() => go("submissions")}>Barchasi</button></div>
               {d.recent_submissions.length === 0 ? <div className="hint">Shu davrda ish topshirilmagan</div> : (
                 <div className="table-scroll"><table className="data-table">
                   <thead><tr><th>Talaba</th><th>Topshiriq</th><th>Holat</th><th>Sana</th></tr></thead>
@@ -103,7 +103,7 @@ export default function Dashboard({ go }: { go: (page: string) => void }) {
           </div>
 
           <div className="grid-2">
-            <Bars title="Yo'nalishlar bo'yicha talabalar" rows={d.per_track.map((t) => [`${t.icon} ${t.title.split(":")[0]}`, t.students])} />
+            <Bars title="Yo'nalishlar bo'yicha talabalar" rows={d.per_track.map((t) => [t.title.split(":")[0], t.students])} />
             <Bars title="Universitetlar bo'yicha talabalar" rows={d.per_university.map((u) => [u.name, u.students])} empty="Hali universitet tanlanmagan" />
           </div>
         </>

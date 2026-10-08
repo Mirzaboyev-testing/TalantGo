@@ -38,7 +38,7 @@ export default function GroupsAdmin() {
             <Fragment key={g.id}>
               <tr>
                 <td><a href="#groups" onClick={(e) => { e.preventDefault(); void show(g); }}><b>{g.name}</b></a></td>
-                <td>{g.is_official ? "Rasmiy" : g.is_private ? "🔒 Shaxsiy" : "Ochiq"}</td>
+                <td>{g.is_official ? "Rasmiy" : g.is_private ? "Shaxsiy" : "Ochiq"}</td>
                 <td className="num">{g.members}</td><td className="num">{g.messages}</td>
                 <td>{g.is_archived ? <span className="badge rejected">Arxivda</span> : <span className="badge peer_verified">Faol</span>}</td>
                 <td>{!g.is_official && (

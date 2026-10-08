@@ -57,7 +57,7 @@ function Verifications({ onChanged }: { onChanged: () => void }) {
   return (
     <div>
       <p className="hint">Universitetida tasdiqlangan karyera markazi xodimi bo'lsa, tasdiqlashni o'sha xodim qiladi. Yo'q bo'lsa, siz qilasiz: talaba ID va fakultetni talabaning HEMIS ma'lumoti bilan solishtiring.</p>
-      {rows?.length === 0 && <div className="center hint">Navbat bo'sh 🎉</div>}
+      {rows?.length === 0 && <div className="center hint">Navbat bo'sh</div>}
       {rows?.map((s) => (
         <div key={s.id} className="card">
           <b>{s.full_name}</b>{s.username && <span className="hint"> · @{s.username}</span>}
@@ -90,8 +90,8 @@ function Companies({ onChanged }: { onChanged: () => void }) {
           <div className="hint">{[c.industry, c.city, c.stir && `STIR: ${c.stir}`].filter(Boolean).join(" · ")}</div>
           {c.description && <p style={{ whiteSpace: "pre-line" }}>{c.description}</p>}
           <div className="row wrap">
-            {c.website && <button className="btn small ghost" onClick={() => openLink(c.website)}>Sayt ↗</button>}
-            <button className="btn small ghost" onClick={() => openLink("https://module.stat.uz/egrpo/")}>Reyestr ↗</button>
+            {c.website && <button className="btn small ghost" onClick={() => openLink(c.website)}>Sayt</button>}
+            <button className="btn small ghost" onClick={() => openLink("https://module.stat.uz/egrpo/")}>Reyestr</button>
           </div>
           {c.status === "pending" && <Decision onDecide={async (a, n) => { await api.admin.reviewCompany(c.id, a, n); void load(); onChanged(); }} needNote={false} />}
           {c.review_note && <div className="hint">Izoh: {c.review_note}</div>}
@@ -108,7 +108,7 @@ function Jobs({ onChanged }: { onChanged: () => void }) {
   return (
     <div>
       <p className="hint">Faqat talabalarga mos e'lonlar: amaliyot, yarim stavka, junior, loyiha. Talabadan pul so'raydigan, MLM yoki tafsiloti noaniq e'lonlarni qaytaring.</p>
-      {rows?.length === 0 && <div className="center hint">Navbat bo'sh 🎉</div>}
+      {rows?.length === 0 && <div className="center hint">Navbat bo'sh</div>}
       {rows?.map((j) => (
         <div key={j.id} className="card">
           <span className="hint">{j.company_name}</span>

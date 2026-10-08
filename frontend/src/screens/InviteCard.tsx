@@ -6,7 +6,7 @@ import { BOT_URL, haptic, openLink } from "../tg";
 export default function InviteCard({ me, compact = false }: { me: Me; compact?: boolean }) {
   const [copied, setCopied] = useState(false);
   const link = `${BOT_URL}?start=${me.invite_code}`;
-  const text = "Men CareerFlow'da o'qish davomida tajriba yig'yapman. Sen ham qo'shil, birga o'samiz! 🚀";
+  const text = "Men CareerFlow'da o'qish davomida tajriba yig'yapman. Sen ham qo'shil, birga o'samiz!";
 
   async function copy() {
     try {
@@ -19,9 +19,9 @@ export default function InviteCard({ me, compact = false }: { me: Me; compact?: 
   }
 
   return (
-    <div className="card" style={{ border: "1px solid var(--btn)" }}>
+    <div className="card soft">
       <div className="row between">
-        <b>🤝 Kursdoshlaringizni taklif qiling</b>
+        <b>Kursdoshlaringizni taklif qiling</b>
         <span className="badge peer_verified">{me.invited_count} kishi</span>
       </div>
       {!compact && (
@@ -31,7 +31,7 @@ export default function InviteCard({ me, compact = false }: { me: Me; compact?: 
         <button className="btn small" onClick={() => openLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`)}>
           Ulashish
         </button>
-        <button className="btn small ghost" onClick={copy}>{copied ? "Nusxalandi ✓" : "Havolani nusxalash"}</button>
+        <button className="btn small ghost" onClick={copy}>{copied ? "Nusxalandi" : "Havolani nusxalash"}</button>
       </div>
     </div>
   );

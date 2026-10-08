@@ -36,7 +36,7 @@ export default function Tracks() {
 
 function TrackForm({ track, onSaved }: { track?: AdminTrack; onSaved: () => void }) {
   const [title, setTitle] = useState(track?.title ?? "");
-  const [icon, setIcon] = useState(track?.icon ?? "📘");
+  const [icon, setIcon] = useState(track?.icon ?? "");
   const [description, setDescription] = useState(track?.description ?? "");
   const [error, setError] = useState("");
 
@@ -112,7 +112,7 @@ function TrackDetail({ track, onChanged }: { track: AdminTrack; onChanged: () =>
         <div key={t.id} className="review" style={t.is_active ? undefined : { opacity: 0.5 }}>
           <div className="row between">
             <div className="grow"><span className="hint">{t.week}-hafta · {t.points} ball</span><div>{t.title}</div></div>
-            <button className="btn small ghost" onClick={() => setTaskForm(t)}>✎</button>
+            <button className="btn small ghost" onClick={() => setTaskForm(t)}>Tahrirlash</button>
             <button className="btn small ghost" onClick={() => toggleTask(t)}>{t.is_active ? "Yashirish" : "Ko'rsatish"}</button>
           </div>
         </div>

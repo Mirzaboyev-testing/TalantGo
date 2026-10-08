@@ -3,6 +3,7 @@ import { api, type Me, type Track, type University } from "../api";
 import { ErrorText, message } from "../ui";
 import { Consent } from "./Consent";
 import PhoneField from "./PhoneField";
+import { TrackMark } from "../icons";
 
 export const GOAL_SUGGESTIONS: Record<string, string[]> = {
   "data-analytics": ["Excel", "SQL", "Power BI", "Data Analyst"],
@@ -66,7 +67,7 @@ export default function Onboarding({ me, onDone, onCancel, onMe }: {
       <h2>1. Qaysi yo'nalishda rivojlanmoqchisiz</h2>
       {tracks.map((t) => (
         <div key={t.id} className={`card tap ${t.id === trackId ? "selected" : ""}`} onClick={() => setTrackId(t.id)}>
-          <div className="row"><span style={{ fontSize: 24 }}>{t.icon}</span><b>{t.title}</b></div>
+          <div className="row"><TrackMark title={t.title} /><b>{t.title}</b></div>
           <div className="hint" style={{ marginTop: 4 }}>{t.description}</div>
         </div>
       ))}

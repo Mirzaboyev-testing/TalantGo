@@ -19,7 +19,7 @@ export default function ProfileTask({ me, task, onDone }: { me: Me; task: Task; 
   if (task.submission) {
     return (
       <div className="card">
-        <b>✅ Bajarildi: +{task.submission.points_awarded} ball</b>
+        <b>Bajarildi: +{task.submission.points_awarded} ball</b>
         <p className="hint">Profilingiz tayyor. Ish beruvchi sizni shu ko'rinishda ko'radi.</p>
         <button className="btn small ghost" onClick={() => openLink(task.submission!.proof_url)}>CV'ni ko'rish</button>
       </div>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type ChatMessage, type GroupCard, type GroupDetail } from "../api";
 import { ask, backButton, BOT_URL, haptic, openLink } from "../tg";
 import { Avatar, ErrorText, message } from "../ui";
+import { Icon } from "../icons";
 
 const POLL_MS = 3000;
 const time = (s: string) => new Date(s).toLocaleTimeString("uz", { hour: "2-digit", minute: "2-digit" });
@@ -41,7 +42,7 @@ export default function Groups({ joinCode, onUnreadChange }: { joinCode?: string
     <div>
       <div className="row between">
         <h1 style={{ margin: "4px 0 12px" }}>Guruhlar</h1>
-        <button className="btn small" onClick={() => setCreating(!creating)}>{creating ? "Bekor qilish" : "+ Guruh ochish"}</button>
+        <button className="btn small" onClick={() => setCreating(!creating)}>{creating ? "Bekor qilish" : <><Icon name="plus" size={16} />Guruh ochish</>}</button>
       </div>
       {creating && <CreateGroup onCreated={(g) => { setCreating(false); void load(); setOpen(g.id); }} />}
       {joinCode && code && (
@@ -80,7 +81,7 @@ export default function Groups({ joinCode, onUnreadChange }: { joinCode?: string
 function GroupRow({ g, onOpen }: { g: GroupCard; onOpen: () => void }) {
   return (
     <div className="card tap row" onClick={onOpen}>
-      <div className="avatar" style={{ fontSize: 18 }}>{g.is_private ? "🔒" : g.is_official ? "🌐" : "#"}</div>
+      <div className="avatar"><Icon name={g.is_private ? "lock" : g.is_official ? "globe" : "chat"} /></div>
       <div className="grow">
         <div className="row between"><b style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</b>
           {g.last_message && <span className="hint">{time(g.last_message.created_at)}</span>}</div>
@@ -190,8 +191,8 @@ function Chat({ groupId, onBack }: { groupId: number; onBack: () => void }) {
   return (
     <div className="chat">
       <div className="chat-head">
-        <button className="back" onClick={onBack} aria-label="Orqaga">←</button>
-        <div className="avatar" style={{ fontSize: 18 }}>{info?.is_private ? "🔒" : "🌐"}</div>
+        <button className="icon-btn" onClick={onBack} aria-label="Orqaga"><Icon name="back" /></button>
+        <div className="avatar"><Icon name={info?.is_private ? "lock" : "globe"} /></div>
         <div className="grow" style={{ cursor: "pointer", minWidth: 0 }} onClick={() => setShowInfo(true)}>
           <b>{info?.name ?? "…"}</b>
           <div className="hint">{info ? `${info.members} a'zo${info.is_private ? " · shaxsiy" : ""} · ma'lumot uchun bosing` : ""}</div>
@@ -199,7 +200,7 @@ function Chat({ groupId, onBack }: { groupId: number; onBack: () => void }) {
       </div>
       <div className="chat-body">
         {hasOlder && msgs.length > 0 && <button className="btn small ghost" style={{ alignSelf: "center" }} onClick={older}>Oldingi xabarlar</button>}
-        {msgs.length === 0 && <div className="center hint">Hali xabar yo'q. Birinchi bo'lib salom bering! 👋</div>}
+        {msgs.length === 0 && <div className="center hint">Hali xabar yo'q. Birinchi bo'lib salom bering.</div>}
         {msgs.map((m) => {
           const d = day(m.created_at);
           const sep = d !== lastDay ? <div key={`d${m.id}`} className="chat-day">{d}</div> : null;
@@ -212,7 +213,7 @@ function Chat({ groupId, onBack }: { groupId: number; onBack: () => void }) {
                 {m.deleted ? <i className="hint">Xabar o'chirildi</i> : <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.text}</div>}
                 <div className="bubble-time">
                   {time(m.created_at)}
-                  {!m.deleted && (m.mine || info?.my_role === "owner") && <button className="bubble-del" onClick={() => remove(m)} aria-label="O'chirish">🗑</button>}
+                  {!m.deleted && (m.mine || info?.my_role === "owner") && <button className="bubble-del" onClick={() => remove(m)} aria-label="O'chirish"><Icon name="trash" size={13} /></button>}
                 </div>
               </div>
             </div>
@@ -225,7 +226,7 @@ function Chat({ groupId, onBack }: { groupId: number; onBack: () => void }) {
         <textarea value={text} rows={1} maxLength={2000} placeholder="Xabar yozing…"
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} />
-        <button className="btn small" type="submit" disabled={!text.trim()}>➤</button>
+        <button className="btn small" type="submit" disabled={!text.trim()} aria-label="Yuborish"><Icon name="send" size={18} /></button>
       </form>
     </div>
   );
@@ -244,7 +245,7 @@ function GroupInfo({ info, onChanged, onBack, onGone }: { info: GroupDetail; onC
   return (
     <div className="chat-page">
       <div className="chat-head" style={{ marginBottom: 8 }}>
-        <button className="back" onClick={onBack} aria-label="Orqaga">←</button>
+        <button className="icon-btn" onClick={onBack} aria-label="Orqaga"><Icon name="back" /></button>
         <b>Guruh haqida</b>
       </div>
       <h1>{info.name}</h1>
@@ -270,7 +271,7 @@ function GroupInfo({ info, onChanged, onBack, onGone }: { info: GroupDetail; onC
               {m.badge && <div className="hint">{m.badge}</div>}</div>
             {m.username && <button className="btn small ghost" onClick={() => openLink(`https://t.me/${m.username}`)}>Yozish</button>}
             {isOwner && m.role !== "owner" && (
-              <button className="btn small ghost" onClick={async () => { if (await ask(`${m.name} guruhdan chiqarilsinmi?`)) void run(() => api.groups.removeMember(info.id, m.user_id)); }}>✕</button>
+              <button className="btn small ghost" onClick={async () => { if (await ask(`${m.name} guruhdan chiqarilsinmi?`)) void run(() => api.groups.removeMember(info.id, m.user_id)); }} aria-label="Chiqarish"><Icon name="close" size={16} /></button>
             )}
           </div>
         ))}

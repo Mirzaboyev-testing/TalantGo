@@ -44,7 +44,7 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
         <div className="grow">
           <h1 style={{ margin: 0 }}>{me.full_name}</h1>
           {me.headline && <div style={{ fontWeight: 600 }}>{me.headline}</div>}
-          <div className="hint">{me.track?.icon} {me.track?.title}{me.role !== "student" ? " · mentor" : ""}</div>
+          <div className="hint">{me.track?.title}{me.role !== "student" ? " · mentor" : ""}</div>
         </div>
       </div>
 
@@ -90,7 +90,7 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
         <input value={form.linkedin_url} placeholder="https://linkedin.com/in/…" inputMode="url" onChange={set("linkedin_url")} />
         <ErrorText error={error} />
         <div className="stack" style={{ marginTop: 12 }}>
-          <button className="btn" disabled={busy} onClick={() => save()}>{saved ? "Saqlandi ✓" : "Saqlash"}</button>
+          <button className="btn" disabled={busy} onClick={() => save()}>{saved ? "Saqlandi" : "Saqlash"}</button>
           <button className="btn ghost" onClick={onChangeTrack}>Yo'nalishni o'zgartirish</button>
         </div>
       </div>

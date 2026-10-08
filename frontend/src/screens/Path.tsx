@@ -3,6 +3,7 @@ import { api, type Me, type Task } from "../api";
 import { haptic, openLink } from "../tg";
 import { ErrorText, Sheet, StatusBadge, message } from "../ui";
 import InviteCard from "./InviteCard";
+import { Icon, TrackMark } from "../icons";
 import ProfileTask from "./ProfileTask";
 
 export default function PathScreen({ me, onChanged, onChangeTrack }: { me: Me; onChanged: () => void; onChangeTrack: () => void }) {
@@ -18,11 +19,11 @@ export default function PathScreen({ me, onChanged, onChangeTrack }: { me: Me; o
   return (
     <div>
       <div className="row between">
-        <h1>{me.track!.icon} {me.track!.title}</h1>
+        <h1 className="row" style={{ gap: 12 }}><TrackMark title={me.track!.title} size={40} />{me.track!.title}</h1>
       </div>
       <div className="stats">
         <div className="stat"><b>{me.points}</b><span>ball</span></div>
-        <div className="stat"><b>{me.streak > 0 ? `🔥 ${me.streak}` : "0"}</b><span>haftalik seriya</span></div>
+        <div className="stat"><b>{me.streak > 0 && <Icon name="flame" size={18} />}{me.streak}</b><span>haftalik seriya</span></div>
         <div className="stat"><b>#{me.rank_overall}</b><span>umumiy o'rin</span></div>
       </div>
       {tasks && (
@@ -35,7 +36,7 @@ export default function PathScreen({ me, onChanged, onChangeTrack }: { me: Me; o
         <div key={t.id} className="card tap" onClick={() => setOpen(t)}>
           <div className="row between">
             <span className="hint">{t.kind === "profile" ? "Start" : `${t.week}-hafta`} · {t.points} ball</span>
-            {t.kind === "profile" && t.submission ? <span className="badge peer_verified">Bajarildi ✓</span>
+            {t.kind === "profile" && t.submission ? <span className="badge peer_verified">Bajarildi</span>
               : <StatusBadge status={t.submission?.status ?? null} />}
           </div>
           <b>{t.title}</b>
