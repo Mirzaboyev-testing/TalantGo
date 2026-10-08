@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type AdminTrack, type AdminUser } from "../../api";
 import { ask } from "../../tg";
-import { ErrorText, message } from "../../ui";
+import { ErrorText, message, toast } from "../../ui";
 import type { AdminCtx } from "./AdminSite";
 
 // Telegram users are students or mentors; admins are separate website accounts ("Adminlar").
@@ -99,8 +99,10 @@ function UserCard({ user, ctx, track, onChanged, onShowWork }: {
       <div className="row between">
         <div className="grow">
           <b>{user.full_name}</b>{user.is_blocked && <span className="badge rejected" style={{ marginLeft: 6 }}>bloklangan</span>}
+          {user.verification === "verified" && <span className="badge peer_verified" style={{ marginLeft: 6 }}>talabaligi tasdiqlangan</span>}
+          {user.verification === "pending" && <span className="badge pending" style={{ marginLeft: 6 }}>tasdiq kutmoqda</span>}
           <div className="hint">
-            {[user.username && `@${user.username}`, user.group_name, track && `${track.icon} ${track.title}`].filter(Boolean).join(" · ")}
+            {[user.username && `@${user.username}`, user.group_name, track?.title.split(":")[0]].filter(Boolean).join(" · ")}
           </div>
           <div className="hint">{user.points} ball · {user.verified_tasks} tasdiqlangan ish · {ago(user.last_seen_at)}</div>
         </div>
@@ -109,6 +111,16 @@ function UserCard({ user, ctx, track, onChanged, onShowWork }: {
         </select>
       </div>
       <div className="row wrap" style={{ marginTop: 8 }}>
+        {user.verification === "pending" && (
+          <button className="btn small" disabled={busy} onClick={async () => {
+            setBusy(true); setError("");
+            try {
+              await api.admin.decideVerification(user.id, true, "");
+              onChanged({ ...user, verification: "verified" });
+              toast(`${user.full_name}: talabaligi tasdiqlandi`);
+            } catch (e) { setError(message(e)); } finally { setBusy(false); }
+          }}>Talabalikni tasdiqlash</button>
+        )}
         <button className="btn small ghost" onClick={onShowWork}>Ishlari</button>
         {user.username && <a className="btn small ghost" href={`https://t.me/${user.username}`} target="_blank" rel="noreferrer">Yozish</a>}
         {(

@@ -87,7 +87,7 @@ async def test_two_peer_rejections_reject(client, make_user):
 async def test_validation_and_access_rules(client, make_user):
     track, tasks, u = await _setup(client, make_user)
     h = u["Aziza"]["headers"]
-    assert (await client.post(f"/api/v1/tasks/{tasks[0]['id']}/submit", json={"proof_url": "github.com/x/y"},
+    assert (await client.post(f"/api/v1/tasks/{tasks[0]['id']}/submit", json={"proof_url": "not a link at all"},
                               headers=h)).status_code == 422
     other_track = next(t for t in (await client.get("/api/v1/tracks")).json() if t["id"] != track["id"])
     other_tasks = [t for t in (await client.get(f"/api/v1/tracks/{other_track['id']}/tasks", headers=h)).json()

@@ -7,8 +7,14 @@ from .models import ReviewKind, Role, Status
 
 
 def _http_url(value: str) -> str:
-    if value and not value.startswith(("https://", "http://")):
-        raise ValueError("Havola https:// bilan boshlanishi kerak")
+    """Accept links typed without the scheme ("github.com/me"); an empty value means "not given"."""
+    if not value:
+        return value
+    if not value.startswith(("https://", "http://")):
+        value = f"https://{value}"
+    host = value.split("://", 1)[1].split("/", 1)[0]
+    if "." not in host or " " in value:
+        raise ValueError("Havola noto'g'ri: masalan, github.com/ismingiz")
     return value
 
 

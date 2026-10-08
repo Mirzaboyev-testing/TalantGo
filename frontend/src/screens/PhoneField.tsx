@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api, formatPhone, type Me } from "../api";
 import { canShareContact, haptic, shareContact } from "../tg";
-import { ErrorText, message } from "../ui";
+import { ErrorText, message, toast } from "../ui";
 
 const normalize = (raw: string) => {
   const digits = raw.replace(/\D/g, "");
@@ -52,6 +52,7 @@ export default function PhoneField({ me, onChanged }: { me: Me; onChanged: (m: M
     try {
       onChanged(await api.updateMe({ phone }));
       haptic("success");
+      toast("Telefon raqami saqlandi");
     } catch (e) {
       setError(message(e));
     } finally {

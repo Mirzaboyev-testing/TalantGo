@@ -48,3 +48,30 @@ async def test_phone_shared_through_telegram_is_verified(client, make_user):
                           "contact": {"user_id": 999, "phone_number": "998900000000"}}}
     await client.post("/telegram/webhook", json=forged, headers=headers)
     assert (await client.get("/api/v1/me", headers=u["headers"])).json()["phone"] == "+998935550011"
+
+
+
+async def test_links_are_optional_and_accepted_without_https(client, make_user):
+    u = await make_user("Aziza")
+    me = (await client.patch("/api/v1/me", json={"github_url": "github.com/aziza", "linkedin_url": ""},
+                              headers=u["headers"])).json()
+    assert me["github_url"] == "https://github.com/aziza" and me["linkedin_url"] == ""
+    assert (await client.patch("/api/v1/me", json={"github_url": "aziza"}, headers=u["headers"])).status_code == 422
+
+
+async def test_verification_request_does_not_need_a_student_number(client, make_user):
+    from sqlalchemy import select
+
+    from app.core.db import SessionLocal
+    from app.models import University
+    from tests.conftest import owner_headers
+
+    u = await make_user("Aziza")
+    async with SessionLocal() as s:
+        uni = (await s.execute(select(University.id).where(University.short_name == "TDIU"))).scalar_one()
+    await client.patch("/api/v1/me", json={"consent": True, "university_id": uni, "faculty": "Iqtisodiyot", "course": 2},
+                       headers=u["headers"])
+    r = await client.post("/api/v1/me/verification", headers=u["headers"])
+    assert r.status_code == 200 and r.json()["verification"] == "pending"
+    queue = (await client.get("/api/v1/admin/verifications", headers=await owner_headers(client))).json()
+    assert [q["full_name"] for q in queue] == ["Aziza"]

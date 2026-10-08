@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api, type Me } from "../api";
 import { haptic, openLink } from "../tg";
-import { Avatar, ErrorText, message } from "../ui";
+import { Avatar, ErrorText, message, toast } from "../ui";
 import CareerProfile from "./CareerProfile";
 import PhoneField from "./PhoneField";
 import InviteCard from "./InviteCard";
@@ -30,6 +30,7 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
       onSaved(await api.updateMe({ ...rest, ...extra }));
       haptic("success");
       setSaved(true);
+      toast("cv_public" in extra ? (extra.cv_public ? "CV ochiq qilindi" : "CV yopildi") : "Ma'lumotlar saqlandi");
     } catch (e) {
       setError(message(e));
     } finally {
@@ -84,10 +85,10 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
         <input value={form.headline} maxLength={120} placeholder="Iqtisodiyot talabasi | Data Analytics" onChange={set("headline")} />
         <label>O'zim haqimda</label>
         <textarea value={form.bio} maxLength={600} placeholder="2-3 gap: nimani o'rganyapsiz, qanday ishga qiziqasiz" onChange={set("bio")} />
-        <label>GitHub</label>
-        <input value={form.github_url} placeholder="https://github.com/…" inputMode="url" onChange={set("github_url")} />
-        <label>LinkedIn</label>
-        <input value={form.linkedin_url} placeholder="https://linkedin.com/in/…" inputMode="url" onChange={set("linkedin_url")} />
+        <label>GitHub (ixtiyoriy)</label>
+        <input value={form.github_url} placeholder="github.com/ismingiz" inputMode="url" onChange={set("github_url")} />
+        <label>LinkedIn (ixtiyoriy)</label>
+        <input value={form.linkedin_url} placeholder="linkedin.com/in/ismingiz" inputMode="url" onChange={set("linkedin_url")} />
         <ErrorText error={error} />
         <div className="stack" style={{ marginTop: 12 }}>
           <button className="btn" disabled={busy} onClick={() => save()}>{saved ? "Saqlandi" : "Saqlash"}</button>

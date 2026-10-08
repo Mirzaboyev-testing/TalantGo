@@ -167,8 +167,9 @@ async def request_verification(user: CurrentUser, session: Session) -> MeOut:
     that the student really studies there. Needs the university, faculty, course and student ID."""
     if user.verification == "verified":
         raise HTTPException(409, "Siz allaqachon tasdiqlangansiz")
+    # the student number (HEMIS) helps the checker but is optional for now
     missing = [label for label, ok in (("universitet", user.university_id), ("fakultet", user.faculty),
-                                       ("kurs", user.course), ("talaba ID (HEMIS)", user.student_number)) if not ok]
+                                       ("kurs", user.course)) if not ok]
     if missing:
         raise HTTPException(422, "To'ldiring: " + ", ".join(missing))
     if user.consent_at is None:

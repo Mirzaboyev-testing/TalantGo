@@ -73,6 +73,7 @@ export interface BotStatus { configured: boolean; hint: string | null; public_ur
 export interface AdminUser {
   id: number; full_name: string; username: string | null; role: Role; is_owner: boolean; is_blocked: boolean;
   track_id: number | null; university: string; group_name: string; points: number; verified_tasks: number;
+  verification: Verification;
   last_seen_at: string | null; created_at: string;
 }
 export interface AdminSubmission {

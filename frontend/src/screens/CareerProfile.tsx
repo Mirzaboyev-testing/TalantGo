@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, JOB_KIND, VERIFICATION_LABEL, type JobKind, type Me, type University } from "../api";
 import { haptic } from "../tg";
-import { ErrorText, message } from "../ui";
+import { ErrorText, message, toast } from "../ui";
 
 const MISSING_LABEL: Record<string, string> = {
   university: "universitet", faculty: "fakultet", course: "kurs", track: "yo'nalish", skills: "kamida 3 ko'nikma",
@@ -30,12 +30,13 @@ export default function CareerProfile({ me, onSaved }: { me: Me; onSaved: (m: Me
     setF({ ...f, [k]: e.target.value });
   };
 
-  async function run(action: () => Promise<Me>) {
+  async function run(action: () => Promise<Me>, done = "Ma'lumotlar saqlandi") {
     setBusy(true); setError("");
     try {
       onSaved(await action());
       haptic("success");
       setSaved(true);
+      toast(done);
     } catch (e) {
       setError(message(e));
     } finally {
@@ -66,12 +67,14 @@ export default function CareerProfile({ me, onSaved }: { me: Me; onSaved: (m: Me
           Profil {pct}% to'ldirilgan.{me.completeness.missing.length > 0 && ` Qolgani: ${me.completeness.missing.map((m) => MISSING_LABEL[m] ?? m).join(", ")}.`}
         </div>
         {me.verification === "verified" && <p className="hint">Tasdiqlagan: {me.verified_by}</p>}
+        {me.verification === "pending" && <p className="notice" style={{ marginTop: 10 }}>So'rovingiz adminga yuborildi. Tasdiqlangach shu yerda «Talabalik tasdiqlangan» belgisi chiqadi.</p>}
         {me.verification === "rejected" && <p className="error">Rad etildi: {me.verification_note || "sabab ko'rsatilmagan"}. Ma'lumotni tuzatib, qayta yuboring.</p>}
 
         <label className="row between" style={{ color: "var(--text)", marginTop: 12, cursor: "pointer" }}>
           <span><b>Ish va amaliyotga tayyorman</b><div className="hint">Yoqilsa, kompaniyalar sizni ismingizsiz, anonim kartochka sifatida topadi</div></span>
           <input type="checkbox" checked={me.open_to_work} style={{ width: 22, height: 22, flex: "none" }}
-                 onChange={(e) => run(() => api.updateMe({ open_to_work: e.target.checked }))} />
+                 onChange={(e) => run(() => api.updateMe({ open_to_work: e.target.checked }),
+                   e.target.checked ? "Kompaniyalar endi sizni topa oladi" : "Profilingiz kompaniyalardan yashirildi")} />
         </label>
       </div>
 
@@ -96,7 +99,7 @@ export default function CareerProfile({ me, onSaved }: { me: Me; onSaved: (m: Me
             <input value={f.graduation_year} inputMode="numeric" maxLength={4} placeholder="2027" onChange={set("graduation_year")} />
           </div>
         </div>
-        <label>Talaba ID (HEMIS'dagi talaba raqami)</label>
+        <label>Talaba ID, HEMIS'dagi talaba raqami (ixtiyoriy)</label>
         <input value={f.student_number} maxLength={32} onChange={set("student_number")} />
         <div className="hint">Faqat universitetingiz karyera markazi va admin ko'radi. Ish beruvchilarga ko'rsatilmaydi.</div>
         <div className="row">
@@ -136,7 +139,7 @@ export default function CareerProfile({ me, onSaved }: { me: Me; onSaved: (m: Me
         <div className="stack" style={{ marginTop: 12 }}>
           <button className="btn" disabled={busy} onClick={save}>{saved ? "Saqlandi" : "Saqlash"}</button>
           {(me.verification === "none" || me.verification === "rejected") && (
-            <button className="btn ok" disabled={busy} onClick={() => run(api.requestVerification)}>Talabalikni tasdiqlashga yuborish</button>
+            <button className="btn ok" disabled={busy} onClick={() => run(api.requestVerification, "So'rov yuborildi. Admin tasdiqlagach «Talabalik tasdiqlangan» belgisi chiqadi")}>Talabalikni tasdiqlashga yuborish</button>
           )}
         </div>
         <p className="hint">

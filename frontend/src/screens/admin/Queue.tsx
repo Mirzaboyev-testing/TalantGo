@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, JOB_KIND, salary, type Company, type Job, type PendingStudent, type StaffRequest } from "../../api";
 import { openLink } from "../../tg";
-import { ErrorText, message } from "../../ui";
+import { ErrorText, message, toast } from "../../ui";
 import type { AdminCtx } from "./AdminSite";
 
 type Kind = "verifications" | "companies" | "jobs" | "staff";
-const KINDS: [Kind, string][] = [["verifications", "Talabalar"], ["companies", "Kompaniyalar"], ["jobs", "Vakansiyalar"], ["staff", "Universitet xodimlari"]];
+const KINDS: [Kind, string][] = [["verifications", "Talabalik tasdig'i"], ["companies", "Kompaniyalar"], ["jobs", "Vakansiyalar"], ["staff", "Universitet xodimlari"]];
 
 export default function Queue({ ctx }: { ctx: AdminCtx }) {
   const [kind, setKind] = useState<Kind>("verifications");
@@ -63,7 +63,11 @@ function Verifications({ onChanged }: { onChanged: () => void }) {
           <b>{s.full_name}</b>{s.username && <span className="hint"> · @{s.username}</span>}
           <div className="hint">{s.university}</div>
           <div className="hint">{[s.faculty, s.course && `${s.course}-kurs`, s.group_name, `ID: ${s.student_number}`].filter(Boolean).join(" · ")}</div>
-          <Decision needNote={false} onDecide={async (approve, note) => { await api.admin.decideVerification(s.id, approve, note); void load(); onChanged(); }} />
+          <Decision needNote={false} onDecide={async (approve, note) => {
+            await api.admin.decideVerification(s.id, approve, note);
+            toast(approve ? `${s.full_name}: talabaligi tasdiqlandi` : `${s.full_name}: so'rov rad etildi`);
+            void load(); onChanged();
+          }} />
         </div>
       ))}
     </div>
