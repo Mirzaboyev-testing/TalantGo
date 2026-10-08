@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import { STATUS_LABEL, absoluteUrl, fileSize, type Review, type Status, type SubmittedFile } from "./api";
 import { openLink } from "./tg";
 
@@ -76,4 +76,16 @@ export function Toaster() {
       {items.map((t) => <div key={t.id} className={`toast ${t.kind}`}>{t.text}</div>)}
     </div>
   );
+}
+
+/** Enter sends on a computer. On a phone the keyboard's Enter key starts a new line and only the send button sends. */
+export function sendsOnEnter(e: KeyboardEvent): boolean {
+  if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return false;
+  return !window.matchMedia("(pointer: coarse)").matches;
+}
+
+/** Lets a one-line message box grow with its text, up to the height set in CSS. */
+export function autoGrow(el: HTMLTextAreaElement): void {
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
 }

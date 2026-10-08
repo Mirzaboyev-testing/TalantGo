@@ -267,6 +267,19 @@ class SubmissionFile(Base):
     submission: Mapped[Submission | None] = relationship(back_populates="files", lazy="raise")
 
 
+class AssistantMessage(Base):
+    """One turn of a person's CareerFlow.ai conversation. Readable by that person and admins only."""
+    __tablename__ = "assistant_messages"
+    __table_args__ = (CheckConstraint("role IN ('user', 'model')", name="assistant_role_valid"),
+                      Index("ix_assistant_messages_user_id_id", "user_id", "id"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    role: Mapped[str] = mapped_column(String(8))
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class TaskQuestion(Base):
     """A student's question about a task. Answers are visible to everyone on the track, like a FAQ."""
     __tablename__ = "task_questions"

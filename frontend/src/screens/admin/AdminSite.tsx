@@ -10,7 +10,7 @@ import GroupsAdmin from "./GroupsAdmin";
 import ChallengesAdmin from "./ChallengesAdmin";
 import { Applications, Companies, Jobs } from "./Market";
 import Queue from "./Queue";
-import { AiCard, AuditCard, BotCard, ExportCard, PartnerLinks, RulesCard } from "./Settings";
+import { AiCard, AiConversations, AuditCard, BotCard, ExportCard, PartnerLinks, RulesCard } from "./Settings";
 import Submissions from "./Submissions";
 import Tracks from "./Tracks";
 import Universities from "./Universities";
@@ -135,7 +135,7 @@ export default function AdminSite() {
             {current.id === "challenges" && <ChallengesAdmin />}
             {current.id === "announcements" && <div className="narrow"><Announcements /></div>}
             {current.id === "bot" && <div className="narrow"><BotCard /></div>}
-            {current.id === "ai" && <div className="narrow"><AiCard canEdit={me.is_owner} /></div>}
+            {current.id === "ai" && <div className="narrow"><AiCard canEdit={me.is_owner} /><AiConversations /></div>}
             {current.id === "reports" && <div className="narrow"><ExportCard /></div>}
             {current.id === "settings" && <div className="narrow"><RulesCard canEdit={me.is_owner} /><PartnerLinks /></div>}
             {current.id === "accounts" && <Accounts meId={me.id} />}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type AiStatus, type AuditEntry, type BotStatus, type Rules } from "../../api";
+import { api, type AiConversation, type AiMessage, type AiStatus, type AuditEntry, type BotStatus, type Rules } from "../../api";
 import { BOT_URL } from "../../tg";
 import { ErrorText, message } from "../../ui";
 
@@ -158,11 +158,61 @@ export function AiCard({ canEdit }: { canEdit: boolean }) {
   );
 }
 
+export function AiConversations() {
+  const [rows, setRows] = useState<AiConversation[] | null>(null);
+  const [open, setOpen] = useState<AiConversation | null>(null);
+  const [chat, setChat] = useState<AiMessage[] | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => { api.admin.aiConversations().then(setRows, (e) => setError(message(e))); }, []);
+
+  async function show(c: AiConversation) {
+    setOpen(c); setChat(null); setError("");
+    try { setChat(await api.admin.aiConversation(c.user_id)); } catch (e) { setError(message(e)); }
+  }
+
+  if (open) {
+    return (
+      <div className="card">
+        <div className="row between">
+          <b>{open.full_name}</b>
+          <button className="btn small ghost" onClick={() => setOpen(null)}>Orqaga</button>
+        </div>
+        <p className="hint">{open.track ?? "Yo'nalish tanlanmagan"} · {open.questions} ta savol. Ko'rganingiz jurnalga yoziladi.</p>
+        <ErrorText error={error} />
+        {!chat && !error && <div className="hint">Yuklanmoqda…</div>}
+        {chat?.map((m) => (
+          <div key={m.id} className={`review ${m.role === "user" ? "" : "yes"}`}>
+            <div className="hint">{m.role === "user" ? open.full_name : "CareerFlow.ai"} · {new Date(m.created_at).toLocaleString()}</div>
+            <div style={{ whiteSpace: "pre-wrap" }}>{m.text}</div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="card">
+      <b>CareerFlow.ai suhbatlari</b>
+      <p className="hint">Har bir talaba va mentorning suhbati alohida, ularni boshqa foydalanuvchilar ko'rmaydi. Bu yerda faqat adminlar ko'radi.</p>
+      <ErrorText error={error} />
+      {rows?.length === 0 && <div className="hint">Hali hech kim yozmagan.</div>}
+      {rows?.map((c) => (
+        <div key={c.user_id} className="review" style={{ cursor: "pointer" }} onClick={() => show(c)}>
+          <div className="row between">
+            <b>{c.full_name}</b>
+            <span className="hint">{c.questions} ta savol</span>
+          </div>
+          <div className="hint">{c.role === "student" ? "Talaba" : "Mentor"}{c.track ? ` · ${c.track.split(":")[0]}` : ""} · oxirgi: {new Date(c.last_at).toLocaleString()}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const ACTION_LABEL: Record<string, string> = {
   "user.update": "Foydalanuvchi o'zgartirildi", "user.points": "Ball tuzatildi", "submission.delete": "Ish o'chirildi",
   "track.create": "Yo'nalish qo'shildi", "track.update": "Yo'nalish o'zgartirildi", "task.create": "Topshiriq qo'shildi",
   "task.update": "Topshiriq o'zgartirildi", "announcement.send": "E'lon yuborildi", "rules.update": "Qoidalar o'zgartirildi",
-  "bot.token": "Bot tokeni almashtirildi", "ai.update": "AI sozlamalari o'zgartirildi", "bot.connect": "Bot ulandi", "export.users": "Ro'yxat yuklab olindi",
+  "bot.token": "Bot tokeni almashtirildi", "ai.update": "AI sozlamalari o'zgartirildi", "assistant.view": "CareerFlow.ai suhbati ko'rildi", "bot.connect": "Bot ulandi", "export.users": "Ro'yxat yuklab olindi",
 };
 
 export function AuditCard() {

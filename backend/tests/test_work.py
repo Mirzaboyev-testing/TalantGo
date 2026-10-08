@@ -181,27 +181,29 @@ async def test_careerflow_ai_chat(client, make_user, monkeypatch):
     track, tasks, u = await _setup(client, make_user)
     h = u["Aziza"]["headers"]
     assert (await client.get("/api/v1/assistant/status", headers=h)).json()["available"] is False
-    assert (await client.post("/api/v1/assistant/chat", json={"messages": [{"role": "user", "text": "Salom"}]},
-                              headers=h)).status_code == 503
+    assert (await client.post("/api/v1/assistant/chat", json={"text": "Salom"}, headers=h)).status_code == 503
 
-    seen = {}
+    seen = []
 
     async def fake_generate(key, model, parts, **kwargs):
-        seen.update(kwargs)
-        return "Yo'l bo'limida topshiriqni oching va fayl yuklang."
+        seen.append(kwargs)
+        return f"Javob {len(seen)}: Yo'l bo'limida topshiriqni oching va fayl yuklang."
     monkeypatch.setattr(ai_review, "generate", fake_generate)
     async with SessionLocal() as s:
         await settings_store.set_value(s, settings_store.GEMINI_KEY, "AIza-test-key-0000000000")
     assert (await client.get("/api/v1/assistant/status", headers=h)).json()["available"] is True
 
-    history = [{"role": "user", "text": "Topshiriqni qanday topshiraman?"}]
-    r = await client.post("/api/v1/assistant/chat", json={"messages": history}, headers=h)
-    assert r.status_code == 200 and "fayl yuklang" in r.json()["reply"]
-    assert seen["contents"][0]["parts"][0]["text"] == "Topshiriqni qanday topshiraman?"
+    await client.post(f"/api/v1/tasks/{tasks[0]['id']}/submit", json={"proof_url": "github.com/aziza/eda"}, headers=h)
+    r = await client.post("/api/v1/assistant/chat", json={"text": "Topshiriqni qanday topshiraman?"}, headers=h)
+    assert r.status_code == 200 and "fayl yuklang" in r.json()["answer"]["text"]
     # the guide and the student's own state travel with every question
-    assert "Fayl tanlash" in seen["system"] and "Aziza" in seen["system"] and tasks[0]["title"] in seen["system"]
-    assert (await client.post("/api/v1/assistant/chat", json={"messages": [{"role": "model", "text": "Salom"}]},
-                              headers=h)).status_code == 422
+    assert "Fayl tanlash" in seen[0]["system"] and "Ism: Aziza" in seen[0]["system"]
+    assert f"{tasks[0]['title']} ({tasks[0]['points']} ball) - tekshirilmoqda" in seen[0]["system"]
+    await client.post("/api/v1/assistant/chat", json={"text": "Keyingi qadamim?"}, headers=h)
+    # the conversation is kept and the model sees the earlier turns
+    assert [c["role"] for c in seen[1]["contents"]] == ["user", "model", "user"]
+    history = (await client.get("/api/v1/assistant/messages", headers=h)).json()
+    assert [m["text"] for m in history][::2] == ["Topshiriqni qanday topshiraman?", "Keyingi qadamim?"]
 
 
 async def test_busy_model_falls_back(monkeypatch):
@@ -225,3 +227,35 @@ async def test_busy_model_falls_back(monkeypatch):
         assert "not valid" in str(exc)
     else:
         raise AssertionError("a bad key must not be hidden by the fallback")
+
+
+async def test_each_conversation_is_private_but_admins_can_read_it(client, make_user, monkeypatch):
+    track, tasks, u = await _setup(client, make_user)
+    prompts = []
+
+    async def fake_generate(key, model, parts, **kwargs):
+        prompts.append((kwargs["system"], kwargs["contents"]))
+        return "OK"
+    monkeypatch.setattr(ai_review, "generate", fake_generate)
+    async with SessionLocal() as s:
+        await settings_store.set_value(s, settings_store.GEMINI_KEY, "AIza-test-key-0000000000")
+    await client.post("/api/v1/assistant/chat", json={"text": "Aziza sirli savol"}, headers=u["Aziza"]["headers"])
+    await client.post("/api/v1/assistant/chat", json={"text": "Bekzod savoli"}, headers=u["Bekzod"]["headers"])
+    (a_system, _), (b_system, b_contents) = prompts
+    assert "Ism: Aziza" in a_system and "Ism: Bekzod" in b_system
+    assert "Aziza" not in b_system and "Aziza sirli savol" not in str(b_contents)
+
+    # peers and mentors see only their own conversation; the admin pages are closed to them
+    for name in ("Bekzod", "Mentor"):
+        mine = (await client.get("/api/v1/assistant/messages", headers=u[name]["headers"])).json()
+        assert "Aziza sirli savol" not in str(mine)
+        assert (await client.get("/api/v1/admin/assistant/users", headers=u[name]["headers"])).status_code in (401, 403)
+
+    admin = await owner_headers(client)
+    people = (await client.get("/api/v1/admin/assistant/users", headers=admin)).json()
+    assert {p["full_name"] for p in people} == {"Aziza", "Bekzod"}
+    aziza = next(p for p in people if p["full_name"] == "Aziza")
+    chat = (await client.get(f"/api/v1/admin/assistant/users/{aziza['user_id']}/messages", headers=admin)).json()
+    assert [m["text"] for m in chat] == ["Aziza sirli savol", "OK"]
+    log = (await client.get("/api/v1/admin/audit", headers=admin)).json()
+    assert any(e["action"] == "assistant.view" and "Aziza" in e["target"] for e in log)

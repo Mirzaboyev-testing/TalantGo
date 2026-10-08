@@ -18,7 +18,7 @@ export default function ReviewScreen({ me, onChanged }: { me: Me; onChanged: () 
       <div className="segmented">
         <button className={view === "queue" ? "on" : ""} onClick={() => setView("queue")}>Tekshirish</button>
         <button className={view === "questions" ? "on" : ""} onClick={() => setView("questions")}>
-          Savollar{openQuestions > 0 ? ` (${openQuestions})` : ""}
+          Savollar{openQuestions > 0 && <span className="seg-count">{openQuestions}</span>}
         </button>
         <button className={view === "tasks" ? "on" : ""} onClick={() => setView("tasks")}>Topshiriqlar</button>
         <button className={view === "challenges" ? "on" : ""} onClick={() => setView("challenges")}>Chellenjlar</button>
@@ -82,8 +82,8 @@ function ReviewCard({ item, onDone }: { item: QueueItem; onDone: () => void }) {
   const tooShort = comment.trim().length < 10;
   return (
     <div className="card">
-      <div className="row between">
-        <span className="hint">{item.author_name} · {item.track_title}</span>
+      <div className="row between wrap" style={{ gap: 6 }}>
+        <span className="hint">{item.author_name} · {item.track_title.split(":")[0]}</span>
         <StatusBadge status={item.status} />
       </div>
       <b>{item.task_title}</b>

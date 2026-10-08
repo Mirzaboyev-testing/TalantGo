@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type ChatMessage, type GroupCard, type GroupDetail } from "../api";
 import { ask, backButton, BOT_URL, haptic, openLink } from "../tg";
-import { Avatar, ErrorText, message } from "../ui";
+import { Avatar, ErrorText, message, sendsOnEnter } from "../ui";
 import { Icon } from "../icons";
 
 const POLL_MS = 3000;
@@ -225,7 +225,7 @@ function Chat({ groupId, onBack }: { groupId: number; onBack: () => void }) {
       <form className="chat-input" onSubmit={(e) => { e.preventDefault(); void send(); }}>
         <textarea value={text} rows={1} maxLength={2000} placeholder="Xabar yozing…"
                   onChange={(e) => setText(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} />
+                  onKeyDown={(e) => { if (sendsOnEnter(e)) { e.preventDefault(); void send(); } }} />
         <button className="btn small" type="submit" disabled={!text.trim()} aria-label="Yuborish"><Icon name="send" size={18} /></button>
       </form>
     </div>

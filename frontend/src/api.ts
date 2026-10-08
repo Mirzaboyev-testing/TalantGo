@@ -22,7 +22,8 @@ export interface TaskQuestion {
   answer: string; answered_by: string | null; created_at: string; answered_at: string | null;
 }
 export interface AiStatus { enabled: boolean; assistant: boolean; model: string; configured: boolean; hint: string | null; models: string[] }
-export interface AiMessage { role: "user" | "model"; text: string }
+export interface AiMessage { id: number; role: "user" | "model"; text: string; created_at: string }
+export interface AiConversation { user_id: number; full_name: string; username: string | null; role: Role; track: string | null; questions: number; last_at: string }
 export interface Me {
   id: number; full_name: string; username: string | null; photo_url: string | null; role: Role;
   track: Track | null; university: string; group_name: string; bio: string; goals: string[];
@@ -272,7 +273,8 @@ export const api = {
   completeProfile: (taskId: number) => request<Submission>("POST", `/tasks/${taskId}/complete-profile`),
   upload: uploadFile,
   assistantStatus: () => request<{ available: boolean; daily_limit: number }>("GET", "/assistant/status"),
-  assistantChat: (messages: AiMessage[]) => request<{ reply: string }>("POST", "/assistant/chat", { messages }),
+  assistantMessages: () => request<AiMessage[]>("GET", "/assistant/messages"),
+  assistantChat: (text: string) => request<{ question: AiMessage; answer: AiMessage }>("POST", "/assistant/chat", { text }),
   submit: (taskId: number, proof_url: string, note: string, file_ids: number[] = []) =>
     request<Submission>("POST", `/tasks/${taskId}/submit`, { proof_url, note, file_ids }),
   questions: (taskId: number) => request<TaskQuestion[]>("GET", `/tasks/${taskId}/questions`),
@@ -322,6 +324,8 @@ export const api = {
     connectBot: () => request<{ username: string }>("POST", "/admin/bot/connect", undefined, true),
     ai: () => request<AiStatus>("GET", "/admin/ai", undefined, true),
     saveAi: (b: { enabled: boolean; assistant: boolean; model: string; api_key?: string }) => request<AiStatus>("PUT", "/admin/ai", b, true),
+    aiConversations: () => request<AiConversation[]>("GET", "/admin/assistant/users", undefined, true),
+    aiConversation: (userId: number) => request<AiMessage[]>("GET", `/admin/assistant/users/${userId}/messages`, undefined, true),
     testAi: () => request<{ model: string; reply: string }>("POST", "/admin/ai/test", undefined, true),
     exportUsers: () => download("/admin/export/users.csv", "careerflow-talabalar.csv"),
     inbox: () => request<{ verifications: number; companies: number; jobs: number; staff: number }>("GET", "/admin/inbox", undefined, true),

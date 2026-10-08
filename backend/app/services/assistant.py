@@ -2,7 +2,7 @@
 
 It runs on the same Gemini key as the review. Every request carries a guide to the whole platform and
 a short snapshot of the student's own state, so it can answer "what should I do next?" concretely.
-The conversation itself lives in the app; the server keeps nothing but a daily message count.
+Conversations are stored (api/assistant.py); the person and the admins can read them, nobody else.
 """
 from datetime import UTC, datetime
 
@@ -16,20 +16,9 @@ from .progress import current_streak, rank_of, today
 from .rules import get_rules
 
 DAILY_LIMIT = 60
-_usage: dict[int, tuple[str, int]] = {}
 
 STATUS_LABEL = {Status.pending: "tekshirilmoqda", Status.peer_verified: "tasdiqlangan",
                 Status.mentor_verified: "mentor tasdiqlagan", Status.rejected: "qaytarilgan, qayta topshirish mumkin"}
-
-
-def take_turn(user_id: int) -> bool:
-    """Counts a message against the student's daily allowance; False once it is used up."""
-    day = today().isoformat()
-    used_day, count = _usage.get(user_id, (day, 0))
-    count = count + 1 if used_day == day else 1
-    _usage[user_id] = (day, count)
-    return count <= DAILY_LIMIT
-
 
 GUIDE = """CareerFlow nima: talabalar uchun karyera platformasi. Talaba yo'nalish (yo'l) tanlaydi, har hafta amaliy topshiriq bajaradi,
 ishini AI yordamchi, tengdoshlar va mentor tekshiradi. Tasdiqlangan ishlar avtomatik CV (portfolio)ga tushadi va har bir ishda
