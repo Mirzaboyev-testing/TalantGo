@@ -324,6 +324,31 @@ async def save_bot_token(body: BotTokenIn, actor: OwnerActor, session: Session) 
     return await _bot_status(session)
 
 
+@router.put("/bot/previous", response_model=BotStatusOut)
+async def set_previous_bot(body: BotTokenIn, actor: OwnerActor, session: Session) -> BotStatusOut:
+    """Brings back an old bot as a signpost to the current one (when its token was replaced without
+    being kept): people who open it are sent to the new bot and can still sign in."""
+    current = await settings_store.get_value(session, settings_store.BOT_TOKEN)
+    if not current:
+        raise HTTPException(400, "Avval ilova botining tokenini saqlang")
+    if body.token == current:
+        raise HTTPException(400, "Bu token ilovaning hozirgi botiniki. Eski botning tokenini kiriting")
+    try:
+        me = await telegram_bot.call(body.token, "getMe")
+    except telegram_bot.BotError as exc:
+        raise HTTPException(400, f"Token ishlamadi: {exc}") from exc
+    await settings_store.set_value(session, settings_store.PREVIOUS_BOT_TOKEN, body.token)
+    await bots.set_info(session, previous_username=me.get("username"))
+    if settings.public_url.startswith("https://"):
+        try:
+            await telegram_bot.retire(body.token, settings.public_url, await bots.username(session))
+        except telegram_bot.BotError as exc:
+            raise HTTPException(400, f"Token saqlandi, lekin eski botni sozlab bo'lmadi: {exc}. «Botni ulash» ni bosing") from exc
+    audit(session, actor, "bot.previous.set", f"@{me.get('username')}", "eski bot yangisiga yo'naltiradi")
+    await session.commit()
+    return await _bot_status(session)
+
+
 @router.post("/bot/previous/forget", response_model=BotStatusOut)
 async def forget_previous_bot(actor: OwnerActor, session: Session) -> BotStatusOut:
     """Stops the old bot (after everyone has moved): it no longer answers or carries messages."""

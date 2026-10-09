@@ -119,3 +119,22 @@ async def test_the_old_bot_can_be_retired_later(client, monkeypatch):
     assert (OLD, "deleteWebhook") in [(t, m) for t, m, _ in calls]
     assert (await _login(client, OLD)).status_code == 401
     assert (await _login(client, NEW)).status_code == 200
+
+
+async def test_an_old_bot_replaced_without_being_kept_can_be_brought_back(client, monkeypatch):
+    calls = fake_telegram(monkeypatch)
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "public_url", "https://talantgo.test")
+    admin = await owner_headers(client)
+    await client.put("/api/v1/admin/bot", json={"token": NEW}, headers=admin)      # the old token was simply overwritten
+    assert (await _login(client, OLD)).status_code == 401
+    assert (await client.put("/api/v1/admin/bot/previous", json={"token": NEW}, headers=admin)).status_code == 400
+
+    status = (await client.put("/api/v1/admin/bot/previous", json={"token": OLD}, headers=admin)).json()
+    assert status["username"] == "talantgo_bot" and status["previous_username"] == "create_carieer_bot"
+    old = await _login(client, OLD)
+    assert old.status_code == 200 and old.json()["moved_to"] == "talantgo_bot"
+    assert (OLD, telegram_bot.OLD_BOT_NAME) in {(t, p.get("name")) for t, m, p in calls if m == "setMyName"}
+    update = {"message": {"from": {"id": 5555}, "chat": {"id": 5555, "type": "private"}, "text": "/start"}}
+    r = await client.post("/telegram/webhook", json=update, headers={"X-Telegram-Bot-Api-Secret-Token": telegram_bot.webhook_secret(OLD)})
+    assert r.status_code == 200 and calls[-1][:2] == (OLD, "sendMessage")

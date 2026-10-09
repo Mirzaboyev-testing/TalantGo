@@ -93,6 +93,7 @@ export function BotCard() {
           </div>
         </div>
       )}
+      {status.configured && !status.previous_username && <PreviousBot onSaved={(s) => { setStatus(s); setResult("Eski bot ulandi: endi unga kirganlar yangi botga yo'naltiriladi."); }} />}
       <label>Yangi token (BotFather beradi; saqlangach faqat qisqartirilgan ko'rinishi qoladi)</label>
       <div className="hint">Boshqa botning tokeni saqlansa, ilova o'sha botga o'tadi, eski bot esa yangisiga yo'naltiruvchi bo'lib qoladi. Avval BotFather'da yangi bot uchun /setdomain qiling.</div>
       <input type="password" value={token} placeholder="123456789:AA…" autoComplete="off" onChange={(e) => setToken(e.target.value.trim())} />
@@ -228,11 +229,42 @@ export function AiConversations() {
   );
 }
 
+/** For an old bot whose token was replaced without being kept: turns it back on as a signpost. */
+function PreviousBot({ onSaved }: { onSaved: (s: BotStatus) => void }) {
+  const [open, setOpen] = useState(false);
+  const [token, setToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  if (!open) {
+    return <button className="btn small ghost" style={{ marginTop: 10 }} onClick={() => setOpen(true)}>Eski botni yo'naltiruvchi qilish</button>;
+  }
+  async function save() {
+    setBusy(true); setError("");
+    try { onSaved(await api.admin.setPreviousBot(token)); setToken(""); setOpen(false); }
+    catch (e) { setError(message(e)); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div className="notice" style={{ marginTop: 10 }}>
+      <b>Eski bot tokeni</b>
+      <p style={{ margin: "4px 0 8px" }}>Ilova yangi botga o'tgan bo'lsa, eski botning tokenini shu yerga qo'ying: unga yozganlar yangi botga
+        yo'naltiriladi, eski botdan ochilgan ilova ishlayveradi, yangi botni hali ochmaganlarga xabarlar eski bot orqali boradi.
+        Token: BotFather → /mybots → eski bot → API Token.</p>
+      <input type="password" value={token} placeholder="123456789:AA…" autoComplete="off" onChange={(e) => setToken(e.target.value.trim())} />
+      <ErrorText error={error} />
+      <div className="row wrap" style={{ marginTop: 8 }}>
+        <button className="btn small" disabled={busy || !token} onClick={save}>{busy ? "Ulanmoqda…" : "Eski botni ulash"}</button>
+        <button className="btn small ghost" onClick={() => setOpen(false)}>Bekor qilish</button>
+      </div>
+    </div>
+  );
+}
+
 const ACTION_LABEL: Record<string, string> = {
   "user.update": "Foydalanuvchi o'zgartirildi", "user.points": "Ball tuzatildi", "submission.delete": "Ish o'chirildi",
   "track.create": "Yo'nalish qo'shildi", "track.update": "Yo'nalish o'zgartirildi", "task.create": "Topshiriq qo'shildi",
   "task.update": "Topshiriq o'zgartirildi", "announcement.send": "E'lon yuborildi", "rules.update": "Qoidalar o'zgartirildi",
-  "bot.token": "Bot tokeni almashtirildi", "ai.update": "AI sozlamalari o'zgartirildi", "assistant.view": "TalantGo AI suhbati ko'rildi", "bot.connect": "Bot ulandi", "export.users": "Ro'yxat yuklab olindi",
+  "bot.token": "Bot tokeni almashtirildi", "bot.previous.set": "Eski bot yo'naltiruvchi qilindi", "bot.previous.forget": "Eski bot to'xtatildi", "ai.update": "AI sozlamalari o'zgartirildi", "assistant.view": "TalantGo AI suhbati ko'rildi", "bot.connect": "Bot ulandi", "export.users": "Ro'yxat yuklab olindi",
 };
 
 export function AuditCard() {

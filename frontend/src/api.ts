@@ -324,6 +324,7 @@ export const api = {
     saveBot: (token: string) => request<BotStatus>("PUT", "/admin/bot", { token }, true),
     testBot: () => request<{ username: string }>("POST", "/admin/bot/test", undefined, true),
     connectBot: () => request<{ username: string; previous_username: string | null; previous_error: string | null }>("POST", "/admin/bot/connect", undefined, true),
+    setPreviousBot: (token: string) => request<BotStatus>("PUT", "/admin/bot/previous", { token }, true),
     forgetPreviousBot: () => request<BotStatus>("POST", "/admin/bot/previous/forget", undefined, true),
     ai: () => request<AiStatus>("GET", "/admin/ai", undefined, true),
     saveAi: (b: { enabled: boolean; assistant: boolean; model: string; api_key?: string }) => request<AiStatus>("PUT", "/admin/ai", b, true),
