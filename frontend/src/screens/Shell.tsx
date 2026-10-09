@@ -13,7 +13,7 @@ export default function Shell<T extends string>({ tabs, active, onChange, user, 
   return (
     <div className="shell">
       <aside className="side-nav">
-        <div className="side-brand"><span className="brand-mark">C</span>CareerFlow</div>
+        <div className="side-brand"><span className="brand-mark">T</span>TalantGo</div>
         {tabs.map((t) => (
           <button key={t.id} className={`side-link ${active === t.id ? "on" : ""}`} onClick={() => onChange(t.id)}>
             <Icon name={t.icon} />{t.label}{t.badge ? <span className="dot">{t.badge}</span> : null}

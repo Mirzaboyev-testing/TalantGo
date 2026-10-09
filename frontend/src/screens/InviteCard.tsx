@@ -6,7 +6,7 @@ import { BOT_URL, haptic, openLink } from "../tg";
 export default function InviteCard({ me, compact = false }: { me: Me; compact?: boolean }) {
   const [copied, setCopied] = useState(false);
   const link = `${BOT_URL}?start=${me.invite_code}`;
-  const text = "Men CareerFlow'da o'qish davomida tajriba yig'yapman. Sen ham qo'shil, birga o'samiz!";
+  const text = "Men TalantGo'da o'qish davomida tajriba yig'yapman. Sen ham qo'shil, birga o'samiz!";
 
   async function copy() {
     try {

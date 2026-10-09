@@ -53,6 +53,9 @@ STATEMENTS = [
     "ALTER TABLE submissions ADD COLUMN IF NOT EXISTS ai_state varchar(16) NOT NULL DEFAULT ''",
     "ALTER TABLE submissions ADD COLUMN IF NOT EXISTS ai_note text NOT NULL DEFAULT ''",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS name_set_by_user boolean NOT NULL DEFAULT false",
+    # the product was renamed from CareerFlow to TalantGo (2026-10-09)
+    "UPDATE groups SET name = 'TalantGo hamjamiyati' WHERE auto_join_all AND name = 'CareerFlow hamjamiyati'",
+    "UPDATE users SET verified_by = 'TalantGo' WHERE verified_by = 'CareerFlow'",
 ]
 
 

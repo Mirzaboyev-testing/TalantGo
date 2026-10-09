@@ -10,7 +10,7 @@ const STARTERS = [
   "Ball va reyting qanday hisoblanadi?",
 ];
 
-/** A small "CareerFlow.ai" button in the corner; the chat opens over the app and keeps its history until reload. */
+/** A small "TalantGo AI" button in the corner; the chat opens over the app and keeps its history until reload. */
 export default function Assistant() {
   const [available, setAvailable] = useState(false);
   const [open, setOpen] = useState(false);
@@ -66,18 +66,18 @@ export default function Assistant() {
   if (!open) {
     if (typing) return null;
     return (
-      <button className="ai-fab" onClick={() => setOpen(true)} aria-label="CareerFlow.ai yordamchisini ochish">
-        <Icon name="spark" size={18} />CareerFlow.ai
+      <button className="ai-fab" onClick={() => setOpen(true)} aria-label="TalantGo AI yordamchisini ochish">
+        <Icon name="spark" size={18} />TalantGo AI
       </button>
     );
   }
 
   return (
-    <div className="ai-panel" role="dialog" aria-label="CareerFlow.ai">
+    <div className="ai-panel" role="dialog" aria-label="TalantGo AI">
       <div className="ai-head">
         <span className="ai-mark"><Icon name="spark" size={18} /></span>
         <div className="grow">
-          <b>CareerFlow.ai</b>
+          <b>TalantGo AI</b>
           <div className="hint">Suhbatingizni faqat siz va platforma admini ko'radi</div>
         </div>
         <button className="icon-btn" aria-label="Yopish" onClick={() => setOpen(false)}><Icon name="close" size={20} /></button>
@@ -85,7 +85,7 @@ export default function Assistant() {
       <div className="ai-body">
         {loaded && messages.length === 0 && (
           <div className="ai-intro">
-            <p>Salom! Men CareerFlow.ai. Ilovadan qanday foydalanish, keyingi qadamingiz, topshiriqlar, Excel, SQL, Power BI va CV haqida so'rashingiz mumkin.</p>
+            <p>Salom! Men TalantGo AI. Ilovadan qanday foydalanish, keyingi qadamingiz, topshiriqlar, Excel, SQL, Power BI va CV haqida so'rashingiz mumkin.</p>
             <div className="ai-starters">
               {STARTERS.map((s) => <button key={s} className="chip" onClick={() => send(s)}>{s}</button>)}
             </div>

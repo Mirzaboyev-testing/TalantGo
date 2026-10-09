@@ -1,5 +1,5 @@
 export const CONSENT_TEXT =
-  "Shaxsga doir ma'lumotlarim (ism, universitet, ko'nikmalar, natijalar) CareerFlow tomonidan " +
+  "Shaxsga doir ma'lumotlarim (ism, universitet, ko'nikmalar, natijalar) TalantGo tomonidan " +
   "«Shaxsga doir ma'lumotlar to'g'risida»gi qonunga muvofiq qayta ishlanishiga roziman. " +
   "Profilim ish beruvchilarga faqat men o'zim ochiq qilganimda ko'rinadi.";
 

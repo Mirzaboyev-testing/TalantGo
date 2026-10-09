@@ -32,7 +32,7 @@ _limit = asyncio.Semaphore(2)            # free-tier keys allow only a few reque
 
 class AiConfig(BaseModel):
     enabled: bool = False                    # review submissions
-    assistant: bool = True                   # the CareerFlow.ai chat for students
+    assistant: bool = True                   # the TalantGo AI chat for students
     model: str = Field(default=MODELS[0], pattern=r"^[a-z0-9][a-z0-9.\-]{2,60}$")
 
 
@@ -126,7 +126,7 @@ def parse_verdict(text: str) -> Verdict:
 
 # --------------------------------------------------------------------------- reviewing a submission
 
-SYSTEM = """Siz CareerFlow platformasida talabalar topshirig'ini birinchi bo'lib tekshiradigan mentor-yordamchisiz.
+SYSTEM = """Siz TalantGo platformasida talabalar topshirig'ini birinchi bo'lib tekshiradigan mentor-yordamchisiz.
 Talabalar iqtisodiyot, menejment va IT yo'nalishlarida o'qiydi va Excel, Power BI, SQL, Stata, Python bo'yicha amaliy ish qiladi.
 Vazifangiz: topshiriq sharti va mezonlariga qarab ish haqiqatan bajarilganini baholash.
 Qoidalar:

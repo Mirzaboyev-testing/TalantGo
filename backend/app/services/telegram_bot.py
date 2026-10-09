@@ -9,7 +9,7 @@ API = "https://api.telegram.org/bot{token}/{method}"
 # Shown in an empty chat before the user presses Start ("What can this bot do?"), max 512 characters.
 DESCRIPTION = (
     "🚀 Kelajagingni biz bilan qur!\n\n"
-    "CareerFlow: o'qish davomida haqiqiy tajriba to'playdigan joy.\n\n"
+    "TalantGo: o'qish davomida haqiqiy tajriba to'playdigan joy.\n\n"
     "🧭 Yo'nalishingni tanla va har hafta topshiriq bajar\n"
     "✅ Ishlaring tengdosh va mentor tomonidan tasdiqlanadi\n"
     "💼 Amaliyot va birinchi ishni top\n\n"
@@ -20,7 +20,7 @@ SHORT_DESCRIPTION = "Kelajagingni biz bilan qur: tajriba, amaliyot va birinchi i
 
 WELCOME_CAPTION = (
     "<b>🚀 Kelajagingni biz bilan qur!</b>\n\n"
-    "CareerFlow: o'qish davomida haqiqiy tajriba to'plab, diplom bilan birga isbotlangan portfolio "
+    "TalantGo: o'qish davomida haqiqiy tajriba to'plab, diplom bilan birga isbotlangan portfolio "
     "olib chiqadigan joy.\n\n"
     "🧭 Yo'nalishingni tanla va har hafta topshiriq bajar\n"
     "✅ Ishlaring tengdosh va mentor tomonidan tasdiqlanadi\n"
@@ -53,7 +53,7 @@ def webhook_secret(token: str) -> str:
 async def connect(token: str, public_url: str) -> dict:
     me = await call(token, "getMe")
     await call(token, "setChatMenuButton",
-               menu_button={"type": "web_app", "text": "CareerFlow", "web_app": {"url": public_url}})
+               menu_button={"type": "web_app", "text": "TalantGo", "web_app": {"url": public_url}})
     await call(token, "setWebhook", url=f"{public_url}/telegram/webhook",
                secret_token=webhook_secret(token), allowed_updates=["message"], drop_pending_updates=True)
     await call(token, "setMyDescription", description=DESCRIPTION)

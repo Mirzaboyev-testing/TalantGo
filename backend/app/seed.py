@@ -144,11 +144,15 @@ UNIVERSITIES: list[tuple[str, str, str]] = [
 
 
 # A first win in 15 minutes, placed before week 1 of every track (sort_order 0).
+COMMUNITY_GROUP = "TalantGo hamjamiyati"
 OLD_STARTER_DESCRIPTION = ("CareerFlow'da professional profilingizni to'ldiring: qisqa sarlavha, o'zingiz haqingizda 2-3 gap, "
                            "kamida 3 ta ko'nikma va tillar. CV'ingizni ochiq qiling. Ish beruvchi sizni birinchi shu yerda ko'radi. "
                            "15 daqiqalik ish, shu oynaning o'zida bajariladi.")
+OLD_STARTER_DESCRIPTION_2 = ("CareerFlow'da professional profilingizni to'ldiring: ism va familiya, sohangiz, o'zingiz haqingizda 1-2 gap, "
+                             "ko'nikmalar va tillar. Ish beruvchi sizni birinchi shu yerda ko'radi. "
+                             "5 daqiqalik ish, shu oynaning o'zida bajariladi.")
 STARTER = ("Start: professional profilingiz",
-           "CareerFlow'da professional profilingizni to'ldiring: ism va familiya, sohangiz, o'zingiz haqingizda 1-2 gap, "
+           "TalantGo'da professional profilingizni to'ldiring: ism va familiya, sohangiz, o'zingiz haqingizda 1-2 gap, "
            "ko'nikmalar va tillar. Ish beruvchi sizni birinchi shu yerda ko'radi. "
            "5 daqiqalik ish, shu oynaning o'zida bajariladi.",
            "Hech narsa yuklash shart emas: profil to'lsa, tizim o'zi tekshiradi va ball beradi.", 5)
@@ -162,7 +166,8 @@ async def add_starters(session: AsyncSession) -> None:
                                                           Task.title == OLD_STARTER_TITLE))).scalars():
         task.kind, task.description, task.proof_hint = "profile", description, proof_hint
     for task in (await session.execute(select(Task).where(Task.kind == "profile",
-                                                          Task.description == OLD_STARTER_DESCRIPTION))).scalars():
+                                                          Task.description.in_([OLD_STARTER_DESCRIPTION,
+                                                                                OLD_STARTER_DESCRIPTION_2])))).scalars():
         task.description = description
     have = set((await session.execute(select(Task.track_id).where(Task.sort_order == 0))).scalars())
     for track_id in (await session.execute(select(Track.id))).scalars():
@@ -194,7 +199,7 @@ async def seed(session: AsyncSession) -> None:
 async def add_official_groups(session: AsyncSession) -> None:
     """One group for the whole community and one per track; members are added when they open Groups."""
     if not await session.scalar(select(Group.id).where(Group.auto_join_all)):
-        session.add(Group(name="CareerFlow hamjamiyati", is_private=False, is_official=True, auto_join_all=True,
+        session.add(Group(name=COMMUNITY_GROUP, is_private=False, is_official=True, auto_join_all=True,
                           description="Talabalar, mentorlar, universitetlar va kompaniyalar: hamma shu yerda."))
     existing = {g.track_id: g for g in (await session.execute(
         select(Group).where(Group.is_official, Group.track_id.isnot(None)))).scalars()}

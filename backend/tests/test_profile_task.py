@@ -32,7 +32,7 @@ async def test_profile_task_checks_the_profile_and_awards_points(client, make_us
 
     cv = (await client.get("/api/v1/me/cv", headers=u["headers"])).json()
     assert cv["headline"] == PROFILE["headline"]
-    assert cv["achievements"][0]["verified_by"] == [{"name": "CareerFlow (avtomatik)", "kind": "system"}]
+    assert cv["achievements"][0]["verified_by"] == [{"name": "TalantGo (avtomatik)", "kind": "system"}]
 
 
 async def test_system_checked_work_is_not_in_review_queues(client, make_user):

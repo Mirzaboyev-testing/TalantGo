@@ -39,7 +39,7 @@ export default function WebLogin({ dev, onTelegram, onDev }: {
     <div className="login">
       <div className="login-card">
         <span className="brand-mark" style={{ display: "grid" }}>C</span>
-        <h1 style={{ marginBottom: 6 }}>CareerFlow</h1>
+        <h1 style={{ marginBottom: 6 }}>TalantGo</h1>
         <p className="hint" style={{ marginTop: 0 }}>O'qish davomida haqiqiy tajriba, tasdiqlangan portfolio va birinchi ish.</p>
         <div className="card" style={{ marginTop: 18 }}>
           <b>Kirish</b>

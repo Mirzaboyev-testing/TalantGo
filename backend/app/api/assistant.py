@@ -1,4 +1,4 @@
-"""CareerFlow.ai chat (see services/assistant.py).
+"""TalantGo AI chat (see services/assistant.py).
 
 Each person has one conversation, stored on the server: only they and the platform admins can read it.
 Peers and mentors never see another person's conversation.
@@ -49,7 +49,7 @@ async def my_messages(user: CurrentUser, session: Session) -> list[dict]:
 async def chat(body: ChatIn, user: CurrentUser, session: Session) -> dict:
     available = await _key_if_available(session)
     if available is None:
-        raise HTTPException(503, "CareerFlow.ai hozir o'chirilgan")
+        raise HTTPException(503, "TalantGo AI hozir o'chirilgan")
     day_start = datetime.combine(today(), datetime.min.time(), TASHKENT)
     asked_today = await session.scalar(select(func.count()).select_from(AssistantMessage).where(
         AssistantMessage.user_id == user.id, AssistantMessage.role == "user", AssistantMessage.created_at >= day_start))
@@ -66,7 +66,7 @@ async def chat(body: ChatIn, user: CurrentUser, session: Session) -> dict:
         reply = await ai_review.generate(key, model, [], contents=contents, system=system, json_mode=False,
                                          temperature=0.5, timeout=30)
     except ai_review.AiError as exc:
-        raise HTTPException(502, f"CareerFlow.ai javob bera olmadi: {exc}") from exc
+        raise HTTPException(502, f"TalantGo AI javob bera olmadi: {exc}") from exc
     reply = reply.strip() or "Kechirasiz, javob tayyorlay olmadim. Savolni boshqacharoq yozib ko'ring."
 
     question = AssistantMessage(user_id=user.id, role="user", text=body.text.strip())

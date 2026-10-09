@@ -418,7 +418,7 @@ async def export_users(actor: AdminActor, session: Session) -> StreamingResponse
     audit(session, actor, "export.users", f"{len(rows)} qator")
     await session.commit()
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv; charset=utf-8",
-                             headers={"Content-Disposition": 'attachment; filename="careerflow-talabalar.csv"'})
+                             headers={"Content-Disposition": 'attachment; filename="talantgo-talabalar.csv"'})
 
 
 # --------------------------------------------------------------------------- moderation queues
@@ -452,7 +452,7 @@ async def decide(user_id: int, body: ReviewDecisionIn, actor: AdminActor, sessio
         raise HTTPException(404, "Foydalanuvchi topilmadi")
     audit(session, actor, "verification.decide", f"{student.full_name} (#{student.id})",
           ("tasdiqlandi" if body.approve else "rad etildi") + (f": {body.note}" if body.note else ""))
-    await decide_verification(session, student, body.approve, "CareerFlow", body.note.strip())
+    await decide_verification(session, student, body.approve, "TalantGo", body.note.strip())
     return {"verification": student.verification}
 
 
@@ -730,7 +730,7 @@ async def export_applications(actor: AdminActor, session: Session) -> StreamingR
     audit(session, actor, "export.applications", f"{len(rows)} qator")
     await session.commit()
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv; charset=utf-8",
-                             headers={"Content-Disposition": 'attachment; filename="careerflow-arizalar.csv"'})
+                             headers={"Content-Disposition": 'attachment; filename="talantgo-arizalar.csv"'})
 
 
 # --------------------------------------------------------------------------- groups

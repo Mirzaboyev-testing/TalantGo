@@ -37,7 +37,7 @@ async def lifespan(_: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title="CareerFlow API", version="0.1.0", lifespan=lifespan,
+app = FastAPI(title="TalantGo API", version="0.1.0", lifespan=lifespan,
               docs_url="/api/docs" if settings.app_env == "dev" else None, openapi_url="/api/openapi.json")
 
 for router in (auth.router, admin_auth.router, people.router, learning.router, groups.router, challenges.router, work.router, assistant.router, jobs.router, employer.router, university.router,

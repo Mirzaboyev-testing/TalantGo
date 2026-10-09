@@ -48,7 +48,7 @@ export default function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
   return (
     <div className="auth-wrap">
       <div className="auth-card">
-        <div className="admin-brand" style={{ justifyContent: "center" }}><i>C</i>CareerFlow admin</div>
+        <div className="admin-brand" style={{ justifyContent: "center" }}><i>T</i>TalantGo admin</div>
         {pending ? (
           <div className="panel">
             <h3 style={{ marginTop: 0 }}>So'rov yuborildi</h3>

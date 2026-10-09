@@ -143,7 +143,7 @@ export default function CareerProfile({ me, onSaved }: { me: Me; onSaved: (m: Me
           )}
         </div>
         <p className="hint">
-          Tasdiqlashni universitetingiz karyera markazi yoki CareerFlow admini HEMIS ma'lumotlari bo'yicha qiladi.
+          Tasdiqlashni universitetingiz karyera markazi yoki TalantGo admini HEMIS ma'lumotlari bo'yicha qiladi.
           Tasdiqdan keyin universitet, fakultet yoki talaba ID o'zgarsa, qayta tasdiqlash kerak bo'ladi.
         </p>
       </div>

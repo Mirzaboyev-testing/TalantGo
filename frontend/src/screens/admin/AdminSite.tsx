@@ -94,7 +94,7 @@ export default function AdminSite() {
       <div className="admin-shell">
         {menuOpen && <div className="admin-backdrop" onClick={() => setMenuOpen(false)} />}
         <aside className={`admin-side ${menuOpen ? "open" : ""}`}>
-          <div className="admin-brand"><i>C</i>CareerFlow</div>
+          <div className="admin-brand"><i>T</i>TalantGo</div>
           {MENU.map((g) => {
             const pages = g.pages.filter((p) => !p.ownerOnly || me.is_owner);
             if (pages.length === 0) return null;

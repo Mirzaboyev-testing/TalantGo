@@ -29,7 +29,7 @@ async def build_cv(session: AsyncSession, user: User) -> dict:
             "points": sub.points_awarded,
             "verified_at": sub.verified_at.isoformat() if sub.verified_at else None,
             "verified_by": [{"name": r.reviewer_name, "kind": r.kind.value} for r in approvers]
-                           or [{"name": "CareerFlow (avtomatik)", "kind": "system"}],
+                           or [{"name": "TalantGo (avtomatik)", "kind": "system"}],
             "mentor_comment": next((r.comment for r in approvers if r.kind is ReviewKind.mentor), None),
         })
 

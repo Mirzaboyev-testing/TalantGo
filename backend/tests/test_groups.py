@@ -13,7 +13,7 @@ async def test_everyone_is_in_the_community_and_their_track_group(client, make_u
     track = await on_track(client, a)
     groups = (await client.get("/api/v1/groups", headers=a["headers"])).json()
     names = [g["name"] for g in groups["mine"]]
-    assert names[0] == "CareerFlow hamjamiyati"
+    assert names[0] == "TalantGo hamjamiyati"
     assert any(track["title"].split(":")[0] in n for n in names)
     # other tracks' groups are open to join, not forced
     assert len(groups["discover"]) == 4

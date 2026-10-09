@@ -28,7 +28,7 @@ export default function Welcome({ me, initial, onStudent, onChanged }: {
   return (
     <div>
       <h1>Salom, {me.full_name.split(" ")[0]}!</h1>
-      <p className="hint">CareerFlow: talabalar tasdiqlangan ko'nikmalar bilan amaliyot va birinchi ishni topadigan joy. Siz kimsiz?</p>
+      <p className="hint">TalantGo: talabalar tasdiqlangan ko'nikmalar bilan amaliyot va birinchi ishni topadigan joy. Siz kimsiz?</p>
       <div className="card tap" onClick={onStudent}>
         <div className="row"><span className="avatar"><Icon name="school" /></span><div><b>Talabaman</b><div className="hint">Yo'l tanlayman, portfolio yig'aman, amaliyot va ish topaman</div></div></div>
       </div>

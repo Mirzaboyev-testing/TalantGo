@@ -1,4 +1,4 @@
-"""CareerFlow.ai: the in-app helper students ask about the platform, their next step and their studies.
+"""TalantGo AI: the in-app helper students ask about the platform, their next step and their studies.
 
 It runs on the same Gemini key as the review. Every request carries a guide to the whole platform and
 a short snapshot of the student's own state, so it can answer "what should I do next?" concretely.
@@ -20,7 +20,7 @@ DAILY_LIMIT = 60
 STATUS_LABEL = {Status.pending: "tekshirilmoqda", Status.peer_verified: "tasdiqlangan",
                 Status.mentor_verified: "mentor tasdiqlagan", Status.rejected: "qaytarilgan, qayta topshirish mumkin"}
 
-GUIDE = """CareerFlow nima: talabalar uchun karyera platformasi. Talaba yo'nalish (yo'l) tanlaydi, har hafta amaliy topshiriq bajaradi,
+GUIDE = """TalantGo nima: talabalar uchun karyera platformasi. Talaba yo'nalish (yo'l) tanlaydi, har hafta amaliy topshiriq bajaradi,
 ishini AI yordamchi, tengdoshlar va mentor tekshiradi. Tasdiqlangan ishlar avtomatik CV (portfolio)ga tushadi va har bir ishda
 kim tasdiqlagani ko'rinadi. Kompaniyalar shu ishonchli portfolio bo'yicha amaliyot va ish taklif qiladi. Ilova Telegram ichida
 (@create_carieer_bot) va kompyuterda sayt sifatida ({url}) ishlaydi; saytga Telegram orqali kiriladi. Bildirishnomalar botga keladi.
@@ -53,7 +53,7 @@ Do'stlarni taklif qilish: Yo'l sahifasidagi taklif kartochkasidagi havolani yubo
 Mentorlar: topshiriq qo'shadi, chellenj tashkil qiladi, savollarga javob beradi, ishlarni tekshiradi (Mentor bo'limi).
 Kompaniya HR yoki universitet karyera markazi xodimi maxsus havola orqali ro'yxatdan o'tadi; buni admin beradi."""
 
-RULES = """Siz CareerFlow.ai: CareerFlow platformasining yordamchisisiz.
+RULES = """Siz TalantGo AI: TalantGo platformasining yordamchisisiz.
 Vazifangiz: talabaga platformadan foydalanishni tushuntirish, keyingi qadamni aniq aytish, o'qish va karyera bo'yicha
 (Excel, Power BI, SQL, Stata, Python, statistika, CV, intervyu, amaliyot) maslahat berish.
 Qoidalar:

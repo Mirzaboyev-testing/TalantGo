@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
+from ..seed import COMMUNITY_GROUP
 from ..models import Group, GroupMember, GroupMessage, Role, User
 from ..services import notify
 from .deps import CurrentUser, Session
@@ -101,7 +102,7 @@ async def my_groups(user: CurrentUser, session: Session) -> dict:
         open_groups = open_groups.where(Group.id.notin_(joined))
     discover = (await session.execute(open_groups)).scalars().all()
     cards = [await _group_card(session, g, m, user) for g, m in mine]
-    cards.sort(key=lambda c: (not c["is_official"] or c["name"] != "CareerFlow hamjamiyati",
+    cards.sort(key=lambda c: (not c["is_official"] or c["name"] != COMMUNITY_GROUP,
                               -(c["last_message"]["created_at"].timestamp() if c["last_message"] else 0)))
     return {"mine": cards, "discover": [await _group_card(session, g, None, user) for g in discover]}
 

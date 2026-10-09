@@ -131,14 +131,14 @@ export function AiCard({ canEdit }: { canEdit: boolean }) {
       <label>Model</label>
       <input value={model} list="ai-models" disabled={!canEdit} onChange={(e) => setModel(e.target.value.trim())} />
       <datalist id="ai-models">{status.models.map((m) => <option key={m} value={m} />)}</datalist>
-      <div className="hint">Ishlarni tekshirish uchun. gemini-3.5-flash tez va barqaror (tavsiya etiladi); gemini-3.8-flash aniqroq, lekin sekin va ba'zan band bo'ladi. Tanlangan model band bo'lsa, avtomatik gemini-3.5-flash ishlatiladi. CareerFlow.ai chat doim tezkor gemini-3.5-flash'da ishlaydi.</div>
+      <div className="hint">Ishlarni tekshirish uchun. gemini-3.5-flash tez va barqaror (tavsiya etiladi); gemini-3.8-flash aniqroq, lekin sekin va ba'zan band bo'ladi. Tanlangan model band bo'lsa, avtomatik gemini-3.5-flash ishlatiladi. TalantGo AI chat doim tezkor gemini-3.5-flash'da ishlaydi.</div>
       <label className="row" style={{ gap: 8, marginTop: 12, cursor: canEdit ? "pointer" : "default" }}>
         <input type="checkbox" checked={enabled} disabled={!canEdit} style={{ width: "auto" }} onChange={(e) => setEnabled(e.target.checked)} />
         Ishlarni AI bilan tekshirish
       </label>
       <label className="row" style={{ gap: 8, marginTop: 6, cursor: canEdit ? "pointer" : "default" }}>
         <input type="checkbox" checked={chat} disabled={!canEdit} style={{ width: "auto" }} onChange={(e) => setChat(e.target.checked)} />
-        Talabalar uchun CareerFlow.ai chat (ilova burchagidagi tugma, kuniga 60 ta savolgacha)
+        Talabalar uchun TalantGo AI chat (ilova burchagidagi tugma, kuniga 60 ta savolgacha)
       </label>
       <div className="row wrap" style={{ marginTop: 10 }}>
         {canEdit && (
@@ -182,7 +182,7 @@ export function AiConversations() {
         {!chat && !error && <div className="hint">Yuklanmoqda…</div>}
         {chat?.map((m) => (
           <div key={m.id} className={`review ${m.role === "user" ? "" : "yes"}`}>
-            <div className="hint">{m.role === "user" ? open.full_name : "CareerFlow.ai"} · {new Date(m.created_at).toLocaleString()}</div>
+            <div className="hint">{m.role === "user" ? open.full_name : "TalantGo AI"} · {new Date(m.created_at).toLocaleString()}</div>
             <div style={{ whiteSpace: "pre-wrap" }}>{m.text}</div>
           </div>
         ))}
@@ -191,7 +191,7 @@ export function AiConversations() {
   }
   return (
     <div className="card">
-      <b>CareerFlow.ai suhbatlari</b>
+      <b>TalantGo AI suhbatlari</b>
       <p className="hint">Har bir talaba va mentorning suhbati alohida, ularni boshqa foydalanuvchilar ko'rmaydi. Bu yerda faqat adminlar ko'radi.</p>
       <ErrorText error={error} />
       {rows?.length === 0 && <div className="hint">Hali hech kim yozmagan.</div>}
@@ -212,7 +212,7 @@ const ACTION_LABEL: Record<string, string> = {
   "user.update": "Foydalanuvchi o'zgartirildi", "user.points": "Ball tuzatildi", "submission.delete": "Ish o'chirildi",
   "track.create": "Yo'nalish qo'shildi", "track.update": "Yo'nalish o'zgartirildi", "task.create": "Topshiriq qo'shildi",
   "task.update": "Topshiriq o'zgartirildi", "announcement.send": "E'lon yuborildi", "rules.update": "Qoidalar o'zgartirildi",
-  "bot.token": "Bot tokeni almashtirildi", "ai.update": "AI sozlamalari o'zgartirildi", "assistant.view": "CareerFlow.ai suhbati ko'rildi", "bot.connect": "Bot ulandi", "export.users": "Ro'yxat yuklab olindi",
+  "bot.token": "Bot tokeni almashtirildi", "ai.update": "AI sozlamalari o'zgartirildi", "assistant.view": "TalantGo AI suhbati ko'rildi", "bot.connect": "Bot ulandi", "export.users": "Ro'yxat yuklab olindi",
 };
 
 export function AuditCard() {
