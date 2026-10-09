@@ -81,7 +81,9 @@ export interface LeaderRow {
   track_icon: string; points: number; is_me: boolean;
 }
 export interface Leaderboard { rows: LeaderRow[]; my_rank: number }
-export interface BotStatus { configured: boolean; hint: string | null; public_url: string }
+export interface BotStatus {
+  configured: boolean; hint: string | null; public_url: string; username: string | null; previous_username: string | null;
+}
 export interface AdminUser {
   id: number; full_name: string; username: string | null; role: Role; is_owner: boolean; is_blocked: boolean;
   track_id: number | null; university: string; group_name: string; points: number; verified_tasks: number;
@@ -177,9 +179,9 @@ async function download(path: string, filename: string): Promise<void> {
 }
 
 export const api = {
-  mode: () => request<{ dev: boolean }>("GET", "/auth/mode"),
+  mode: () => request<{ dev: boolean; bot_username: string | null }>("GET", "/auth/mode"),
   telegramWebLogin: (user: object) => request<{ token: string }>("POST", "/auth/telegram-web", user),
-  telegramLogin: (init_data: string) => request<{ token: string }>("POST", "/auth/telegram", { init_data }),
+  telegramLogin: (init_data: string) => request<{ token: string; moved_to?: string | null }>("POST", "/auth/telegram", { init_data }),
   devLogin: (telegram_id: number, full_name: string) =>
     request<{ token: string }>("POST", "/auth/dev", { telegram_id, full_name }),
   me: () => request<Me>("GET", "/me"),
@@ -321,7 +323,8 @@ export const api = {
     bot: () => request<BotStatus>("GET", "/admin/bot", undefined, true),
     saveBot: (token: string) => request<BotStatus>("PUT", "/admin/bot", { token }, true),
     testBot: () => request<{ username: string }>("POST", "/admin/bot/test", undefined, true),
-    connectBot: () => request<{ username: string }>("POST", "/admin/bot/connect", undefined, true),
+    connectBot: () => request<{ username: string; previous_username: string | null; previous_error: string | null }>("POST", "/admin/bot/connect", undefined, true),
+    forgetPreviousBot: () => request<BotStatus>("POST", "/admin/bot/previous/forget", undefined, true),
     ai: () => request<AiStatus>("GET", "/admin/ai", undefined, true),
     saveAi: (b: { enabled: boolean; assistant: boolean; model: string; api_key?: string }) => request<AiStatus>("PUT", "/admin/ai", b, true),
     aiConversations: () => request<AiConversation[]>("GET", "/admin/assistant/users", undefined, true),

@@ -21,7 +21,7 @@ from ..schemas import (AdminSubmissionOut, AdminTaskOut, AdminTrackOut, AdminUse
                        AnnouncementOut, AuditOut, BotStatusOut, BotTokenIn, CompanyOut, PointsAdjustIn,
                        ReviewDecisionIn, ReviewOut, TaskIn, TaskPatch, TrackIn, TrackPatch, UniversityIn,
                        UniversityOut, UniversityPatch, UserPatch)
-from ..services import ai_review, announcements, files, notify, settings_store, telegram_bot
+from ..services import ai_review, announcements, bots, files, notify, settings_store, telegram_bot
 from ..services.admin_accounts import hash_password
 from ..services.career import decide_verification
 from ..services.rules import Rules, get_rules, save_rules
@@ -284,21 +284,60 @@ async def update_rules(body: Rules, actor: OwnerActor, session: Session) -> Rule
     return await save_rules(session, body)
 
 
+async def _bot_status(session: Session) -> BotStatusOut:
+    hint = await settings_store.get_hint(session, settings_store.BOT_TOKEN)
+    _, previous = await bots.current_and_previous(session)
+    info = await bots.get_info(session)
+    return BotStatusOut(configured=hint is not None, hint=hint, public_url=settings.public_url,
+                        username=await bots.username(session) if hint else None,
+                        previous_username=info.get("previous_username") if previous else None)
+
+
 @router.get("/bot", response_model=BotStatusOut)
 async def bot_status(_: AdminActor, session: Session) -> BotStatusOut:
-    hint = await settings_store.get_hint(session, settings_store.BOT_TOKEN)
-    return BotStatusOut(configured=hint is not None, hint=hint, public_url=settings.public_url)
+    return await _bot_status(session)
 
 
 @router.put("/bot", response_model=BotStatusOut)
 async def save_bot_token(body: BotTokenIn, actor: OwnerActor, session: Session) -> BotStatusOut:
+    """A different bot's token makes it the app's bot; the old bot is kept as a signpost to it."""
     try:
-        await telegram_bot.call(body.token, "getMe")
+        me = await telegram_bot.call(body.token, "getMe")
     except telegram_bot.BotError as exc:
         raise HTTPException(400, f"Token ishlamadi: {exc}") from exc
-    audit(session, actor, "bot.token", "", "token almashtirildi")
-    hint = await settings_store.set_value(session, settings_store.BOT_TOKEN, body.token)
-    return BotStatusOut(configured=True, hint=hint, public_url=settings.public_url)
+    current = await settings_store.get_value(session, settings_store.BOT_TOKEN)
+    if current and current != body.token:
+        old_username = (await bots.get_info(session)).get("username")
+        if not old_username:
+            try:
+                old_username = (await telegram_bot.call(current, "getMe")).get("username")
+            except telegram_bot.BotError:
+                old_username = None
+        await settings_store.set_value(session, settings_store.PREVIOUS_BOT_TOKEN, current)
+        await bots.set_info(session, previous_username=old_username)
+        audit(session, actor, "bot.token", f"@{old_username} -> @{me.get('username')}",
+              "yangi bot ulandi, eski bot yangisiga yo'naltiradi")
+    else:
+        audit(session, actor, "bot.token", f"@{me.get('username')}", "token almashtirildi")
+    await settings_store.set_value(session, settings_store.BOT_TOKEN, body.token)
+    await bots.set_info(session, username=me.get("username"))
+    return await _bot_status(session)
+
+
+@router.post("/bot/previous/forget", response_model=BotStatusOut)
+async def forget_previous_bot(actor: OwnerActor, session: Session) -> BotStatusOut:
+    """Stops the old bot (after everyone has moved): it no longer answers or carries messages."""
+    _, previous = await bots.current_and_previous(session)
+    if previous:
+        try:
+            await telegram_bot.call(previous, "deleteWebhook")
+        except telegram_bot.BotError:
+            pass                             # the token may already be revoked; forgetting it is enough
+        await settings_store.delete_value(session, settings_store.PREVIOUS_BOT_TOKEN)
+        info = await bots.get_info(session)
+        audit(session, actor, "bot.previous.forget", f"@{info.get('previous_username')}")
+        await bots.set_info(session, previous_username=None)
+    return await _bot_status(session)
 
 
 async def _bot_token(session: Session) -> str:
@@ -326,9 +365,18 @@ async def connect_bot(actor: OwnerActor, session: Session) -> dict:
         me = await telegram_bot.connect(await _bot_token(session), settings.public_url)
     except telegram_bot.BotError as exc:
         raise HTTPException(400, str(exc)) from exc
+    await bots.set_info(session, username=me.get("username"))
+    _, previous = await bots.current_and_previous(session)
+    previous_note = None
+    if previous:
+        try:
+            await telegram_bot.retire(previous, settings.public_url, me.get("username"))
+        except telegram_bot.BotError as exc:     # the new bot works either way; report the old one's state
+            previous_note = f"Eski botni sozlab bo'lmadi: {exc}"
     audit(session, actor, "bot.connect", settings.public_url)
     await session.commit()
-    return {"ok": True, "username": me.get("username")}
+    return {"ok": True, "username": me.get("username"), "previous_username": (await bots.get_info(session)).get("previous_username"),
+            "previous_error": previous_note}
 
 
 class AiSettingsIn(BaseModel):

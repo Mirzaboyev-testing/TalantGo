@@ -77,8 +77,24 @@ export function BotCard() {
         <b>Telegram bot</b>
         <span className={`badge ${status.configured ? "peer_verified" : "rejected"}`}>{status.configured ? "Sozlangan" : "Sozlanmagan"}</span>
       </div>
+      {status.username && <p style={{ margin: "8px 0 0" }}>Ilova boti: <b>@{status.username}</b></p>}
       {status.hint && <p className="hint">Saqlangan token: {status.hint}</p>}
+      {status.previous_username && (
+        <div className="notice" style={{ marginTop: 10 }}>
+          Eski bot <b>@{status.previous_username}</b> hamon ishlayapti: unga yozganlarni yangi botga yo'naltiradi,
+          eski botdan ochilgan ilova ham ishlaydi, yangi botni hali ochmaganlarga xabarlar eski bot orqali boradi.
+          Hamma o'tib bo'lgach, uni o'chirishingiz mumkin.
+          <div style={{ marginTop: 8 }}>
+            <button className="btn small ghost" disabled={busy}
+                    onClick={() => { if (window.confirm(`@${status.previous_username} butunlay to'xtatilsinmi? U endi javob bermaydi va xabar tashimaydi.`))
+                      void run(async () => { setStatus(await api.admin.forgetPreviousBot()); return "Eski bot to'xtatildi."; }); }}>
+              Eski botni to'xtatish
+            </button>
+          </div>
+        </div>
+      )}
       <label>Yangi token (BotFather beradi; saqlangach faqat qisqartirilgan ko'rinishi qoladi)</label>
+      <div className="hint">Boshqa botning tokeni saqlansa, ilova o'sha botga o'tadi, eski bot esa yangisiga yo'naltiruvchi bo'lib qoladi. Avval BotFather'da yangi bot uchun /setdomain qiling.</div>
       <input type="password" value={token} placeholder="123456789:AA…" autoComplete="off" onChange={(e) => setToken(e.target.value.trim())} />
       <div className="row wrap" style={{ marginTop: 10 }}>
         <button className="btn small" disabled={busy || !token}
@@ -86,7 +102,11 @@ export function BotCard() {
         <button className="btn small ghost" disabled={busy || !status.configured}
                 onClick={() => run(async () => `Ishlayapti: @${(await api.admin.testBot()).username}`)}>Tekshirish</button>
         <button className="btn small ghost" disabled={busy || !status.configured}
-                onClick={() => run(async () => `@${(await api.admin.connectBot()).username} ilovaga ulandi.`)}>Botni ulash</button>
+                onClick={() => run(async () => {
+                  const r = await api.admin.connectBot();
+                  return `@${r.username} ilovaga ulandi.` + (r.previous_username ? ` Eski bot @${r.previous_username} endi yangisiga yo'naltiradi.` : "")
+                    + (r.previous_error ? ` ${r.previous_error}` : "");
+                })}>Botni ulash</button>
       </div>
       {result && <p className="notice" style={{ marginTop: 10 }}>{result}</p>}
       <ErrorText error={error} />

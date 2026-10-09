@@ -7,6 +7,7 @@ import httpx
 API = "https://api.telegram.org/bot{token}/{method}"
 
 BOT_NAME = "TalantGo"                     # the name shown at the top of the chat
+OLD_BOT_NAME = "TalantGo (eski bot)"
 
 # Shown in an empty chat before the user presses Start ("What can this bot do?"), max 512 characters.
 DESCRIPTION = (
@@ -45,6 +46,46 @@ async def call(token: str, method: str, **params) -> dict:
     if not data.get("ok"):
         raise BotError(data.get("description", "Telegram xatosi"))
     return data["result"]
+
+
+async def send_any(tokens: list[str], method: str, note: str = "", **params) -> dict:
+    """Tries each bot in turn, the current one first. `note` is added to the text when an older bot
+    has to carry the message (it tells the person where the new bot is)."""
+    if not tokens:
+        raise BotError("Bot sozlanmagan")
+    error: BotError | None = None
+    for i, token in enumerate(tokens):
+        sent = {**params, "text": params["text"] + note} if i and note and "text" in params else params
+        try:
+            return await call(token, method, **sent)
+        except BotError as exc:
+            error = exc
+    raise error
+
+
+def start_link(username: str, payload: str = "") -> str:
+    safe = "".join(c for c in payload if c.isalnum() or c in "_-")[:64]   # Telegram's rule for start payloads
+    return f"https://t.me/{username}" + (f"?start={safe}" if safe else "")
+
+
+async def send_moved(token: str, chat_id: int, new_username: str, payload: str = "") -> None:
+    """The old bot's answer to anything: where the new bot is. An invite code travels along."""
+    text = ("Botimiz yangilandi.\n\n"
+            f"TalantGo endi @{new_username} botida ishlaydi. Akkauntingiz, ballaringiz va CV'ingiz joyida: "
+            "yangi botni ochib «Start» ni bosing, hammasi o'sha yerda.")
+    markup = {"inline_keyboard": [[{"text": "Yangi botni ochish", "url": start_link(new_username, payload)}]]}
+    await call(token, "sendMessage", chat_id=chat_id, text=text, reply_markup=markup)
+
+
+async def retire(token: str, public_url: str, new_username: str) -> None:
+    """Turns the old bot into a signpost to the new one. Its webhook stays, so it can answer."""
+    await call(token, "setWebhook", url=f"{public_url}/telegram/webhook",
+               secret_token=webhook_secret(token), allowed_updates=["message"])
+    await call(token, "setMyName", name=OLD_BOT_NAME)
+    await call(token, "setMyShortDescription", short_description=f"Bot yangilandi: @{new_username}")
+    await call(token, "setMyDescription", description=(
+        f"Bot yangilandi. TalantGo endi @{new_username} botida.\n\n"
+        "Akkauntingiz, ballaringiz va CV'ingiz saqlangan: yangi botni ochib «Start» ni bosing."))
 
 
 def webhook_secret(token: str) -> str:

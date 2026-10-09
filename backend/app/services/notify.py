@@ -8,7 +8,7 @@ import logging
 
 from ..core.config import settings
 from ..core.db import SessionLocal
-from . import settings_store, telegram_bot
+from . import bots, telegram_bot
 
 log = logging.getLogger("careerflow.notify")
 _running: set[asyncio.Task] = set()
@@ -25,13 +25,14 @@ def send(telegram_ids: list[int], text: str, button: str = "Ilovani ochish") -> 
 
 async def _send(telegram_ids: list[int], text: str, button: str) -> None:
     async with SessionLocal() as session:
-        token = await settings_store.get_value(session, settings_store.BOT_TOKEN)
-    if not token:
+        tokens = await bots.tokens(session)
+        note = await bots.moved_note(session)
+    if not tokens:
         return
     markup = {"inline_keyboard": [[{"text": button, "web_app": {"url": settings.public_url}}]]}
     for chat_id in telegram_ids:
         try:
-            await telegram_bot.call(token, "sendMessage", chat_id=chat_id, text=text, reply_markup=markup)
+            await telegram_bot.send_any(tokens, "sendMessage", note, chat_id=chat_id, text=text, reply_markup=markup)
         except telegram_bot.BotError as exc:
             log.info("notification not delivered: %s", exc)
         await asyncio.sleep(0.05)

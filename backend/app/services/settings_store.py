@@ -7,6 +7,7 @@ from ..core.security import decrypt, encrypt, mask
 from ..models import AppSetting
 
 BOT_TOKEN = "telegram_bot_token"
+PREVIOUS_BOT_TOKEN = "telegram_bot_token_previous"   # the old bot, kept while people move to the new one
 GEMINI_KEY = "gemini_api_key"
 _cache: dict[str, tuple[float, str | None]] = {}
 _TTL = 30.0
@@ -32,6 +33,14 @@ async def set_value(session: AsyncSession, key: str, value: str) -> str:
     await session.commit()
     _cache.pop(key, None)
     return hint
+
+
+async def delete_value(session: AsyncSession, key: str) -> None:
+    row = await session.get(AppSetting, key)
+    if row:
+        await session.delete(row)
+        await session.commit()
+    _cache.pop(key, None)
 
 
 async def get_hint(session: AsyncSession, key: str) -> str | None:

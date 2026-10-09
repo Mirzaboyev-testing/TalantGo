@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from ..core.config import settings
 from ..core.db import SessionLocal
 from ..models import AppConfig, Status, Submission, Task, User
-from . import settings_store, telegram_bot
+from . import bots, telegram_bot
 from .progress import TASHKENT
 
 log = logging.getLogger("careerflow.reminders")
@@ -60,15 +60,16 @@ async def run_once(now: datetime) -> int:
         return 0
     year, week, _ = now.isocalendar()
     async with SessionLocal() as session:
-        token = await settings_store.get_value(session, settings_store.BOT_TOKEN)
-        if not token or not await _claim_week(session, f"{year}-W{week:02d}"):
+        tokens = await bots.tokens(session)
+        note = await bots.moved_note(session)
+        if not tokens or not await _claim_week(session, f"{year}-W{week:02d}"):
             return 0
         messages = await build_messages(session)
     markup = {"inline_keyboard": [[{"text": "Ilovani ochish", "web_app": {"url": settings.public_url}}]]}
     sent = 0
     for chat_id, text in messages:
         try:
-            await telegram_bot.call(token, "sendMessage", chat_id=chat_id, text=text, reply_markup=markup)
+            await telegram_bot.send_any(tokens, "sendMessage", note, chat_id=chat_id, text=text, reply_markup=markup)
             sent += 1
         except telegram_bot.BotError as exc:
             log.info("reminder not delivered: %s", exc)

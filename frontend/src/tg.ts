@@ -33,8 +33,14 @@ const app: WebApp | undefined = window.Telegram?.WebApp;
 
 export const insideTelegram = Boolean(app?.initData);
 export const initData = app?.initData ?? "";
-export const BOT_USERNAME = "create_carieer_bot";
-export const BOT_URL = `https://t.me/${BOT_USERNAME}`;
+// The bot comes from the server (admin site > Telegram bot), so changing bots needs no new build.
+// `let` exports are live: screens read the current value when they render.
+export let BOT_USERNAME = "create_carieer_bot";
+export let BOT_URL = `https://t.me/${BOT_USERNAME}`;
+export function setBotUsername(name: string): void {
+  BOT_USERNAME = name;
+  BOT_URL = `https://t.me/${name}`;
+}
 
 export function boot(): void {
   app?.ready();

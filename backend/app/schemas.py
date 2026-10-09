@@ -54,6 +54,7 @@ class PasswordChangeIn(BaseModel):
 
 class TokenOut(BaseModel):
     token: str
+    moved_to: str | None = None      # opened from the old bot: the new bot's @username
 
 
 # --------------------------------------------------------------------------- tracks & tasks
@@ -404,6 +405,8 @@ class BotStatusOut(BaseModel):
     configured: bool
     hint: str | None
     public_url: str
+    username: str | None = None
+    previous_username: str | None = None      # the old bot that sends people to the new one
 
 
 class AdminMeOut(BaseModel):

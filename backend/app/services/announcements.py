@@ -8,7 +8,7 @@ from sqlalchemy import select
 from ..core.config import settings
 from ..core.db import SessionLocal
 from ..models import Announcement, User
-from . import settings_store, telegram_bot
+from . import bots, telegram_bot
 
 log = logging.getLogger("careerflow.announce")
 _running: set[asyncio.Task] = set()      # keeps background tasks from being garbage-collected
@@ -33,14 +33,16 @@ def start(announcement_id: int, chat_ids: list[int]) -> None:
 async def _send(announcement_id: int, chat_ids: list[int]) -> None:
     async with SessionLocal() as session:
         row = await session.get(Announcement, announcement_id)
-        token = await settings_store.get_value(session, settings_store.BOT_TOKEN)
-        if row is None or not token:
+        tokens = await bots.tokens(session)
+        note = await bots.moved_note(session)
+        if row is None or not tokens:
             return
         markup = {"inline_keyboard": [[{"text": "Ilovani ochish", "web_app": {"url": settings.public_url}}]]}
         for chat_id in chat_ids:
             try:
                 # plain text, no parse_mode: nothing typed by an admin is interpreted as markup
-                await telegram_bot.call(token, "sendMessage", chat_id=chat_id, text=row.text, reply_markup=markup)
+                await telegram_bot.send_any(tokens, "sendMessage", note, chat_id=chat_id, text=row.text,
+                                            reply_markup=markup)
                 row.sent += 1
             except telegram_bot.BotError as exc:   # blocked the bot, never started it, ...
                 row.failed += 1

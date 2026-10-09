@@ -16,6 +16,7 @@ import Groups from "./screens/Groups";
 import Assistant from "./screens/Assistant";
 import Shell, { type ShellTab } from "./screens/Shell";
 import WebLogin from "./screens/WebLogin";
+import { announceMove } from "./screens/MovedNotice";
 
 // A group invite (t.me/<bot>?start=g<code>) opens the app with ?join=<code>.
 const joinCode = new URLSearchParams(window.location.search).get("join");
@@ -44,10 +45,11 @@ export default function App() {
     api.mode().then((m) => setAuth({ kind: "login", dev: m.dev }), () => setAuth({ kind: "login", dev: false }));
   }, []);
 
-  const signIn = useCallback(async (getToken: () => Promise<{ token: string }>) => {
+  const signIn = useCallback(async (getToken: () => Promise<{ token: string; moved_to?: string | null }>) => {
     try {
-      const { token } = await getToken();
+      const { token, moved_to } = await getToken();
       setUserToken(token);
+      if (moved_to) announceMove(moved_to);       // opened from the old bot
       if (!insideTelegram) storeToken(token);
       await refreshMe();
       setAuth({ kind: "ok" });

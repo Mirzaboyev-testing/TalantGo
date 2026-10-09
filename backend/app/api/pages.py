@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from ..core.config import settings
 from ..models import User
-from ..services import settings_store, telegram_bot
+from ..services import bots, telegram_bot
 from ..services.cv import build_cv
 from .deps import Session
 
@@ -29,8 +29,13 @@ async def cv_page(slug: str, request: Request, session: Session) -> HTMLResponse
 @router.post("/telegram/webhook")
 async def webhook(update: dict, session: Session,
                   x_telegram_bot_api_secret_token: str | None = Header(default=None)) -> dict:
-    token = await settings_store.get_value(session, settings_store.BOT_TOKEN)
-    if not token or x_telegram_bot_api_secret_token != telegram_bot.webhook_secret(token):
+    current, previous = await bots.current_and_previous(session)
+    secret = x_telegram_bot_api_secret_token
+    if current and secret == telegram_bot.webhook_secret(current):
+        token, old_bot = current, False
+    elif previous and secret == telegram_bot.webhook_secret(previous):
+        token, old_bot = previous, True
+    else:
         raise HTTPException(403)
     message = update.get("message") or {}
     contact = message.get("contact")
@@ -44,7 +49,18 @@ async def webhook(update: dict, session: Session,
             await session.commit()
         return {"ok": True}
     text = message.get("text", "")
-    if text.startswith("/start") and message.get("chat", {}).get("type") == "private" and sender:
+    private = message.get("chat", {}).get("type") == "private"
+    if old_bot:
+        # the old bot only points to the new one; an invite code (/start r12, g<code>, hr) is carried over
+        new_username = await bots.username(session)
+        if private and sender and new_username:
+            payload = text.removeprefix("/start").strip() if text.startswith("/start") else ""
+            try:
+                await telegram_bot.send_moved(token, message["chat"]["id"], new_username, payload)
+            except telegram_bot.BotError as exc:
+                log.warning("old bot could not answer: %s", exc)
+        return {"ok": True}
+    if text.startswith("/start") and private and sender:
         payload = text.removeprefix("/start").strip()
         role = {"hr": "employer", "uni": "university"}.get(payload)
         if payload.startswith("r") and payload[1:].isdigit():

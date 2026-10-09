@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
 from ..models import Challenge, Role, Status, Submission, Task, User
+from . import bots
 from .career import completeness
 from .progress import current_streak, rank_of, today
 from .rules import get_rules
@@ -23,7 +24,7 @@ STATUS_LABEL = {Status.pending: "tekshirilmoqda", Status.peer_verified: "tasdiql
 GUIDE = """TalantGo nima: talabalar uchun karyera platformasi. Talaba yo'nalish (yo'l) tanlaydi, har hafta amaliy topshiriq bajaradi,
 ishini AI yordamchi, tengdoshlar va mentor tekshiradi. Tasdiqlangan ishlar avtomatik CV (portfolio)ga tushadi va har bir ishda
 kim tasdiqlagani ko'rinadi. Kompaniyalar shu ishonchli portfolio bo'yicha amaliyot va ish taklif qiladi. Ilova Telegram ichida
-(@create_carieer_bot) va kompyuterda sayt sifatida ({url}) ishlaydi; saytga Telegram orqali kiriladi. Bildirishnomalar botga keladi.
+(@{bot}) va kompyuterda sayt sifatida ({url}) ishlaydi; saytga Telegram orqali kiriladi. Bildirishnomalar botga keladi.
 
 Bo'limlar (pastki menyu yoki kompyuterda chap menyu):
 - Yo'l: haftalik topshiriqlar va chellenjlar; ball, haftalik seriya va umumiy o'rin. "yo'lni o'zgartirish" havolasi orqali yo'nalishni almashtirish mumkin.
@@ -70,7 +71,7 @@ Qoidalar:
 async def system_prompt(session: AsyncSession, user: User, ai_review_on: bool) -> str:
     rules = await get_rules(session)
     guide = GUIDE.format(
-        url=settings.public_url, peers=rules.peer_approvals_required, bonus=rules.mentor_bonus_percent,
+        bot=await bots.username(session) or "talantgo_bot", url=settings.public_url, peers=rules.peer_approvals_required, bonus=rules.mentor_bonus_percent,
         review_points=rules.review_points,
         ai_line="ish topshirilgach AI yordamchi bir daqiqa ichida tekshirib izoh yozadi va uning bahosi bitta tengdosh ovozi hisoblanadi;"
                 if ai_review_on else "ishni tengdoshlar tekshiradi;")

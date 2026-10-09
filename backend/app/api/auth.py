@@ -8,7 +8,7 @@ from ..core.config import settings
 from ..core.security import InitDataError, create_token, validate_init_data, validate_login_widget
 from ..models import User
 from ..schemas import DevAuthIn, TelegramAuthIn, TokenOut
-from ..services import settings_store
+from ..services import bots
 from .deps import Session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -32,18 +32,30 @@ async def _upsert(session: Session, telegram_id: int, full_name: str, username: 
     return user
 
 
-@router.post("/telegram", response_model=TokenOut)
-async def telegram_login(body: TelegramAuthIn, session: Session) -> TokenOut:
-    bot_token = await settings_store.get_value(session, settings_store.BOT_TOKEN)
-    if not bot_token:
+async def _check(session: Session, check) -> tuple[dict, bool]:
+    """Validates with the current bot, then with the previous one (people still opening the old bot).
+    Returns the Telegram user and whether the old bot was used."""
+    current, previous = await bots.current_and_previous(session)
+    if not current:
         raise HTTPException(503, "Bot hali sozlanmagan: admin panelda bot tokenini kiriting")
     try:
-        tg = validate_init_data(body.init_data, bot_token, settings.init_data_max_age)
+        return check(current), False
     except InitDataError as exc:
+        if previous:
+            try:
+                return check(previous), True
+            except InitDataError:
+                pass
         raise HTTPException(401, f"Telegram tekshiruvidan o'tmadi: {exc}") from exc
+
+
+@router.post("/telegram", response_model=TokenOut)
+async def telegram_login(body: TelegramAuthIn, session: Session) -> TokenOut:
+    tg, old_bot = await _check(session, lambda token: validate_init_data(body.init_data, token, settings.init_data_max_age))
     full_name = " ".join(filter(None, [tg.get("first_name"), tg.get("last_name")])) or "Talaba"
     user = await _upsert(session, int(tg["id"]), full_name[:128], tg.get("username"), tg.get("photo_url"))
-    return TokenOut(token=create_token(str(user.id), "user", USER_TOKEN_HOURS))
+    return TokenOut(token=create_token(str(user.id), "user", USER_TOKEN_HOURS),
+                    moved_to=await bots.username(session) if old_bot else None)
 
 
 class WidgetAuthIn(BaseModel):
@@ -60,22 +72,17 @@ class WidgetAuthIn(BaseModel):
 async def telegram_web_login(body: WidgetAuthIn, session: Session) -> TokenOut:
     """Sign-in on the website (outside Telegram) with the Telegram Login Widget: the same account
     as in the Telegram app, no separate password."""
-    bot_token = await settings_store.get_value(session, settings_store.BOT_TOKEN)
-    if not bot_token:
-        raise HTTPException(503, "Bot hali sozlanmagan")
-    try:
-        tg = validate_login_widget(body.model_dump(exclude_none=True), bot_token, settings.init_data_max_age)
-    except InitDataError as exc:
-        raise HTTPException(401, f"Telegram tekshiruvidan o'tmadi: {exc}") from exc
+    fields = body.model_dump(exclude_none=True)
+    tg, _ = await _check(session, lambda token: validate_login_widget(fields, token, settings.init_data_max_age))
     full_name = " ".join(filter(None, [tg.get("first_name"), tg.get("last_name")])) or "Talaba"
     user = await _upsert(session, int(tg["id"]), full_name[:128], tg.get("username"), tg.get("photo_url"))
     return TokenOut(token=create_token(str(user.id), "user", USER_TOKEN_HOURS))
 
 
 @router.get("/mode")
-async def mode() -> dict:
+async def mode(session: Session) -> dict:
     """Tells the app whether the browser sign-in for development is available."""
-    return {"dev": settings.app_env == "dev"}
+    return {"dev": settings.app_env == "dev", "bot_username": await bots.username(session)}
 
 
 @router.post("/dev", response_model=TokenOut, include_in_schema=False)
