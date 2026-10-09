@@ -24,6 +24,7 @@ export default function Onboarding({ me, onDone, onCancel, onMe }: {
   const [uniId, setUniId] = useState(me.university_ref ? String(me.university_ref.id) : "");
   const [faculty, setFaculty] = useState(me.faculty);
   const [course, setCourse] = useState(me.course ? String(me.course) : "");
+  const [group, setGroup] = useState(me.group_name);
   const [consent, setConsent] = useState(me.has_consent);
   const [goals, setGoals] = useState<string[]>([...new Set([...me.skills, ...me.goals])]);
   const [busy, setBusy] = useState(false);
@@ -37,7 +38,8 @@ export default function Onboarding({ me, onDone, onCancel, onMe }: {
   const chosen = tracks.find((t) => t.id === trackId);
   const suggestions = chosen ? GOAL_SUGGESTIONS[chosen.slug] ?? [] : [];
   const toggle = (g: string) => setGoals((cur) => (cur.includes(g) ? cur.filter((x) => x !== g) : [...cur, g].slice(0, 8)));
-  const ready = Boolean(trackId && uniId && faculty.trim().length >= 2 && course && me.phone && consent);
+  const groupOk = group.trim().length >= 2;
+  const ready = Boolean(trackId && uniId && faculty.trim().length >= 2 && course && groupOk && me.phone && consent);
 
   async function save() {
     setBusy(true);
@@ -45,7 +47,7 @@ export default function Onboarding({ me, onDone, onCancel, onMe }: {
     try {
       await api.updateMe({
         track_id: trackId, goals, skills: [...new Set([...me.skills, ...goals])].slice(0, 20), consent: true, university_id: Number(uniId), faculty: faculty.trim(),
-        course: Number(course),
+        course: Number(course), group_name: group.trim().toUpperCase(),
       });
       onDone();
     } catch (e) {
@@ -88,6 +90,9 @@ export default function Onboarding({ me, onDone, onCancel, onMe }: {
           {[1, 2, 3, 4, 5, 6].map((c) => <option key={c} value={c}>{c}-kurs</option>)}
           <option value="7">Magistratura</option>
         </select>
+        <label>Guruh</label>
+        <input value={group} maxLength={40} placeholder="Masalan: 114-25" autoCapitalize="characters" onChange={(e) => setGroup(e.target.value)} />
+        <div className="hint">Guruhdoshlaringizni topish va guruh reytingi uchun kerak.</div>
       </div>
 
       <h2>3. Telefon raqamingiz</h2>
@@ -113,7 +118,7 @@ export default function Onboarding({ me, onDone, onCancel, onMe }: {
       {!ready && (
         <p className="hint" style={{ marginTop: 12 }}>
           To'ldirilmagan: {[!trackId && "yo'nalish", !uniId && "universitet", faculty.trim().length < 2 && "mutaxassislik",
-                            !course && "kurs", !me.phone && "telefon", !consent && "rozilik"].filter(Boolean).join(", ")}
+                            !course && "kurs", !groupOk && "guruh", !me.phone && "telefon", !consent && "rozilik"].filter(Boolean).join(", ")}
         </p>
       )}
       <div className="stack" style={{ marginTop: 12 }}>

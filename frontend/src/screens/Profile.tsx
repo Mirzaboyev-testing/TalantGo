@@ -25,13 +25,14 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
   // the name and the field are required; everything else here is optional
   const nameOk = isFullName(form.full_name);
   const headlineOk = form.headline.trim().length >= 5;
+  const groupOk = form.group_name.trim().length >= 2;
 
   async function save(extra: Partial<Me> = {}) {
     const isCvToggle = "cv_public" in extra;
-    if (!isCvToggle && (!nameOk || !headlineOk)) {
+    if (!isCvToggle && (!nameOk || !headlineOk || !groupOk)) {
       setTried(true);
-      toast(!nameOk ? "Ism va familiyani to'liq yozing" : "Sohangizni yozing", "error");
-      focusField(!nameOk ? "pf-name" : "pf-headline");
+      toast(!nameOk ? "Ism va familiyani to'liq yozing" : !headlineOk ? "Sohangizni yozing" : "Guruhingizni yozing", "error");
+      focusField(!nameOk ? "pf-name" : !headlineOk ? "pf-headline" : "pf-group");
       return;
     }
     setBusy(true);
@@ -39,7 +40,7 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
     try {
       const { goals: _unused, ...rest } = form;
       void _unused;
-      onSaved(await api.updateMe(isCvToggle ? extra : { ...rest, full_name: rest.full_name.trim(), ...extra }));
+      onSaved(await api.updateMe(isCvToggle ? extra : { ...rest, full_name: rest.full_name.trim(), group_name: rest.group_name.trim().toUpperCase(), ...extra }));
       haptic("success");
       setSaved(true);
       toast("cv_public" in extra ? (extra.cv_public ? "CV ochiq qilindi" : "CV yopildi") : "Ma'lumotlar saqlandi");
@@ -100,8 +101,10 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
         <input id="pf-headline" className={tried && !headlineOk ? "invalid" : ""} value={form.headline} maxLength={120}
                placeholder="Iqtisodiyot talabasi | Data Analytics" onChange={set("headline")} />
         {tried && !headlineOk && <div className="field-error">Sohangizni yozing, masalan: Data analitik</div>}
-        <label>Guruh (ixtiyoriy)</label>
-        <input value={form.group_name} maxLength={40} onChange={set("group_name")} />
+        <label htmlFor="pf-group">Guruh *</label>
+        <input id="pf-group" className={tried && !groupOk ? "invalid" : ""} value={form.group_name} maxLength={40}
+               placeholder="Masalan: 114-25" onChange={set("group_name")} />
+        {tried && !groupOk && <div className="field-error">Guruhingizni yozing</div>}
         <label>O'zim haqimda (ixtiyoriy)</label>
         <textarea value={form.bio} maxLength={600} placeholder="2-3 gap: nimani o'rganyapsiz, qanday ishga qiziqasiz" onChange={set("bio")} />
         <label>GitHub (ixtiyoriy)</label>

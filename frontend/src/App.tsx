@@ -119,7 +119,8 @@ export default function App() {
                                                onStudent={() => setChosenStudent(true)} onChanged={setMe} /></div>;
   }
 
-  const incomplete = !me.track || !me.university_ref || !me.course || !me.faculty || !me.phone || !me.has_consent;
+  // students must say where they study (university, field, course, group) before using the app
+  const incomplete = !me.track || !me.university_ref || !me.course || !me.faculty || !me.group_name.trim() || !me.phone || !me.has_consent;
   if (incomplete || changingTrack) {
     return (
       <div className="app">
