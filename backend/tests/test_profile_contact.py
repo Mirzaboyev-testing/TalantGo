@@ -75,3 +75,17 @@ async def test_verification_request_does_not_need_a_student_number(client, make_
     assert r.status_code == 200 and r.json()["verification"] == "pending"
     queue = (await client.get("/api/v1/admin/verifications", headers=await owner_headers(client))).json()
     assert [q["full_name"] for q in queue] == ["Aziza"]
+
+
+async def test_an_unlisted_university_can_be_typed_in(client, make_user):
+    u = await make_user("Aziza")
+    r = await client.post("/api/v1/universities", json={"name": "  Samarqand   iqtisodiyot va servis instituti "}, headers=u["headers"])
+    assert r.status_code == 200 and r.json()["name"] == "Samarqand iqtisodiyot va servis instituti"
+    again = await client.post("/api/v1/universities", json={"name": "SAMARQAND IQTISODIYOT VA SERVIS INSTITUTI"}, headers=u["headers"])
+    assert again.json()["id"] == r.json()["id"]                          # no duplicates
+    listed = (await client.get("/api/v1/universities")).json()
+    assert any(x["id"] == r.json()["id"] for x in listed)
+    me = (await client.patch("/api/v1/me", json={"university_id": r.json()["id"]}, headers=u["headers"])).json()
+    assert me["university_ref"]["id"] == r.json()["id"]
+    assert (await client.post("/api/v1/universities", json={"name": "ab"}, headers=u["headers"])).status_code == 422
+    assert (await client.post("/api/v1/universities", json={"name": "Nomsiz universitet"})).status_code == 401

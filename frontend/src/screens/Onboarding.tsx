@@ -22,6 +22,7 @@ export default function Onboarding({ me, onDone, onCancel, onMe }: {
   const [trackId, setTrackId] = useState<number | null>(me.track?.id ?? null);
   const [unis, setUnis] = useState<University[]>([]);
   const [uniId, setUniId] = useState(me.university_ref ? String(me.university_ref.id) : "");
+  const [otherUni, setOtherUni] = useState("");          // typed when the university is not listed
   const [faculty, setFaculty] = useState(me.faculty);
   const [course, setCourse] = useState(me.course ? String(me.course) : "");
   const [group, setGroup] = useState(me.group_name);
@@ -39,14 +40,16 @@ export default function Onboarding({ me, onDone, onCancel, onMe }: {
   const suggestions = chosen ? GOAL_SUGGESTIONS[chosen.slug] ?? [] : [];
   const toggle = (g: string) => setGoals((cur) => (cur.includes(g) ? cur.filter((x) => x !== g) : [...cur, g].slice(0, 8)));
   const groupOk = group.trim().length >= 2;
-  const ready = Boolean(trackId && uniId && faculty.trim().length >= 2 && course && groupOk && me.phone && consent);
+  const uniOk = uniId === "other" ? otherUni.trim().length >= 3 : Boolean(uniId);
+  const ready = Boolean(trackId && uniOk && faculty.trim().length >= 2 && course && groupOk && me.phone && consent);
 
   async function save() {
     setBusy(true);
     setError("");
     try {
+      const universityId = uniId === "other" ? (await api.addUniversity(otherUni.trim())).id : Number(uniId);
       await api.updateMe({
-        track_id: trackId, goals, skills: [...new Set([...me.skills, ...goals])].slice(0, 20), consent: true, university_id: Number(uniId), faculty: faculty.trim(),
+        track_id: trackId, goals, skills: [...new Set([...me.skills, ...goals])].slice(0, 20), consent: true, university_id: universityId, faculty: faculty.trim(),
         course: Number(course), group_name: group.trim().toUpperCase(),
       });
       onDone();
@@ -79,9 +82,13 @@ export default function Onboarding({ me, onDone, onCancel, onMe }: {
         <label>Universitet</label>
         <select value={uniId} onChange={(e) => setUniId(e.target.value)}>
           <option value="">Tanlang…</option>
-          {unis.map((u) => <option key={u.id} value={u.id}>{u.short_name} · {u.name}</option>)}
+          {unis.map((u) => <option key={u.id} value={u.id}>{u.short_name === u.name ? u.name : `${u.short_name} · ${u.name}`}</option>)}
+          <option value="other">Ro'yxatda yo'q: o'zim yozaman</option>
         </select>
-        <div className="hint">Ro'yxatda yo'q bo'lsa, adminga yozing: qo'shib qo'yamiz.</div>
+        {uniId === "other" && (
+          <input value={otherUni} maxLength={200} placeholder="Universitetingizning to'liq nomi" style={{ marginTop: 8 }}
+                 onChange={(e) => setOtherUni(e.target.value)} />
+        )}
         <label>Universitetdagi yo'nalishingiz (mutaxassislik)</label>
         <input value={faculty} maxLength={120} placeholder="Masalan: Iqtisodiyot, Menejment, Dasturiy injiniring" onChange={(e) => setFaculty(e.target.value)} />
         <label>Kurs</label>
@@ -117,7 +124,7 @@ export default function Onboarding({ me, onDone, onCancel, onMe }: {
       <ErrorText error={error} />
       {!ready && (
         <p className="hint" style={{ marginTop: 12 }}>
-          To'ldirilmagan: {[!trackId && "yo'nalish", !uniId && "universitet", faculty.trim().length < 2 && "mutaxassislik",
+          To'ldirilmagan: {[!trackId && "yo'nalish", !uniOk && "universitet", faculty.trim().length < 2 && "mutaxassislik",
                             !course && "kurs", !groupOk && "guruh", !me.phone && "telefon", !consent && "rozilik"].filter(Boolean).join(", ")}
         </p>
       )}

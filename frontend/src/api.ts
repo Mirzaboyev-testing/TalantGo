@@ -190,6 +190,7 @@ export const api = {
   tracks: () => request<Track[]>("GET", "/tracks"),
   rules: () => request<Rules>("GET", "/rules"),
   universities: () => request<University[]>("GET", "/universities"),
+  addUniversity: (name: string) => request<University>("POST", "/universities", { name }),
   requestVerification: () => request<Me>("POST", "/me/verification"),
   registerCompany: (c: Omit<Company, "id" | "status" | "review_note" | "created_at">) => request<Me>("POST", "/me/company", c),
   requestStaff: (university_id: number, position: string) => request<Me>("POST", "/me/staff-request", { university_id, position }),

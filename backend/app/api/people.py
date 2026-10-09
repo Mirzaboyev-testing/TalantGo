@@ -1,6 +1,7 @@
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from datetime import UTC, datetime
@@ -162,6 +163,27 @@ async def leaderboard(user: CurrentUser, session: Session,
 async def universities(session: Session) -> list[University]:
     return list((await session.execute(select(University).where(University.is_active)
                                        .order_by(University.city != "Toshkent", University.name))).scalars())
+
+
+class UniversityIn(BaseModel):
+    name: str = Field(min_length=3, max_length=200)
+
+
+@router.post("/universities", response_model=UniversityOut)
+async def add_university(body: UniversityIn, _: CurrentUser, session: Session) -> University:
+    """A student whose university is not listed types its name, so sign-up never stops there.
+    An existing name (any letter case) is reused; admins can tidy the list later."""
+    name = " ".join(body.name.split())
+    existing = (await session.execute(select(University).where(func.lower(University.name) == name.lower()))).scalar_one_or_none()
+    if existing:
+        if not existing.is_active:
+            existing.is_active = True
+            await session.commit()
+        return existing
+    uni = University(name=name, short_name=name[:40], city="")
+    session.add(uni)
+    await session.commit()
+    return uni
 
 
 @router.post("/me/verification", response_model=MeOut)
