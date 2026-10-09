@@ -5,9 +5,9 @@ restart on Monday never sends twice.
 """
 import asyncio
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from ..core.config import settings
 from ..core.db import SessionLocal
@@ -17,6 +17,12 @@ from .progress import TASHKENT
 
 log = logging.getLogger("careerflow.reminders")
 KEY = "weekly_reminder"
+NUDGE_KEY = "signup_nudge"         # {"since": ...}: only people who start signing up after this are reminded
+NUDGE_AFTER = timedelta(hours=1)   # give people an hour before reminding them
+NUDGE_WINDOW = timedelta(days=3)   # and stop trying after a few days
+NUDGE_TEXT = ("Ro'yxatdan o'tishingiz yakunlanmadi.\n\n"
+              "Ilovani ochib yo'nalish, universitet, kurs va guruhingizni tanlang: bu 1 daqiqa. "
+              "Shundan keyin haftalik vazifalar, reyting va amaliyotlar ochiladi.")
 SEND_HOUR = 10                     # Monday 10:00 Tashkent
 
 
@@ -78,10 +84,54 @@ async def run_once(now: datetime) -> int:
     return sent
 
 
+def unfinished_signup():
+    """Mirrors the app's sign-up gate (App.tsx): what a student must fill before using the app."""
+    return or_(User.track_id.is_(None), User.university_id.is_(None), User.course.is_(None), User.faculty == "",
+               User.group_name == "", User.phone == "", User.consent_at.is_(None))
+
+
+async def nudge_unfinished(now: datetime) -> int:
+    """One bot reminder for people who opened the app but left sign-up unfinished an hour ago."""
+    async with SessionLocal() as session:
+        tokens = await bots.tokens(session)
+        if not tokens:
+            return 0
+        row = await session.get(AppConfig, NUDGE_KEY)
+        if row is None:                          # first run: start from now, earlier visitors are not messaged
+            session.add(AppConfig(key=NUDGE_KEY, value={"since": now.isoformat()}))
+            await session.commit()
+            return 0
+        since = max(datetime.fromisoformat(row.value["since"]), now - NUDGE_WINDOW)
+        people = (await session.execute(select(User).where(
+            User.account_type == "student", User.is_blocked.is_(False), User.onboarding_nudged_at.is_(None),
+            User.created_at >= since, User.created_at <= now - NUDGE_AFTER, unfinished_signup()))).scalars().all()
+        for user in people:
+            user.onboarding_nudged_at = now      # marked before sending: a crash never sends twice
+        await session.commit()
+        chat_ids = [u.telegram_id for u in people]
+        note = await bots.moved_note(session)
+    markup = {"inline_keyboard": [[{"text": "Ro'yxatdan o'tishni yakunlash", "web_app": {"url": settings.public_url}}]]}
+    sent = 0
+    for chat_id in chat_ids:
+        try:
+            await telegram_bot.send_any(tokens, "sendMessage", note, chat_id=chat_id, text=NUDGE_TEXT, reply_markup=markup)
+            sent += 1
+        except telegram_bot.BotError as exc:
+            log.info("sign-up reminder not delivered: %s", exc)
+        await asyncio.sleep(0.05)
+    if chat_ids:
+        log.info("sign-up reminders sent to %s of %s people", sent, len(chat_ids))
+    return sent
+
+
 async def loop() -> None:
     while True:
         try:
             await run_once(datetime.now(TASHKENT))
         except Exception:                        # a reminder must never take the API down
             log.exception("weekly reminder failed")
-        await asyncio.sleep(1800)
+        try:
+            await nudge_unfinished(datetime.now(UTC))
+        except Exception:
+            log.exception("sign-up reminder failed")
+        await asyncio.sleep(900)
