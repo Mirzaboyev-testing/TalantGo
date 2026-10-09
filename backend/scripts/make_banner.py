@@ -1,4 +1,4 @@
-"""Welcome banner for the CareerFlow bot: 1280x640 PNG. Run on Windows (uses Montserrat from C:/Windows/Fonts)."""
+"""Welcome banner for the TalantGo bot: 1280x640 PNG. Run on Windows (uses Montserrat from C:/Windows/Fonts)."""
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -37,8 +37,8 @@ for cx, cy in [(931, 400), (1016, 330), (1101, 240), (1186, 140)]:
 
 # brand mark
 d.rounded_rectangle((80, 56, 132, 108), radius=14, fill=(255, 209, 102))
-d.text((106, 82), "C", font=font("Montserrat-Black.ttf", 34), fill=(12, 22, 52), anchor="mm")
-d.text((150, 82), "CareerFlow", font=font("Montserrat-Bold.ttf", 34), fill=(255, 255, 255), anchor="lm")
+d.text((106, 82), "T", font=font("Montserrat-Black.ttf", 34), fill=(12, 22, 52), anchor="mm")
+d.text((150, 82), "TalantGo", font=font("Montserrat-Bold.ttf", 34), fill=(255, 255, 255), anchor="lm")
 
 # headline
 big = font("Montserrat-Black.ttf", 104)

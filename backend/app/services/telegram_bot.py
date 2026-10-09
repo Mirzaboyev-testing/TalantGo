@@ -6,6 +6,8 @@ import httpx
 
 API = "https://api.telegram.org/bot{token}/{method}"
 
+BOT_NAME = "TalantGo"                     # the name shown at the top of the chat
+
 # Shown in an empty chat before the user presses Start ("What can this bot do?"), max 512 characters.
 DESCRIPTION = (
     "🚀 Kelajagingni biz bilan qur!\n\n"
@@ -51,6 +53,7 @@ def webhook_secret(token: str) -> str:
 
 
 async def connect(token: str, public_url: str) -> dict:
+    await call(token, "setMyName", name=BOT_NAME)
     me = await call(token, "getMe")
     await call(token, "setChatMenuButton",
                menu_button={"type": "web_app", "text": "TalantGo", "web_app": {"url": public_url}})
@@ -68,7 +71,7 @@ async def send_welcome(token: str, chat_id: int, public_url: str, role: str | No
     url = f"{public_url}/?{query}" if query else public_url
     markup = {"inline_keyboard": [[{"text": "🚀 Ilovani ochish", "web_app": {"url": url}}]]}
     try:
-        await call(token, "sendPhoto", chat_id=chat_id, photo=f"{public_url}/media/welcome.png",
+        await call(token, "sendPhoto", chat_id=chat_id, photo=f"{public_url}/media/welcome.png?v=talantgo",   # a new URL: Telegram caches by URL
                    caption=WELCOME_CAPTION, parse_mode="HTML", reply_markup=markup)
     except BotError:
         # Telegram could not fetch the picture (e.g. a local address): the text alone still greets
