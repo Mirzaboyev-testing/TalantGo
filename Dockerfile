@@ -8,6 +8,8 @@ RUN npm run build
 
 # 2) the API
 FROM python:3.12-slim
+# DejaVu: a font with Cyrillic and Uzbek letters for the PDF CVs
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 TZ=Asia/Tashkent
 WORKDIR /app
 COPY backend/pyproject.toml ./

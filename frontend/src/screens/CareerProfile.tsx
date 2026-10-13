@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, JOB_KIND, VERIFICATION_LABEL, type JobKind, type Me, type University } from "../api";
+import { api, courseLabel, JOB_KIND, loadCatalog, VERIFICATION_LABEL, type Catalog, type JobKind, type Me, type University } from "../api";
+import { Req } from "../form";
 import { haptic } from "../tg";
 import { ErrorText, message, toast } from "../ui";
 
@@ -20,10 +21,12 @@ export default function CareerProfile({ me, onSaved }: { me: Me; onSaved: (m: Me
     skills: me.skills.join(", "), languages: me.languages.join(", "), city: me.city,
   });
   const [jobTypes, setJobTypes] = useState<JobKind[]>(me.job_types);
+  const [industries, setIndustries] = useState<string[]>(me.work_industries);
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
-  useEffect(() => { api.universities().then(setUnis, () => {}); }, []);
+  useEffect(() => { api.universities().then(setUnis, () => {}); loadCatalog().then(setCatalog, () => {}); }, []);
 
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setSaved(false);
@@ -44,7 +47,16 @@ export default function CareerProfile({ me, onSaved }: { me: Me; onSaved: (m: Me
     }
   }
 
-  const save = () => run(() => api.updateMe({
+  const seeker = me.role === "student";
+  const save = () => {
+    if (seeker && (industries.length === 0 || jobTypes.length === 0)) {
+      setError(industries.length === 0 ? "Kamida bitta sohani tanlang" : "Qanday ish izlayotganingizni tanlang");
+      return;
+    }
+    return doSave();
+  };
+  const doSave = () => run(() => api.updateMe({
+    ...(seeker ? { work_industries: industries } : {}),
     university_id: f.university_id ? Number(f.university_id) : null, faculty: f.faculty.trim(),
     course: f.course ? Number(f.course) : null, graduation_year: f.graduation_year ? Number(f.graduation_year) : null,
     gpa: f.gpa ? Number(f.gpa.replace(",", ".")) : null, gpa_scale: Number(f.gpa_scale),
@@ -71,7 +83,7 @@ export default function CareerProfile({ me, onSaved }: { me: Me; onSaved: (m: Me
         {me.verification === "rejected" && <p className="error">Rad etildi: {me.verification_note || "sabab ko'rsatilmagan"}. Ma'lumotni tuzatib, qayta yuboring.</p>}
 
         <label className="row between" style={{ color: "var(--text)", marginTop: 12, cursor: "pointer" }}>
-          <span><b>Ish va amaliyotga tayyorman</b><div className="hint">Yoqilsa, kompaniyalar sizni ismingizsiz, anonim kartochka sifatida topadi</div></span>
+          <span><b>Ish va amaliyotga tayyorman</b><div className="hint">Yoqilsa, kompaniyalar sizni «Ish izlayotganlar» ro'yxatida ko'radi</div></span>
           <input type="checkbox" checked={me.open_to_work} style={{ width: 22, height: 22, flex: "none" }}
                  onChange={(e) => run(() => api.updateMe({ open_to_work: e.target.checked }),
                    e.target.checked ? "Kompaniyalar endi sizni topa oladi" : "Profilingiz kompaniyalardan yashirildi")} />
@@ -124,7 +136,20 @@ export default function CareerProfile({ me, onSaved }: { me: Me; onSaved: (m: Me
             <button key={l} className="chip" onClick={() => setF({ ...f, languages: [...split(f.languages), l].join(", ") })}>+ {l}</button>
           ))}
         </div>
-        <label>Qanday ish qidiryapsiz</label>
+        {seeker && (
+          <>
+            <label>Qaysi sohada ishlamoqchisiz<Req /></label>
+            <div className="chips">
+              {catalog && Object.entries(catalog.industries).map(([k, label]) => (
+                <button key={k} className={`chip ${industries.includes(k) ? "on" : ""}`}
+                        onClick={() => { setSaved(false); setIndustries(industries.includes(k) ? industries.filter((x) => x !== k) : [...industries, k].slice(0, 6)); }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        <label>Qanday ish qidiryapsiz{seeker && <Req />}</label>
         <div className="chips">
           {(Object.keys(JOB_KIND) as JobKind[]).map((k) => (
             <button key={k} className={`chip ${jobTypes.includes(k) ? "on" : ""}`}
@@ -157,14 +182,14 @@ function AnonymousPreview({ me }: { me: Me }) {
   return (
     <div className="card">
       <b>Kompaniyalar sizni shunday ko'radi</b>
-      <p className="hint">Ismingiz, rasmingiz va Telegram'ingiz siz ariza topshirmaguningizcha yoki rozilik bermaguningizcha yashirin turadi.</p>
+      <p className="hint">TalantGo tekshirgan kompaniyalar ismingiz, o'qishingiz, natijalaringiz va CV'ingizni ko'radi. Telefon raqamingiz faqat ariza bersangiz yoki so'roviga rozi bo'lsangiz ochiladi.</p>
       <div className="card" style={{ background: "var(--bg2)", marginBottom: 0 }}>
         <div className="row between">
-          <b>Talaba T-{String(me.id).padStart(5, "0")}</b>
+          <b>{me.full_name}</b>
           {me.verification === "verified" && <span className="badge peer_verified">Tasdiqlangan</span>}
         </div>
         <div className="hint">
-          {[me.university_ref?.short_name, me.faculty, me.course && `${me.course}-kurs`].filter(Boolean).join(" · ") || "Universitet ko'rsatilmagan"}
+          {[me.university_ref?.short_name, me.faculty, courseLabel(me.course), me.group_name && `guruh ${me.group_name}`].filter(Boolean).join(" · ") || "Universitet ko'rsatilmagan"}
         </div>
         <div className="hint">{me.track?.title} · {me.points} ball</div>
         {me.skills.length > 0 && <div className="chips" style={{ marginTop: 6 }}>{me.skills.map((s) => <span key={s} className="chip">{s}</span>)}</div>}

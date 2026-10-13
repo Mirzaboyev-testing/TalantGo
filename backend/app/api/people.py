@@ -1,16 +1,19 @@
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from datetime import UTC, datetime
 
-from ..models import Company, Status, Submission, Track, University, User
-from ..schemas import (CompanyIn, CompanyOut, LeaderboardOut, LeaderRow, MeOut, MeUpdate, PeerOut,
+from ..models import Company, Role, Status, Submission, Track, University, User
+from ..schemas import (CompanyOut, EmployerSignupIn, LeaderboardOut, LeaderRow, MeOut, MeUpdate, PeerOut,
                        StaffRequestIn, TrackOut, UniversityOut)
 from ..services import notify
-from ..services.career import completeness
+from ..services.career import completeness, signup_missing
+from ..services.catalog import CONSENT_VERSION, as_dict as catalog_dict
+from ..core.security import read_token
+from ..services import cv_pdf
 from ..services.cv import build_cv
 from ..services.progress import current_streak, rank_of
 from .deps import CurrentUser, Session
@@ -38,7 +41,8 @@ async def me_out(session: Session, user: User) -> MeOut:
         phone=user.phone, phone_verified=user.phone_verified, show_phone=user.show_phone,
         invite_code=f"r{user.id}", headline=user.headline,
         invited_count=await session.scalar(select(func.count()).select_from(User).where(User.referred_by_id == user.id)),
-        completeness=completeness(user))
+        completeness=completeness(user), consent_current=user.consent_version >= CONSENT_VERSION,
+        work_industries=user.work_industries, job_title=user.job_title, signup_missing=signup_missing(user))
 
 
 # Changing any of these after verification means the old check no longer covers the profile.
@@ -71,6 +75,11 @@ async def update_me(body: MeUpdate, user: CurrentUser, session: Session) -> MeOu
         user.name_set_by_user = True        # Telegram sign-in no longer overwrites it
     if changes.pop("consent", None):
         user.consent_at = user.consent_at or datetime.now(UTC)
+        user.consent_version = CONSENT_VERSION
+    if changes.get("job_title") is not None:
+        changes["job_title"] = " ".join(changes["job_title"].split())
+    if changes.get("work_industries") is not None:
+        changes["work_industries"] = list(dict.fromkeys(changes["work_industries"]))
     if (gpa := changes.get("gpa")) is not None and gpa > (changes.get("gpa_scale") or user.gpa_scale):
         raise HTTPException(422, "O'rtacha baho shkaladan katta bo'lishi mumkin emas")
     if "phone" in changes and changes["phone"] != user.phone:
@@ -92,6 +101,30 @@ async def update_me(body: MeUpdate, user: CurrentUser, session: Session) -> MeOu
 @router.get("/me/cv")
 async def my_cv(user: CurrentUser, session: Session) -> dict:
     return await build_cv(session, user)
+
+
+@router.get("/me/cv-link")
+async def my_cv_link(user: CurrentUser) -> dict:
+    from .employer import cv_pdf_link
+    return {"url": cv_pdf_link(user.id)}
+
+
+@router.get("/cv-pdf/{user_id}", include_in_schema=False)
+async def cv_pdf_file(user_id: int, t: str, session: Session) -> Response:
+    """The CV as a PDF. The signed link is the permission: the app hands it only to the student
+    themselves and to approved employers, and it expires after a couple of hours."""
+    if read_token(t, "cvpdf") != str(user_id):
+        raise HTTPException(403, "Havola eskirgan: CV'ni ilovadan qayta yuklab oling")
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(404, "Talaba topilmadi")
+    extra = {"city": user.city, "gpa": user.gpa, "gpa_scale": user.gpa_scale,
+             "work_industries": user.work_industries, "job_types": user.job_types}
+    pdf = cv_pdf.render(await build_cv(session, user), extra)
+    name = cv_pdf.filename(user.full_name)
+    return Response(pdf, media_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="{name.encode("ascii", "replace").decode()}"',
+        "Cache-Control": "private, no-store"})
 
 
 @router.get("/cv/{slug}")
@@ -208,21 +241,35 @@ async def request_verification(user: CurrentUser, session: Session) -> MeOut:
     return await me_out(session, user)
 
 
+@router.get("/catalog")
+async def catalog() -> dict:
+    """Choice lists for the sign-up forms (fields of business, company types, sizes, regions)."""
+    return catalog_dict()
+
+
 @router.post("/me/company", response_model=MeOut, status_code=201)
-async def register_company(body: CompanyIn, user: CurrentUser, session: Session) -> MeOut:
+async def register_company(body: EmployerSignupIn, user: CurrentUser, session: Session) -> MeOut:
     """Turns the account into an employer account. The company is hidden until an admin checks it
     (for example its STIR on orginfo.uz)."""
     if user.company_id:
         raise HTTPException(409, "Siz allaqachon kompaniyaga bog'langansiz")
-    if body.stir and await session.scalar(select(func.count()).select_from(Company).where(Company.stir == body.stir)):
+    if not user.phone:
+        raise HTTPException(422, "Telefon raqamingizni kiriting")
+    if await session.scalar(select(func.count()).select_from(Company).where(Company.stir == body.stir)):
         raise HTTPException(409, "Bu STIR bilan kompaniya ro'yxatdan o'tgan. Jamoaga qo'shilish uchun adminga yozing.")
-    company = Company(**body.model_dump())
+    company = Company(**body.model_dump(exclude={"full_name", "job_title", "consent"}))
     session.add(company)
     await session.flush()
     user.company_id, user.account_type = company.id, "employer"
+    user.full_name, user.name_set_by_user = " ".join(body.full_name.split()), True
+    user.job_title = " ".join(body.job_title.split())
     user.consent_at = user.consent_at or datetime.now(UTC)
+    user.consent_version = CONSENT_VERSION
     await session.commit()
     await session.refresh(user)
+    admins = (await session.execute(select(User.telegram_id).where(
+        (User.role == Role.admin) | User.is_owner, User.is_blocked.is_(False)))).scalars().all()
+    notify.send(list(admins), f"Yangi kompaniya tekshiruvni kutmoqda: {company.name} (STIR {company.stir}).")
     return await me_out(session, user)
 
 

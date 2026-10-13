@@ -36,6 +36,7 @@ export interface Me {
   company: Company | null; staff_university: University | null; staff_status: string; staff_position: string;
   phone: string; phone_verified: boolean; show_phone: boolean; invite_code: string; invited_count: number; headline: string;
   completeness: { percent: number; missing: string[] };
+  consent_current: boolean; work_industries: string[]; job_title: string; signup_missing: string[];
 }
 export type AccountType = "student" | "employer" | "university";
 export type Verification = "none" | "pending" | "verified" | "rejected";
@@ -45,7 +46,68 @@ export interface University { id: number; name: string; short_name: string; city
 export interface Company {
   id: number; name: string; stir: string | null; industry: string; website: string; city: string;
   description: string; status: "pending" | "approved" | "rejected"; review_note: string; created_at: string;
+  legal_form: string; size: string; telegram: string; address: string; email: string;
 }
+export type CompanyInput = Omit<Company, "id" | "status" | "review_note" | "created_at" | "stir"> & { stir: string };
+export interface Catalog {
+  industries: Record<string, string>; legal_forms: Record<string, string>; company_sizes: Record<string, string>; regions: string[];
+}
+export interface StudentRow extends TalentCard {
+  full_name: string; username: string | null; photo_url: string | null; group_name: string; bio: string;
+  work_industries: string[]; open_to_work: boolean; github_url: string; linkedin_url: string;
+  rank: number; tests_taken: number; test_percent: number | null;
+}
+export interface CvData {
+  full_name: string; headline: string; university: string; faculty: string; course: number | null; bio: string;
+  skills: string[]; languages: string[]; track: string | null; github_url: string; linkedin_url: string;
+  stats: { points: number; streak: number; verified_tasks: number; mentor_verified: number; rank_overall: number; rank_in_track: number | null };
+  achievements: { task: string; track: string; level_label: string; points: number; proof_url: string; mentor_comment: string | null;
+                  verified_by: { name: string; kind: string }[] }[];
+  challenges: { title: string; place: number | null; score: number | null }[];
+}
+export interface StudentDetail extends StudentRow {
+  cv: CvData; phone: string | null; contact_status: string | null; applied: boolean;
+  tests: { attempt_id: number; test_id: number; title: string; status: AttemptStatus; score: number; max_score: number; submitted_at: string | null }[];
+}
+export type QuestionKind = "single" | "multi" | "text";
+export type TestStatus = "draft" | "pending" | "approved" | "rejected" | "closed";
+export type AttemptStatus = "in_progress" | "submitted" | "graded";
+export interface TestQuestion { id: number; kind: QuestionKind; text: string; options: string[]; points: number; correct?: number[] }
+export interface QuestionInput { kind: QuestionKind; text: string; options: string[]; correct: number[]; points: number }
+export interface CompanyTestSummary {
+  id: number; title: string; description: string; status: TestStatus; review_note: string; audience: "all" | "tracks" | "applicants";
+  track_ids: number[]; job_id: number | null; job_title: string | null; deadline: string | null; time_limit_min: number | null;
+  questions_count: number; max_score: number; is_survey: boolean; company: string; company_industry: string;
+  attempts: number; to_grade: number; created_at: string; updated_at: string;
+}
+export interface CompanyTestFull extends CompanyTestSummary { questions: TestQuestion[] }
+export interface TestInput {
+  title: string; description: string; job_id: number | null; audience: "all" | "tracks" | "applicants"; track_ids: number[];
+  deadline: string | null; time_limit_min: number | null; questions: QuestionInput[]; submit: boolean;
+}
+export interface StudentBrief {
+  id: number; full_name: string; username: string | null; photo_url: string | null; university: string | null;
+  faculty: string; course: number | null; group_name: string; track: string | null; points: number;
+}
+export interface TestResultRow {
+  attempt_id: number; place: number; student: StudentBrief; status: AttemptStatus; score: number; max_score: number;
+  percent: number | null; late: boolean; submitted_at: string | null;
+}
+export interface AttemptItem {
+  question: TestQuestion; scored: boolean; choice: number[]; text: string; points: number | null; comment: string;
+}
+export interface AttemptDetail {
+  id: number; test_id: number; title: string; status: AttemptStatus; score: number; max_score: number; late: boolean;
+  feedback: string; started_at: string; submitted_at: string | null; graded_at: string | null; items: AttemptItem[];
+  student?: StudentBrief;
+}
+export interface StudentTestCard {
+  id: number; title: string; description: string; status: TestStatus; audience: string; job_id: number | null; job_title: string | null;
+  deadline: string | null; time_limit_min: number | null; questions_count: number; max_score: number; is_survey: boolean;
+  company: string; company_industry: string; open: boolean;
+  my_attempt: { id: number; status: AttemptStatus; score: number; max_score: number; submitted_at: string | null } | null;
+}
+export interface StartedTest extends StudentTestCard { attempt_id: number; started_at: string; ends_at: string | null; questions: TestQuestion[] }
 export interface Job {
   id: number; company_id: number; company_name: string; company_industry: string; title: string; kind: JobKind;
   work_mode: WorkMode; city: string; is_paid: boolean; salary_from: number | null; salary_to: number | null;
@@ -192,7 +254,16 @@ export const api = {
   universities: () => request<University[]>("GET", "/universities"),
   addUniversity: (name: string) => request<University>("POST", "/universities", { name }),
   requestVerification: () => request<Me>("POST", "/me/verification"),
-  registerCompany: (c: Omit<Company, "id" | "status" | "review_note" | "created_at">) => request<Me>("POST", "/me/company", c),
+  registerCompany: (c: CompanyInput & { full_name: string; job_title: string; consent: boolean }) => request<Me>("POST", "/me/company", c),
+  catalog: () => request<Catalog>("GET", "/catalog"),
+  myCvLink: () => request<{ url: string }>("GET", "/me/cv-link"),
+  tests: {
+    list: () => request<StudentTestCard[]>("GET", "/tests"),
+    start: (id: number) => request<StartedTest>("POST", `/tests/${id}/start`),
+    submit: (id: number, answers: { question_id: number; choice: number[]; text: string }[]) =>
+      request<AttemptDetail>("POST", `/tests/${id}/submit`, { answers }),
+    result: (id: number) => request<AttemptDetail>("GET", `/tests/${id}/result`),
+  },
   requestStaff: (university_id: number, position: string) => request<Me>("POST", "/me/staff-request", { university_id, position }),
   backToStudent: () => request<Me>("POST", "/me/account-type/student"),
   jobs: (params: Record<string, string>) => request<Job[]>("GET", `/jobs?${new URLSearchParams(params)}`),
@@ -253,7 +324,20 @@ export const api = {
 
   employer: {
     company: () => request<Company>("GET", "/employer/company"),
-    editCompany: (c: Omit<Company, "id" | "status" | "review_note" | "created_at">) => request<Company>("PATCH", "/employer/company", c),
+    editCompany: (c: CompanyInput) => request<Company>("PATCH", "/employer/company", c),
+    students: (params: Record<string, string>) => request<StudentRow[]>("GET", `/employer/students?${new URLSearchParams(params)}`),
+    student: (id: number) => request<StudentDetail>("GET", `/employer/students/${id}`),
+    cvLink: (id: number) => request<{ url: string }>("GET", `/employer/students/${id}/cv-link`),
+    tests: () => request<CompanyTestSummary[]>("GET", "/employer/tests"),
+    test: (id: number) => request<CompanyTestFull>("GET", `/employer/tests/${id}`),
+    createTest: (t: TestInput) => request<CompanyTestFull>("POST", "/employer/tests", t),
+    editTest: (id: number, t: TestInput) => request<CompanyTestFull>("PUT", `/employer/tests/${id}`, t),
+    closeTest: (id: number) => request<CompanyTestSummary>("POST", `/employer/tests/${id}/close`),
+    deleteTest: (id: number) => request<null>("DELETE", `/employer/tests/${id}`),
+    testResults: (id: number) => request<{ test: CompanyTestSummary; rows: TestResultRow[] }>("GET", `/employer/tests/${id}/results`),
+    attempt: (id: number) => request<AttemptDetail>("GET", `/employer/test-attempts/${id}`),
+    grade: (id: number, grades: { question_id: number; points: number; comment: string }[], feedback: string) =>
+      request<AttemptDetail>("POST", `/employer/test-attempts/${id}/grade`, { grades, feedback }),
     jobs: () => request<Job[]>("GET", "/employer/jobs"),
     createJob: (j: JobInput) => request<Job>("POST", "/employer/jobs", j),
     editJob: (id: number, j: JobInput) => request<Job>("PUT", `/employer/jobs/${id}`, j),
@@ -333,7 +417,9 @@ export const api = {
     aiConversation: (userId: number) => request<AiMessage[]>("GET", `/admin/assistant/users/${userId}/messages`, undefined, true),
     testAi: () => request<{ model: string; reply: string }>("POST", "/admin/ai/test", undefined, true),
     exportUsers: () => download("/admin/export/users.csv", "talantgo-talabalar.csv"),
-    inbox: () => request<{ verifications: number; companies: number; jobs: number; staff: number }>("GET", "/admin/inbox", undefined, true),
+    inbox: () => request<{ verifications: number; companies: number; jobs: number; staff: number; tests: number }>("GET", "/admin/inbox", undefined, true),
+    tests: (status: string) => request<CompanyTestFull[]>("GET", `/admin/tests${status ? `?status=${status}` : ""}`, undefined, true),
+    reviewTest: (id: number, approve: boolean, note: string) => request<CompanyTestFull>("POST", `/admin/tests/${id}/review`, { approve, note }, true),
     verifications: () => request<PendingStudent[]>("GET", "/admin/verifications", undefined, true),
     decideVerification: (id: number, approve: boolean, note: string) => request<unknown>("POST", `/admin/verifications/${id}`, { approve, note }, true),
     companies: (status: string) => request<Company[]>("GET", `/admin/companies?status=${status}`, undefined, true),
@@ -466,3 +552,17 @@ export const uzDate = (iso: string) => {
 };
 /** Days left until a deadline, for "3 kun qoldi". */
 export const daysLeft = (iso: string) => Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000));
+
+export const ATTEMPT_STATUS: Record<AttemptStatus, string> = { in_progress: "Ishlanmoqda", submitted: "Baholanmoqda", graded: "Baholangan" };
+export const TEST_STATUS: Record<TestStatus, [string, string]> = {
+  draft: ["Qoralama", "todo"], pending: ["Tekshiruvda", "pending"], approved: ["E'lon qilingan", "peer_verified"],
+  rejected: ["Qaytarilgan", "rejected"], closed: ["Yopilgan", "todo"],
+};
+export const QUESTION_KIND: Record<QuestionKind, string> = { single: "Bitta javob", multi: "Bir nechta javob", text: "Yozma javob" };
+
+let catalogCache: Promise<Catalog> | null = null;
+/** The choice lists rarely change: fetched once per app launch. */
+export function loadCatalog(): Promise<Catalog> {
+  catalogCache ??= api.catalog().catch((e) => { catalogCache = null; throw e; });
+  return catalogCache;
+}

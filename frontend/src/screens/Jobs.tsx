@@ -3,12 +3,13 @@ import { api, APPLICATION_STATUS, JOB_KIND, salary, WORK_MODE, type Job, type Jo
          type StudentContact } from "../api";
 import { haptic } from "../tg";
 import { ErrorText, Sheet, message } from "../ui";
+import StudentTests from "./StudentTests";
 
 const KINDS: [JobKind | "", string][] = [["", "Hammasi"], ["internship", "Amaliyot"], ["part_time", "Yarim stavka"],
                                         ["junior", "Junior"], ["project", "Loyiha"]];
 
 export default function JobsScreen({ me, onOpenProfile }: { me: Me; onOpenProfile: () => void }) {
-  const [view, setView] = useState<"jobs" | "mine">("jobs");
+  const [view, setView] = useState<"jobs" | "mine" | "tests">("jobs");
   const [kind, setKind] = useState<JobKind | "">("");
   const [paidOnly, setPaidOnly] = useState(false);
   const [practiceOnly, setPracticeOnly] = useState(false);
@@ -43,6 +44,7 @@ export default function JobsScreen({ me, onOpenProfile }: { me: Me; onOpenProfil
       <div className="segmented">
         <button className={view === "jobs" ? "on" : ""} onClick={() => setView("jobs")}>Amaliyot va ish</button>
         <button className={view === "mine" ? "on" : ""} onClick={() => setView("mine")}>Arizalarim</button>
+        <button className={view === "tests" ? "on" : ""} onClick={() => setView("tests")}>Testlar</button>
       </div>
 
       {pending.map((c) => <ContactCard key={c.id} contact={c} onAnswered={loadContacts} />)}
@@ -72,6 +74,7 @@ export default function JobsScreen({ me, onOpenProfile }: { me: Me; onOpenProfil
         </>
       )}
 
+      {view === "tests" && <StudentTests />}
       {view === "mine" && (
         <>
           {!mine && !error && <div className="hint">Yuklanmoqda…</div>}

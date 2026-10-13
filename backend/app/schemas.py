@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from .models import ReviewKind, Role, Status
+from .services.catalog import COMPANY_SIZES, INDUSTRIES, LEGAL_FORMS, REGIONS
 
 
 def _http_url(value: str) -> str:
@@ -25,6 +26,17 @@ Tag = Goal
 Phone = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^(\+998\d{9})?$")]
 JobKind = Literal["internship", "part_time", "junior", "project"]
 WorkMode = Literal["office", "remote", "hybrid"]
+
+
+def _one_of(values, what: str):
+    def check(value: str) -> str:
+        if value not in values:
+            raise ValueError(f"{what} ro'yxatdan tanlang")
+        return value
+    return AfterValidator(check)
+
+
+Industry = Annotated[str, _one_of(INDUSTRIES, "Sohani")]
 
 
 class ORM(BaseModel):
@@ -196,6 +208,10 @@ class MeOut(ORM):
     invited_count: int
     headline: str
     completeness: dict
+    consent_current: bool = False
+    work_industries: list[str] = []
+    job_title: str = ""
+    signup_missing: list[str] = []
 
 
 class MeUpdate(BaseModel):
@@ -224,6 +240,8 @@ class MeUpdate(BaseModel):
     open_to_work: bool | None = None
     phone: Phone | None = None
     show_phone: bool | None = None
+    work_industries: list[Industry] | None = Field(default=None, max_length=6)
+    job_title: str | None = Field(default=None, max_length=120)
 
 
 class UniversityOut(ORM):
@@ -241,18 +259,43 @@ class CompanyOut(ORM):
     website: str
     city: str
     description: str
+    legal_form: str = ""
+    size: str = ""
+    telegram: str = ""
+    address: str = ""
+    email: str = ""
     status: str
     review_note: str
     created_at: datetime
 
 
 class CompanyIn(BaseModel):
-    name: str = Field(min_length=2, max_length=160)
-    stir: Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^\d{9}$")] | None = None
-    industry: str = Field(default="", max_length=80)
+    """Everything marked required on the sign-up form is required here too."""
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=160)]
+    stir: Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^\d{9}$")]
+    legal_form: Annotated[str, _one_of(LEGAL_FORMS, "Kompaniya turini")]
+    industry: Industry
+    size: Annotated[str, _one_of(COMPANY_SIZES, "Xodimlar sonini")]
+    city: Annotated[str, _one_of(REGIONS, "Viloyat yoki shaharni")]
+    description: Annotated[str, StringConstraints(strip_whitespace=True, min_length=20, max_length=2000)]
     website: Url = ""
-    city: str = Field(default="", max_length=60)
-    description: str = Field(default="", max_length=2000)
+    telegram: Annotated[str, StringConstraints(strip_whitespace=True, max_length=128)] = ""
+    address: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] = ""
+    email: Annotated[str, StringConstraints(strip_whitespace=True, max_length=120,
+                                            pattern=r"^([^@\s]+@[^@\s]+\.[^@\s]+)?$")] = ""
+
+
+class EmployerSignupIn(CompanyIn):
+    """Sign-up as an employer: the person (name, position) and the company in one form."""
+    full_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=128)]
+    job_title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=120)]
+    consent: bool
+
+    @model_validator(mode="after")
+    def _consent(self):
+        if not self.consent:
+            raise ValueError("Shaxsiy ma'lumotlarni qayta ishlashga rozilik bering")
+        return self
 
 
 class StaffRequestIn(BaseModel):

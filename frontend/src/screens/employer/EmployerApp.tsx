@@ -1,20 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, APPLICATION_STATUS, JOB_KIND, salary, WORK_MODE, type Applicant, type EmployerContact, type Job,
-         type JobInput, type JobKind, type Me, type TalentCard, type Track, type University, type WorkMode } from "../../api";
+         type JobInput, type JobKind, type Me, type TalentCard, type Track, type WorkMode } from "../../api";
+import { Field, Req, useRequired, type Check } from "../../form";
 import { ask, haptic, openLink } from "../../tg";
-import { ErrorText, Sheet, message } from "../../ui";
-import CompanyForm from "./CompanyForm";
+import { ErrorText, message, toast } from "../../ui";
+import EmployerSignup from "./EmployerSignup";
+import Students, { downloadCv, StudentSheet } from "./Students";
+import Tests from "./Tests";
 import Groups from "../Groups";
 import Shell, { type ShellTab } from "../Shell";
 import { Icon } from "../../icons";
 
-type Tab = "jobs" | "talent" | "contacts" | "groups" | "company";
+type Tab = "students" | "jobs" | "tests" | "groups" | "profile";
 const TABS: ShellTab<Tab>[] = [
-  { id: "jobs", icon: "briefcase", label: "Vakansiyalar" },
-  { id: "talent", icon: "search", label: "Talantlar" },
-  { id: "contacts", icon: "inbox", label: "Kontaktlar" },
+  { id: "students", icon: "users", label: "Talabalar" },
+  { id: "jobs", icon: "briefcase", label: "Vakansiyalarim" },
+  { id: "tests", icon: "check", label: "Testlar" },
   { id: "groups", icon: "chat", label: "Guruhlar" },
-  { id: "company", icon: "building", label: "Kompaniya" },
+  { id: "profile", icon: "building", label: "Profilim" },
 ];
 const JOB_STATUS: Record<string, [string, string]> = {
   pending: ["Tekshiruvda", "pending"], approved: ["E'lon qilingan", "peer_verified"],
@@ -22,24 +25,26 @@ const JOB_STATUS: Record<string, [string, string]> = {
 };
 
 export default function EmployerApp({ me, onChanged, onLogout }: { me: Me; onChanged: (m: Me) => void; onLogout: () => void }) {
-  const [tab, setTab] = useState<Tab>("jobs");
+  const [tab, setTab] = useState<Tab>("students");
+  const [studentsView, setStudentsView] = useState<"all" | "contacts">("all");
+  const [attempt, setAttempt] = useState<number | null>(null);
+  const openAttempt = (id: number) => { setAttempt(id); setTab("tests"); };
   return (
-    <Shell tabs={TABS} active={tab} onChange={setTab} onLogout={onLogout}
+    <Shell tabs={TABS} active={tab} onChange={(t) => { setAttempt(null); setTab(t); }} onLogout={onLogout}
            user={{ name: me.full_name, photo: me.photo_url, subtitle: me.company?.name }}>
-        {tab === "jobs" && <JobsTab />}
-        {tab === "talent" && <TalentTab />}
-        {tab === "contacts" && <ContactsTab />}
-        {tab === "groups" && <Groups />}
-        {tab === "company" && (
-          <div>
-            <h1>Kompaniya</h1>
-            {me.company && (
-              <CompanyForm initial={me.company} submitLabel="Saqlash"
-                           onSubmit={async (c) => { await api.employer.editCompany(c); onChanged(await api.me()); }} />
-            )}
-            <p className="hint">Nom yoki STIR o'zgarsa, kompaniya qayta tekshiriladi.</p>
-          </div>
+        {tab === "students" && (
+          <>
+            <div className="segmented">
+              <button className={studentsView === "all" ? "on" : ""} onClick={() => setStudentsView("all")}>Barcha talabalar</button>
+              <button className={studentsView === "contacts" ? "on" : ""} onClick={() => setStudentsView("contacts")}>Bog'lanish so'rovlari</button>
+            </div>
+            {studentsView === "all" ? <Students onTest={openAttempt} /> : <ContactsTab />}
+          </>
         )}
+        {tab === "jobs" && <JobsTab />}
+        {tab === "tests" && <Tests key={attempt ?? "list"} openAttempt={attempt} />}
+        {tab === "groups" && <Groups />}
+        {tab === "profile" && <EmployerSignup me={me} onSaved={onChanged} />}
     </Shell>
   );
 }
@@ -59,8 +64,8 @@ function JobsTab() {
 
   return (
     <div>
-      <h1>Vakansiyalar</h1>
-      <button className="btn" onClick={() => setEditing("new")}>+ Yangi vakansiya</button>
+      <h1>Vakansiyalarim</h1>
+      <button className="btn" onClick={() => setEditing("new")}><Icon name="plus" size={18} />Vakansiya qo'shish</button>
       <p className="hint">Faqat talabalar uchun: amaliyot, yarim stavka, junior va loyiha. Har bir e'lon admin tekshiruvidan keyin chiqadi.</p>
       <ErrorText error={error} />
       {!jobs && !error && <div className="hint">Yuklanmoqda…</div>}
@@ -92,7 +97,7 @@ function JobsTab() {
 function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [f, setF] = useState({
-    title: job?.title ?? "", kind: (job?.kind ?? "internship") as JobKind, work_mode: (job?.work_mode ?? "office") as WorkMode,
+    title: job?.title ?? "", kind: (job?.kind ?? "") as JobKind | "", work_mode: (job?.work_mode ?? "office") as WorkMode,
     city: job?.city ?? "Toshkent", is_paid: job?.is_paid ?? true, salary_from: job?.salary_from ? String(job.salary_from) : "",
     salary_to: job?.salary_to ? String(job.salary_to) : "", hours: job?.hours_per_week ? String(job.hours_per_week) : "",
     description: job?.description ?? "", requirements: job?.requirements ?? "", skills: job?.skills.join(", ") ?? "",
@@ -101,14 +106,25 @@ function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
   const [rules, setRules] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const { errors, check, clear, cls, groupCls } = useRequired();
   useEffect(() => { api.tracks().then(setTracks, () => {}); }, []);
-  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+  const set = (k: keyof typeof f, id?: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setF({ ...f, [k]: e.target.value });
+    if (id) clear(id);
+  };
   const num = (v: string) => (v.replace(/\D/g, "") ? Number(v.replace(/\D/g, "")) : null);
 
   async function save() {
+    const checks: Check[] = [
+      ["j-title", f.title.trim().length >= 3, "lavozim"],
+      ["j-kind", Boolean(f.kind), "ish turi"],
+      ["j-city", f.city.trim().length >= 2, "shahar"],
+      ["j-desc", f.description.trim().length >= 20, "vazifalar (kamida 20 belgi)"],
+      ["j-rules", rules, "platforma qoidalari"],
+    ];
+    if (!check(checks)) return;
     const body: JobInput = {
-      title: f.title.trim(), kind: f.kind, work_mode: f.work_mode, city: f.city.trim(), is_paid: f.is_paid,
+      title: f.title.trim(), kind: f.kind as JobKind, work_mode: f.work_mode, city: f.city.trim(), is_paid: f.is_paid,
       salary_from: f.is_paid ? num(f.salary_from) : null, salary_to: f.is_paid ? num(f.salary_to) : null,
       hours_per_week: num(f.hours), description: f.description.trim(), requirements: f.requirements.trim(),
       skills: f.skills.split(",").map((s) => s.trim()).filter((s) => s.length >= 2), track_ids: f.track_ids,
@@ -119,6 +135,7 @@ function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
       if (job) await api.employer.editJob(job.id, body);
       else await api.employer.createJob(body);
       haptic("success");
+      toast("Vakansiya saqlandi va tekshiruvga yuborildi");
       onDone();
     } catch (e) {
       setError(message(e));
@@ -129,63 +146,77 @@ function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
   return (
     <div>
       <button className="btn small ghost" onClick={onDone}><Icon name="back" size={16} />Orqaga</button>
-      <h1>{job ? "Vakansiyani tahrirlash" : "Yangi vakansiya"}</h1>
+      <h1>{job ? "Vakansiyani tahrirlash" : "Vakansiya qo'shish"}</h1>
       {job?.status === "approved" && <p className="notice">O'zgartirilgan e'lon qayta tekshiruvga yuboriladi.</p>}
+      <p className="form-note"><Req />belgisi bor maydonlar majburiy.</p>
       <div className="card">
-        <label>Lavozim</label>
-        <input value={f.title} maxLength={160} placeholder="Masalan: Data analitik stajyor" onChange={set("title")} />
+        <Field id="j-title" label="Lavozim" required error={errors["j-title"] && "Lavozim nomini yozing"}>
+          <input id="j-title" className={cls("j-title")} value={f.title} maxLength={160} placeholder="Masalan: Data analitik stajyor" onChange={set("title", "j-title")} />
+        </Field>
         <div className="row">
-          <div className="grow"><label>Turi</label>
-            <select value={f.kind} onChange={set("kind")}>{(Object.keys(JOB_KIND) as JobKind[]).map((k) => <option key={k} value={k}>{JOB_KIND[k]}</option>)}</select>
+          <div className="grow">
+            <Field id="j-kind" label="Ish turi" required error={errors["j-kind"] && "Tanlang"}>
+              <select id="j-kind" className={cls("j-kind")} value={f.kind} onChange={set("kind", "j-kind")}>
+                <option value="">Tanlang…</option>
+                {(Object.keys(JOB_KIND) as JobKind[]).map((k) => <option key={k} value={k}>{JOB_KIND[k]}</option>)}
+              </select>
+            </Field>
           </div>
-          <div className="grow"><label>Format</label>
-            <select value={f.work_mode} onChange={set("work_mode")}>{(Object.keys(WORK_MODE) as WorkMode[]).map((k) => <option key={k} value={k}>{WORK_MODE[k]}</option>)}</select>
+          <div className="grow">
+            <Field id="j-mode" label="Format" required>
+              <select id="j-mode" value={f.work_mode} onChange={set("work_mode")}>{(Object.keys(WORK_MODE) as WorkMode[]).map((k) => <option key={k} value={k}>{WORK_MODE[k]}</option>)}</select>
+            </Field>
           </div>
         </div>
         <div className="row">
-          <div className="grow"><label>Shahar</label><input value={f.city} maxLength={60} onChange={set("city")} /></div>
-          <div style={{ width: 120 }}><label>Soat/hafta</label><input value={f.hours} inputMode="numeric" placeholder="20" onChange={set("hours")} /></div>
+          <div className="grow">
+            <Field id="j-city" label="Shahar" required error={errors["j-city"] && "Shaharni yozing"}>
+              <input id="j-city" className={cls("j-city")} value={f.city} maxLength={60} onChange={set("city", "j-city")} />
+            </Field>
+          </div>
+          <div style={{ width: 120 }}><Field id="j-hours" label="Soat/hafta"><input id="j-hours" value={f.hours} inputMode="numeric" placeholder="20" onChange={set("hours")} /></Field></div>
         </div>
-        <label className="row" style={{ color: "var(--text)", marginTop: 12, gap: 8 }}>
-          <input type="checkbox" checked={f.is_paid} style={{ width: 20, height: 20 }} onChange={(e) => setF({ ...f, is_paid: e.target.checked })} />
-          To'lanadi
+        <label className="radio-line" style={{ marginTop: 12 }}>
+          <input type="checkbox" checked={f.is_paid} onChange={(e) => setF({ ...f, is_paid: e.target.checked })} />To'lanadi
         </label>
         {f.is_paid ? (
           <div className="row">
-            <div className="grow"><label>Maosh, so'm/oy (dan)</label><input value={f.salary_from} inputMode="numeric" placeholder="2000000" onChange={set("salary_from")} /></div>
-            <div className="grow"><label>gacha</label><input value={f.salary_to} inputMode="numeric" placeholder="3000000" onChange={set("salary_to")} /></div>
+            <div className="grow"><Field id="j-from" label="Maosh, so'm/oy (dan)"><input id="j-from" value={f.salary_from} inputMode="numeric" placeholder="2000000" onChange={set("salary_from")} /></Field></div>
+            <div className="grow"><Field id="j-to" label="gacha"><input id="j-to" value={f.salary_to} inputMode="numeric" placeholder="3000000" onChange={set("salary_to")} /></Field></div>
           </div>
         ) : (
           <p className="hint">To'lanmaydigan amaliyot talabalarga aniq ko'rsatiladi. Bo'sh lavozimga muddatli shartnoma bilan olinsa, Mehnat kodeksiga ko'ra haq to'lanadi.</p>
         )}
-        <label>Vazifalar</label>
-        <textarea value={f.description} maxLength={5000} placeholder="Stajyor nima qiladi, nimani o'rganadi, kimga hisobot beradi" onChange={set("description")} />
-        <label>Talablar (ixtiyoriy)</label>
-        <textarea value={f.requirements} maxLength={3000} onChange={set("requirements")} />
-        <label>Ko'nikmalar (vergul bilan, moslikni hisoblash uchun)</label>
-        <input value={f.skills} placeholder="SQL, Power BI, Excel" onChange={set("skills")} />
+        <Field id="j-desc" label="Vazifalar" required error={errors["j-desc"] && "Kamida 20 belgi yozing"}>
+          <textarea id="j-desc" className={cls("j-desc")} value={f.description} maxLength={5000}
+                    placeholder="Stajyor nima qiladi, nimani o'rganadi, kimga hisobot beradi" onChange={set("description", "j-desc")} />
+        </Field>
+        <Field id="j-req" label="Talablar"><textarea id="j-req" value={f.requirements} maxLength={3000} onChange={set("requirements")} /></Field>
+        <Field id="j-skills" label="Ko'nikmalar (vergul bilan)" hint="Talabalar bilan moslikni hisoblash uchun">
+          <input id="j-skills" value={f.skills} placeholder="SQL, Power BI, Excel" onChange={set("skills")} />
+        </Field>
         <label>Mos yo'nalishlar</label>
         <div className="chips">
           {tracks.map((t) => (
-            <button key={t.id} className={`chip ${f.track_ids.includes(t.id) ? "on" : ""}`}
+            <button key={t.id} type="button" className={`chip ${f.track_ids.includes(t.id) ? "on" : ""}`}
                     onClick={() => setF({ ...f, track_ids: f.track_ids.includes(t.id) ? f.track_ids.filter((x) => x !== t.id) : [...f.track_ids, t.id] })}>
               {t.title.split(":")[0]}
             </button>
           ))}
         </div>
-        <label>Ariza muddati (ixtiyoriy)</label>
-        <input type="date" value={f.deadline} onChange={set("deadline")} />
-        <label className="row" style={{ color: "var(--text)", marginTop: 12, gap: 8, alignItems: "flex-start" }}>
-          <input type="checkbox" checked={f.practice} style={{ width: 20, height: 20, flex: "none" }} onChange={(e) => setF({ ...f, practice: e.target.checked })} />
+        <Field id="j-deadline" label="Ariza muddati"><input id="j-deadline" type="date" value={f.deadline} onChange={set("deadline")} /></Field>
+        <label className="radio-line" style={{ marginTop: 12 }}>
+          <input type="checkbox" checked={f.practice} onChange={(e) => setF({ ...f, practice: e.target.checked })} />
           <span>Universitetdagi malakaviy amaliyot sifatida rasmiylashtirishga tayyormiz (shartnoma va xulosa beramiz)</span>
         </label>
-        <label className="row" style={{ color: "var(--text)", marginTop: 12, gap: 8, alignItems: "flex-start" }}>
-          <input type="checkbox" checked={rules} style={{ width: 20, height: 20, flex: "none" }} onChange={(e) => setRules(e.target.checked)} />
-          <span>Bu MLM yoki faqat foizga ishlash emas. Talabadan hech qanday to'lov olinmaydi va pasport yoki karta ma'lumotlari so'ralmaydi.</span>
+        <label id="j-rules" tabIndex={-1} className={groupCls("j-rules", "radio-line")} style={{ marginTop: 12 }}>
+          <input type="checkbox" checked={rules} onChange={(e) => { setRules(e.target.checked); clear("j-rules"); }} />
+          <span>Bu MLM yoki faqat foizga ishlash emas. Talabadan hech qanday to'lov olinmaydi va pasport yoki karta ma'lumotlari so'ralmaydi.<Req /></span>
         </label>
+        {errors["j-rules"] && <div className="field-error">Qoidalarni tasdiqlang</div>}
         <ErrorText error={error} />
-        <button className="btn" style={{ marginTop: 12 }} disabled={busy || !rules || f.title.trim().length < 3 || f.description.trim().length < 20} onClick={save}>
-          {busy ? "Yuborilmoqda…" : "Tekshiruvga yuborish"}
+        <button className="btn" style={{ marginTop: 12 }} disabled={busy} onClick={save}>
+          {busy ? "Yuborilmoqda…" : "Saqlash va tekshiruvga yuborish"}
         </button>
       </div>
     </div>
@@ -196,6 +227,7 @@ const NEXT_STATUS: [string, string, string][] = [["shortlisted", "Keyingi bosqic
 
 function Applicants({ job, onBack }: { job: Job; onBack: () => void }) {
   const [items, setItems] = useState<Applicant[] | null>(null);
+  const [profile, setProfile] = useState<number | null>(null);
   const [error, setError] = useState("");
   useEffect(() => { api.employer.applicants(job.id).then(setItems, (e) => setError(message(e))); }, [job.id]);
 
@@ -225,18 +257,20 @@ function Applicants({ job, onBack }: { job: Job; onBack: () => void }) {
           {a.note && <p style={{ whiteSpace: "pre-line" }}>«{a.note}»</p>}
           <div className="row wrap" style={{ marginTop: 8 }}>
             {a.identity.username && <button className="btn small" onClick={() => openLink(`https://t.me/${a.identity.username}`)}>Telegram'da yozish</button>}
-            {a.identity.cv_url && <button className="btn small ghost" onClick={() => openLink(a.identity.cv_url!)}>CV</button>}
+            <button className="btn small ghost" onClick={() => setProfile(a.card.id)}>Profil</button>
+            <button className="btn small ghost" onClick={() => downloadCv(a.card.id)}>CV (PDF)</button>
             {NEXT_STATUS.filter(([s]) => s !== a.status).map(([s, label, kind]) => (
               <button key={s} className={`btn small ${kind === "bad" ? "ghost" : "ghost"}`} onClick={() => setStatus(a, s)}>{label}</button>
             ))}
           </div>
         </div>
       ))}
+      {profile && <StudentSheet id={profile} catalog={null} onClose={() => setProfile(null)} />}
     </div>
   );
 }
 
-// --------------------------------------------------------------------------- talent search
+// --------------------------------------------------------------------------- shared card
 
 function CardBody({ card }: { card: TalentCard }) {
   return (
@@ -259,114 +293,6 @@ function CardBody({ card }: { card: TalentCard }) {
   );
 }
 
-function TalentTab() {
-  const [unis, setUnis] = useState<University[]>([]);
-  const [tracks, setTracks] = useState<Track[]>([]);
-  const [filters, setFilters] = useState({ university_id: "", track_id: "", course: "", skill: "", job_type: "", verified_only: false });
-  const [cards, setCards] = useState<TalentCard[] | null>(null);
-  const [contacting, setContacting] = useState<TalentCard | null>(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    api.universities().then(setUnis, () => {});
-    api.tracks().then(setTracks, () => {});
-  }, []);
-
-  const search = useCallback(() => {
-    const params: Record<string, string> = {};
-    for (const [k, v] of Object.entries(filters)) if (v) params[k] = String(v);
-    setCards(null); setError("");
-    api.employer.talent(params).then(setCards, (e) => setError(message(e)));
-  }, [filters]);
-  useEffect(() => { search(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const set = (k: keyof typeof filters) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setFilters({ ...filters, [k]: e.target.value });
-
-  return (
-    <div>
-      <h1>Talantlar</h1>
-      <p className="hint">Ishga tayyorligini bildirgan talabalar. Ismlar yashirin: siz ko'nikmalar va tasdiqlangan natijalarga qarab tanlaysiz. Talaba rozi bo'lsa, ismi va Telegram'i ochiladi.</p>
-      <div className="card">
-        <div className="row">
-          <select className="grow" value={filters.university_id} onChange={set("university_id")}>
-            <option value="">Barcha universitetlar</option>
-            {unis.map((u) => <option key={u.id} value={u.id}>{u.short_name}</option>)}
-          </select>
-          <select className="grow" value={filters.track_id} onChange={set("track_id")}>
-            <option value="">Barcha yo'nalishlar</option>
-            {tracks.map((t) => <option key={t.id} value={t.id}>{t.title.split(":")[0]}</option>)}
-          </select>
-        </div>
-        <div className="row" style={{ marginTop: 8 }}>
-          <select className="grow" value={filters.course} onChange={set("course")}>
-            <option value="">Har qanday kurs</option>
-            {[1, 2, 3, 4, 5, 6].map((c) => <option key={c} value={c}>{c}-kurs</option>)}
-            <option value="7">Magistratura</option>
-          </select>
-          <select className="grow" value={filters.job_type} onChange={set("job_type")}>
-            <option value="">Har qanday ish</option>
-            {(Object.keys(JOB_KIND) as JobKind[]).map((k) => <option key={k} value={k}>{JOB_KIND[k]}</option>)}
-          </select>
-        </div>
-        <input style={{ marginTop: 8 }} value={filters.skill} placeholder="Ko'nikma: SQL, Power BI…" onChange={set("skill")} />
-        <label className="row" style={{ color: "var(--text)", gap: 8 }}>
-          <input type="checkbox" checked={filters.verified_only} style={{ width: 20, height: 20 }}
-                 onChange={(e) => setFilters({ ...filters, verified_only: e.target.checked })} />
-          Faqat talabaligi tasdiqlanganlar
-        </label>
-        <button className="btn" style={{ marginTop: 10 }} onClick={search}>Qidirish</button>
-      </div>
-      <ErrorText error={error} />
-      {!cards && !error && <div className="hint">Yuklanmoqda…</div>}
-      {cards?.length === 0 && <div className="center hint">Mos talaba topilmadi. Filtrlarni kengaytiring.</div>}
-      {cards?.map((c) => (
-        <div key={c.id} className="card">
-          <div className="row between">
-            <b>Talaba {c.code}</b>
-            {c.verification === "verified" ? <span className="badge peer_verified">{c.verified_by || "Tasdiqlangan"}</span>
-              : <span className="badge todo">Tasdiq kutilmoqda</span>}
-          </div>
-          <CardBody card={c} />
-          <div style={{ marginTop: 8 }}>
-            {c.contact_status ? (
-              <span className="hint">So'rov yuborilgan: {c.contact_status === "accepted" ? "rozi bo'ldi" : c.contact_status === "declined" ? "rad etdi" : "javob kutilmoqda"}</span>
-            ) : (
-              <button className="btn small" onClick={() => setContacting(c)}>Bog'lanish so'rovi</button>
-            )}
-          </div>
-        </div>
-      ))}
-      {contacting && <ContactSheet card={contacting} onClose={() => setContacting(null)} onSent={() => { setContacting(null); search(); }} />}
-    </div>
-  );
-}
-
-function ContactSheet({ card, onClose, onSent }: { card: TalentCard; onClose: () => void; onSent: () => void }) {
-  const [msg, setMsg] = useState("");
-  const [error, setError] = useState("");
-  async function send() {
-    try {
-      await api.employer.contact(card.id, msg.trim());
-      haptic("success");
-      onSent();
-    } catch (e) {
-      setError(message(e));
-    }
-  }
-  return (
-    <Sheet onClose={onClose}>
-      <h1>Talaba {card.code}</h1>
-      <p className="hint">Xabaringiz botdan talabaga boradi. U rozi bo'lsa, «Kontaktlar»da ismi va Telegram'i ochiladi. Kuniga 20 tagacha so'rov.</p>
-      <textarea value={msg} maxLength={1000} placeholder="Kim ekansiz va nimani taklif qilyapsiz: amaliyot, muddat, to'lov" onChange={(e) => setMsg(e.target.value)} />
-      <ErrorText error={error} />
-      <div className="stack" style={{ marginTop: 10 }}>
-        <button className="btn" disabled={msg.trim().length < 10} onClick={send}>Yuborish</button>
-        <button className="btn ghost" onClick={onClose}>Bekor qilish</button>
-      </div>
-    </Sheet>
-  );
-}
-
 function ContactsTab() {
   const [items, setItems] = useState<EmployerContact[] | null>(null);
   const [error, setError] = useState("");
@@ -375,7 +301,7 @@ function ContactsTab() {
     <div>
       <h1>Kontaktlar</h1>
       <ErrorText error={error} />
-      {items?.length === 0 && <div className="center hint">Hali so'rov yubormagansiz. «Talantlar»dan boshlang.</div>}
+      {items?.length === 0 && <div className="center hint">Hali so'rov yubormagansiz. Talaba profilidan «Bog'lanish so'rovi»ni bosing.</div>}
       {items?.map((c) => (
         <div key={c.id} className="card">
           <div className="row between">

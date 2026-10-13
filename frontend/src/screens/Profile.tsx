@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, type Me } from "../api";
+import { absoluteUrl, api, type Me } from "../api";
 import { haptic, openLink } from "../tg";
 import { Avatar, ErrorText, focusField, isFullName, message, toast } from "../ui";
 import CareerProfile from "./CareerProfile";
@@ -72,6 +72,9 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
           <button className="btn" disabled={busy} onClick={() => save({ cv_public: !me.cv_public })}>
             {me.cv_public ? "CV'ni yopish" : "CV'ni ochiq qilish"}
           </button>
+          <button className="btn ghost" onClick={async () => {
+            try { openLink(absoluteUrl((await api.myCvLink()).url)); } catch (e) { toast(message(e), "error"); }
+          }}>CV'ni PDF qilib yuklab olish</button>
           {me.cv_public && (
             <div className="row">
               <button className="btn ghost" onClick={() => openLink(cvUrl)}>Ko'rish</button>

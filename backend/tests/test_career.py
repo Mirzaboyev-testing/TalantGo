@@ -30,10 +30,16 @@ async def make_student(client, make_user, name: str, open_to_work=True) -> dict:
     return u
 
 
-async def make_employer(client, make_user) -> dict:
-    hr = await make_user("HR Nigora")
-    r = await client.post("/api/v1/me/company", json={"name": "Data Solutions MChJ", "stir": "301234567",
-                                                      "industry": "IT", "city": "Toshkent"}, headers=hr["headers"])
+COMPANY = {"name": "Data Solutions MChJ", "stir": "301234567", "legal_form": "llc", "industry": "it",
+           "size": "11-50", "city": "Toshkent shahri",
+           "description": "Ma'lumotlar tahlili bo'yicha xizmatlar, talabalar uchun amaliyot dasturi"}
+EMPLOYER = {**COMPANY, "full_name": "Nigora Karimova", "job_title": "HR menejer", "consent": True}
+
+
+async def make_employer(client, make_user, name: str = "HR Nigora", stir: str = "301234567") -> dict:
+    hr = await make_user(name)
+    await client.patch("/api/v1/me", json={"phone": "+998901234567"}, headers=hr["headers"])
+    r = await client.post("/api/v1/me/company", json={**EMPLOYER, "stir": stir}, headers=hr["headers"])
     assert r.status_code == 201, r.text
     hr["company_id"] = r.json()["company"]["id"]
     return hr

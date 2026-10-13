@@ -246,3 +246,33 @@ input.invalid, textarea.invalid, select.invalid { border-color: var(--bad) !impo
 .invalid-group { outline: 1.5px solid var(--bad); outline-offset: 4px; border-radius: 12px; }
 .field-error { color: var(--bad); font-size: 13px; margin-top: 4px; }
 .check-line { display: block; border: 0; background: none; padding: 2px 0; font: inherit; font-size: 14px; color: var(--hint); cursor: pointer; text-align: left; }
+
+/* ------------------------------------------------------------------ sign-up forms */
+.req { color: var(--bad); margin-left: 3px; font-weight: 700; }
+.form-note { font-size: 13px; color: var(--hint); margin: 4px 0 12px; }
+.form-note .req { margin: 0 2px 0 0; }
+.choice-grid { display: grid; gap: 10px; }
+@media (min-width: 640px) { .choice-grid { grid-template-columns: 1fr 1fr; } }
+.choice-card { text-align: left; border: 1px solid var(--line); background: var(--bg); border-radius: var(--radius); padding: 20px; cursor: pointer; box-shadow: var(--shadow); transition: border-color .15s, box-shadow .15s; font: inherit; color: inherit; }
+.choice-card:hover { border-color: var(--brand); }
+.choice-card b { display: block; font-size: 17px; margin: 10px 0 4px; }
+.choice-card .avatar { width: 44px; height: 44px; }
+.radio-line { display: flex; align-items: flex-start; gap: 8px; color: var(--text); font-size: 14px; font-weight: 400; margin: 6px 0; cursor: pointer; }
+.radio-line input { width: 18px; height: 18px; flex: none; margin-top: 1px; }
+.save-bar { position: sticky; bottom: 0; background: linear-gradient(to top, var(--bg) 70%, transparent); padding: 12px 0 calc(8px + env(safe-area-inset-bottom)); margin-top: 8px; z-index: 2; }
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.stat-row .card { margin: 0; padding: 12px; }
+.stat-row b { display: block; font-size: 20px; }
+.rank { display: inline-grid; place-items: center; min-width: 30px; height: 30px; border-radius: 15px; background: var(--brand-soft); color: var(--brand); font-weight: 700; font-size: 13px; flex: none; }
+.rank.top { background: var(--brand); color: #fff; }
+.q-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 10px 0; background: #fbfdfb; }
+.q-option { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.q-option input[type=text], .q-option input:not([type]) { flex: 1; }
+.q-option .mark { width: 20px; height: 20px; flex: none; }
+.answer-opt { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 8px; cursor: pointer; background: var(--bg); font-size: 15px; color: var(--text); font-weight: 400; }
+.answer-opt.on { border-color: var(--brand); background: var(--brand-soft); }
+.answer-opt input { width: 18px; height: 18px; flex: none; margin-top: 2px; }
+.answer-opt.right { border-color: var(--brand); }
+.answer-opt.wrong { border-color: var(--bad); }
+.timer { position: sticky; top: 0; z-index: 3; background: var(--bg); border-bottom: 1px solid var(--line); padding: 8px 0; margin-bottom: 8px; font-weight: 600; }
+.timer.low { color: var(--bad); }

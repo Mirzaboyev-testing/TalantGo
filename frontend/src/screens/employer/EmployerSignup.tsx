@@ -1,0 +1,182 @@
+import { useEffect, useState } from "react";
+import { api, loadCatalog, type Catalog, type Me } from "../../api";
+import { Field, Req, useRequired, type Check } from "../../form";
+import { haptic } from "../../tg";
+import { ErrorText, isFullName, message, toast } from "../../ui";
+import { Consent } from "../Consent";
+import PhoneField from "../PhoneField";
+
+/** Older companies typed the field and city by hand: match them to the lists where possible. */
+function guessIndustry(value: string, catalog: Catalog | null): string {
+  if (!catalog || !value) return "";
+  if (value in catalog.industries) return value;
+  const v = value.trim().toLowerCase();
+  const hit = Object.entries(catalog.industries).find(([k, label]) => k === v || label.toLowerCase().startsWith(v));
+  return hit ? hit[0] : "";
+}
+function guessRegion(value: string, catalog: Catalog | null): string {
+  if (!catalog || !value) return "";
+  if (catalog.regions.includes(value)) return value;
+  if (value.trim().toLowerCase() === "toshkent") return "Toshkent shahri";
+  return catalog.regions.find((r) => r.toLowerCase().startsWith(value.trim().toLowerCase())) ?? "";
+}
+
+/**
+ * Employer sign-up: the person and the company on one page. Without a company it creates one (sent to an
+ * admin for the STIR check); with a company it edits both, which is also the employer's "Profilim".
+ */
+export default function EmployerSignup({ me, onSaved, onBack }: { me: Me; onSaved: (m: Me) => void; onBack?: () => void }) {
+  const c = me.company;
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
+  const [f, setF] = useState({
+    full_name: me.full_name, job_title: me.job_title, name: c?.name ?? "", legal_form: c?.legal_form ?? "",
+    industry: c?.industry ?? "", size: c?.size ?? "", city: c?.city ?? "", stir: c?.stir ?? "",
+    description: c?.description ?? "", website: c?.website ?? "", telegram: c?.telegram ?? "",
+    address: c?.address ?? "", email: c?.email ?? "",
+  });
+  const [consent, setConsent] = useState(me.consent_current);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const { errors, check, clear, cls, groupCls } = useRequired();
+
+  useEffect(() => {
+    loadCatalog().then((cat) => {
+      setCatalog(cat);
+      setF((cur) => ({ ...cur, industry: guessIndustry(cur.industry, cat), city: guessRegion(cur.city, cat) }));
+    }, (e) => setError(message(e)));
+  }, []);
+
+  const set = (k: keyof typeof f, id: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    setF({ ...f, [k]: e.target.value });
+    clear(id);
+  };
+
+  async function save() {
+    const checks: Check[] = [
+      ["e-name", isFullName(f.full_name), "ism va familiya"],
+      ["e-title", f.job_title.trim().length >= 2, "lavozimingiz"],
+      ["e-phone", Boolean(me.phone), "telefon raqam"],
+      ["e-company", f.name.trim().length >= 2, "kompaniya nomi"],
+      ["e-form", Boolean(f.legal_form), "kompaniya turi"],
+      ["e-industry", Boolean(f.industry), "soha"],
+      ["e-size", Boolean(f.size), "xodimlar soni"],
+      ["e-city", Boolean(f.city), "viloyat / shahar"],
+      ["e-stir", /^\d{9}$/.test(f.stir.trim()), "STIR (9 raqam)"],
+      ["e-about", f.description.trim().length >= 20, "kompaniya haqida (kamida 20 belgi)"],
+      ["e-consent", consent, "rozilik"],
+    ];
+    if (!check(checks)) return;
+    const company = {
+      name: f.name.trim(), legal_form: f.legal_form, industry: f.industry, size: f.size, city: f.city, stir: f.stir.trim(),
+      description: f.description.trim(), website: f.website.trim(), telegram: f.telegram.trim(), address: f.address.trim(),
+      email: f.email.trim(),
+    };
+    setBusy(true); setError("");
+    try {
+      let saved: Me;
+      if (!c) {
+        saved = await api.registerCompany({ ...company, full_name: f.full_name.trim(), job_title: f.job_title.trim(), consent: true });
+      } else {
+        await api.updateMe({ full_name: f.full_name.trim(), job_title: f.job_title.trim(), ...(me.consent_current ? {} : { consent: true }) });
+        await api.employer.editCompany(company);
+        saved = await api.me();
+      }
+      haptic("success");
+      toast(c ? "Ma'lumotlar saqlandi" : "Ma'lumotlar saqlandi va tekshiruvga yuborildi");
+      onSaved(saved);
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const options = (entries: [string, string][]) => [<option key="" value="">Tanlang…</option>,
+    ...entries.map(([k, label]) => <option key={k} value={k}>{label}</option>)];
+
+  return (
+    <div>
+      {onBack && <button className="btn small ghost" onClick={onBack}>Orqaga</button>}
+      <h1>{c ? "Profilim" : "Ish beruvchi sifatida ro'yxatdan o'tish"}</h1>
+      {!c && <p className="hint">Kompaniyani admin STIR bo'yicha tekshiradi (odatda 1 ish kuni). Tasdiqlangach talabalar ro'yxati, vakansiyalar va testlar ochiladi.</p>}
+      {c && c.status !== "approved" && <p className="notice">Kompaniya tekshiruvda. Nom yoki STIR o'zgarsa, qayta tekshiriladi.</p>}
+      <p className="form-note"><Req />belgisi bor maydonlar majburiy.</p>
+
+      <h2>1. Mas'ul shaxs</h2>
+      <div className="card">
+        <Field id="e-name" label="Ism va familiya" required error={errors["e-name"] && "Ism va familiyani to'liq yozing"}>
+          <input id="e-name" className={cls("e-name")} value={f.full_name} maxLength={128} placeholder="Masalan: Nigora Karimova" onChange={set("full_name", "e-name")} />
+        </Field>
+        <Field id="e-title" label="Lavozimingiz" required error={errors["e-title"] && "Lavozimingizni yozing"}>
+          <input id="e-title" className={cls("e-title")} value={f.job_title} maxLength={120} placeholder="Masalan: HR menejer" onChange={set("job_title", "e-title")} />
+        </Field>
+        <div id="e-phone" tabIndex={-1} className={groupCls("e-phone")} style={{ marginTop: 12 }}>
+          <label style={{ marginTop: 0 }}>Telefon raqam<Req /></label>
+          <PhoneField me={me} onChanged={(m) => { onSaved(m); if (m.phone) clear("e-phone"); }} />
+          {errors["e-phone"] && <div className="field-error">Telefon raqamni kiriting yoki Telegram orqali ulashing</div>}
+        </div>
+      </div>
+
+      <h2>2. Kompaniya</h2>
+      <div className="card">
+        <Field id="e-company" label="Kompaniya nomi" required error={errors["e-company"] && "Kompaniya nomini yozing"}>
+          <input id="e-company" className={cls("e-company")} value={f.name} maxLength={160} placeholder="Masalan: Data Solutions" onChange={set("name", "e-company")} />
+        </Field>
+        <div className="row">
+          <div className="grow">
+            <Field id="e-form" label="Kompaniya turi" required error={errors["e-form"] && "Tanlang"}>
+              <select id="e-form" className={cls("e-form")} value={f.legal_form} onChange={set("legal_form", "e-form")}>
+                {options(Object.entries(catalog?.legal_forms ?? {}))}
+              </select>
+            </Field>
+          </div>
+          <div className="grow">
+            <Field id="e-size" label="Xodimlar soni" required error={errors["e-size"] && "Tanlang"}>
+              <select id="e-size" className={cls("e-size")} value={f.size} onChange={set("size", "e-size")}>
+                {options(Object.entries(catalog?.company_sizes ?? {}))}
+              </select>
+            </Field>
+          </div>
+        </div>
+        <Field id="e-industry" label="Soha (kategoriya)" required error={errors["e-industry"] && "Sohani tanlang"}>
+          <select id="e-industry" className={cls("e-industry")} value={f.industry} onChange={set("industry", "e-industry")}>
+            {options(Object.entries(catalog?.industries ?? {}))}
+          </select>
+        </Field>
+        <Field id="e-city" label="Viloyat / shahar" required error={errors["e-city"] && "Tanlang"}>
+          <select id="e-city" className={cls("e-city")} value={f.city} onChange={set("city", "e-city")}>
+            {options((catalog?.regions ?? []).map((r) => [r, r]))}
+          </select>
+        </Field>
+        <Field id="e-stir" label="STIR (9 raqam)" required error={errors["e-stir"] && "STIR 9 ta raqamdan iborat"}
+               hint="Davlat reyestrida tekshiriladi">
+          <input id="e-stir" className={cls("e-stir")} value={f.stir} inputMode="numeric" maxLength={9} placeholder="301234567"
+                 onChange={(e) => { setF({ ...f, stir: e.target.value.replace(/\D/g, "") }); clear("e-stir"); }} />
+        </Field>
+        <Field id="e-about" label="Kompaniya haqida" required error={errors["e-about"] && "Kamida 20 belgi yozing"}>
+          <textarea id="e-about" className={cls("e-about")} value={f.description} maxLength={2000}
+                    placeholder="Nima bilan shug'ullanasiz, talabalarga qanday imkoniyat berasiz" onChange={set("description", "e-about")} />
+        </Field>
+      </div>
+
+      <h2>3. Qo'shimcha (ixtiyoriy)</h2>
+      <div className="card">
+        <Field id="e-site" label="Sayt"><input id="e-site" value={f.website} inputMode="url" placeholder="kompaniya.uz" onChange={set("website", "e-site")} /></Field>
+        <Field id="e-tg" label="Telegram kanal"><input id="e-tg" value={f.telegram} maxLength={128} placeholder="@kompaniya" onChange={set("telegram", "e-tg")} /></Field>
+        <Field id="e-email" label="Email"><input id="e-email" value={f.email} inputMode="email" maxLength={120} placeholder="hr@kompaniya.uz" onChange={set("email", "e-email")} /></Field>
+        <Field id="e-addr" label="Ofis manzili"><input id="e-addr" value={f.address} maxLength={200} onChange={set("address", "e-addr")} /></Field>
+      </div>
+
+      {(!c || !me.consent_current) && (
+        <>
+          <Consent employer value={consent} id="e-consent" invalid={Boolean(errors["e-consent"])} onChange={(v) => { setConsent(v); clear("e-consent"); }} />
+          {errors["e-consent"] && <div className="field-error">Rozilik belgisini qo'ying</div>}
+        </>
+      )}
+      <ErrorText error={error} />
+      <div className="save-bar">
+        <button className="btn" disabled={busy} onClick={save}>{busy ? "Saqlanmoqda…" : c ? "Saqlash" : "Saqlash va tekshiruvga yuborish"}</button>
+      </div>
+    </div>
+  );
+}

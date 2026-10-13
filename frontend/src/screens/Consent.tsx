@@ -1,14 +1,24 @@
-export const CONSENT_TEXT =
-  "Shaxsga doir ma'lumotlarim (ism, universitet, ko'nikmalar, natijalar) TalantGo tomonidan " +
-  "«Shaxsga doir ma'lumotlar to'g'risida»gi qonunga muvofiq qayta ishlanishiga roziman. " +
-  "Profilim ish beruvchilarga faqat men o'zim ochiq qilganimda ko'rinadi.";
+import { Req } from "../form";
 
-export function Consent({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+// v2 (2026-10-13): approved employers see every student's name, study details, results and CV.
+export const CONSENT_TEXT =
+  "Shaxsga doir ma'lumotlarim (ism-familiya, universitet, yo'nalish, kurs, guruh, ko'nikmalar, natijalar va CV) " +
+  "TalantGo tomonidan «Shaxsga doir ma'lumotlar to'g'risida»gi qonunga muvofiq qayta ishlanishiga va TalantGo " +
+  "tekshirgan ish beruvchilarga ko'rsatilishiga roziman. Telefon raqamim faqat men ariza bersam yoki bog'lanishga rozi bo'lsam ochiladi.";
+
+export const EMPLOYER_CONSENT_TEXT =
+  "Mening va kompaniyamning ma'lumotlari TalantGo tomonidan qayta ishlanishiga roziman. Talabalar haqidagi " +
+  "ma'lumotlardan faqat ishga va amaliyotga olish uchun foydalanaman, ularni uchinchi shaxslarga bermayman.";
+
+export function Consent({ value, onChange, employer = false, id = "f-consent", invalid = false }: {
+  value: boolean; onChange: (v: boolean) => void; employer?: boolean; id?: string; invalid?: boolean;
+}) {
   return (
-    <label className="row" style={{ alignItems: "flex-start", gap: 10, color: "var(--text)", marginTop: 14, cursor: "pointer" }}>
+    <label id={id} tabIndex={-1} className={invalid ? "invalid-group" : ""}
+           style={{ display: "flex", alignItems: "flex-start", gap: 10, color: "var(--text)", marginTop: 14, cursor: "pointer", fontWeight: 400 }}>
       <input type="checkbox" checked={value} style={{ width: 20, height: 20, flex: "none", marginTop: 2 }}
              onChange={(e) => onChange(e.target.checked)} />
-      <span style={{ fontSize: 13 }}>{CONSENT_TEXT}</span>
+      <span style={{ fontSize: 13 }}>{employer ? EMPLOYER_CONSENT_TEXT : CONSENT_TEXT}<Req /></span>
     </label>
   );
 }

@@ -11,6 +11,7 @@ import ProfileScreen from "./screens/Profile";
 import JobsScreen from "./screens/Jobs";
 import Welcome, { PendingScreen } from "./screens/Welcome";
 import EmployerApp from "./screens/employer/EmployerApp";
+import EmployerSignup from "./screens/employer/EmployerSignup";
 import UniversityApp from "./screens/university/UniversityApp";
 import Groups from "./screens/Groups";
 import Assistant from "./screens/Assistant";
@@ -102,8 +103,9 @@ export default function App() {
   }
   if (!me) return null;
 
-  // Employers and university staff get their own apps once an admin has checked them.
+  // Employers: the sign-up form until every required field is filled, then the admin check, then their app.
   if (me.account_type === "employer") {
+    if (me.signup_missing.length > 0) return <div className="app"><EmployerSignup me={me} onSaved={setMe} /></div>;
     return me.company?.status === "approved"
       ? <EmployerApp me={me} onChanged={setMe} onLogout={logout} />
       : <div className="app"><PendingScreen me={me} onChanged={setMe} /></div>;
@@ -113,19 +115,21 @@ export default function App() {
       ? <UniversityApp me={me} onLogout={logout} />
       : <div className="app"><PendingScreen me={me} onChanged={setMe} /></div>;
   }
-  const partnerRole = new URLSearchParams(window.location.search).get("role");
-  if (partnerRole && !me.track && !me.has_consent && !chosenStudent) {
+  // a brand-new account first chooses: job seeker or employer
+  const isNew = !me.track && !me.has_consent;
+  if (isNew && !chosenStudent) {
+    const partnerRole = new URLSearchParams(window.location.search).get("role");
     return <div className="app"><Welcome me={me} initial={partnerRole === "employer" || partnerRole === "university" ? partnerRole : null}
-                                               onStudent={() => setChosenStudent(true)} onChanged={setMe} /></div>;
+                                         onStudent={() => setChosenStudent(true)} onChanged={setMe} /></div>;
   }
 
-  // students must say where they study (university, field, course, group) before using the app
-  const incomplete = !me.track || !me.university_ref || !me.course || !me.faculty || !me.group_name.trim() || !me.phone || !me.has_consent;
-  if (incomplete || changingTrack) {
+  // job seekers stay on the sign-up form until every required field is filled
+  if (me.signup_missing.length > 0 || changingTrack) {
     return (
       <div className="app">
-        <Onboarding me={me} onMe={setMe} onDone={async () => { await refreshMe(); setChangingTrack(false); setTab("path"); }}
-                    onCancel={changingTrack && !incomplete ? () => setChangingTrack(false) : undefined} />
+        {isNew && <button className="btn small ghost" onClick={() => setChosenStudent(false)}>Orqaga</button>}
+        <Onboarding me={me} onMe={setMe} onDone={async () => { await refreshMe(); setChangingTrack(false); setTab(isNew ? "profile" : "path"); }}
+                    onCancel={changingTrack && me.signup_missing.length === 0 ? () => setChangingTrack(false) : undefined} />
       </div>
     );
   }

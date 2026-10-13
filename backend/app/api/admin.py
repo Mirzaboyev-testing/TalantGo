@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import aliased
 
 from ..core.config import settings
-from ..models import (AdminAccount, Announcement, Application, AuditLog, Challenge, ChallengeEntry, Company, Group,
+from ..models import (AdminAccount, CompanyTest, Announcement, Application, AuditLog, Challenge, ChallengeEntry, Company, Group,
                       GroupMember, GroupMessage, Job, Role, Status, Submission, Task, Track, University, User)
 from ..schemas import (AdminSubmissionOut, AdminTaskOut, AdminTrackOut, AdminUserOut, AnnouncementIn,
                        AnnouncementOut, AuditOut, BotStatusOut, BotTokenIn, CompanyOut, PointsAdjustIn,
@@ -505,6 +505,7 @@ async def inbox(_: AdminActor, session: Session) -> dict:
         "companies": await count(Company, Company.status == "pending"),
         "jobs": await count(Job, Job.status == "pending"),
         "staff": await count(User, User.staff_status == "pending"),
+        "tests": await count(CompanyTest, CompanyTest.status == "pending"),
     }
 
 

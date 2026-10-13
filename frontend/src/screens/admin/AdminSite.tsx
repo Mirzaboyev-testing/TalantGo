@@ -8,7 +8,7 @@ import AuthScreen from "./AuthScreen";
 import Dashboard from "./Dashboard";
 import GroupsAdmin from "./GroupsAdmin";
 import ChallengesAdmin from "./ChallengesAdmin";
-import { Applications, Companies, Jobs } from "./Market";
+import { Applications, Companies, Jobs, Tests } from "./Market";
 import Queue from "./Queue";
 import { AiCard, AiConversations, AuditCard, BotCard, ExportCard, PartnerLinks, RulesCard } from "./Settings";
 import Submissions from "./Submissions";
@@ -33,6 +33,7 @@ const MENU: { group: string; pages: Page[] }[] = [
   { group: "Ish bozori", pages: [
     { id: "companies", label: "Kompaniyalar", icon: "building" },
     { id: "jobs", label: "Vakansiyalar", icon: "briefcase" },
+    { id: "tests", label: "Testlar", icon: "check" },
     { id: "applications", label: "Arizalar", icon: "inbox" },
   ] },
   { group: "Ta'lim", pages: [{ id: "universities", label: "Universitetlar", icon: "building" }] },
@@ -59,6 +60,7 @@ export default function AdminSite() {
   const [page, setPage] = useState(pageFromHash());
   const [menuOpen, setMenuOpen] = useState(false);
   const [queue, setQueue] = useState(0);
+  const [pendingTests, setPendingTests] = useState(0);
   const [userFilter, setUserFilter] = useState<{ id: number; name: string } | null>(null);
 
   const signOut = useCallback(() => { clearToken(); setMe(null); }, []);
@@ -78,7 +80,7 @@ export default function AdminSite() {
 
   useEffect(() => {
     if (!me) return;
-    api.admin.inbox().then((c) => setQueue(c.verifications + c.companies + c.jobs + c.staff), () => {});
+    api.admin.inbox().then((c) => { setQueue(c.verifications + c.companies + c.jobs + c.staff); setPendingTests(c.tests ?? 0); }, () => {});
   }, [me, page]);
 
   const go = (id: string) => { window.location.hash = id; setPage(id); setMenuOpen(false); };
@@ -105,6 +107,7 @@ export default function AdminSite() {
                   <button key={p.id} className={`admin-link ${current.id === p.id ? "on" : ""}`} onClick={() => go(p.id)}>
                     <Icon name={p.icon} size={18} />{p.label}
                     {p.id === "queue" && queue > 0 && <span className="dot">{queue}</span>}
+                    {p.id === "tests" && pendingTests > 0 && <span className="dot">{pendingTests}</span>}
                   </button>
                 ))}
               </div>
@@ -129,6 +132,7 @@ export default function AdminSite() {
             {current.id === "tracks" && <div className="narrow"><Tracks /></div>}
             {current.id === "companies" && <Companies />}
             {current.id === "jobs" && <Jobs />}
+            {current.id === "tests" && <Tests />}
             {current.id === "applications" && <Applications />}
             {current.id === "universities" && <div className="narrow"><Universities /></div>}
             {current.id === "groups" && <GroupsAdmin />}

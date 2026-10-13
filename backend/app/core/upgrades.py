@@ -57,6 +57,15 @@ STATEMENTS = [
     # the product was renamed from CareerFlow to TalantGo (2026-10-09)
     "UPDATE groups SET name = 'TalantGo hamjamiyati' WHERE auto_join_all AND name = 'CareerFlow hamjamiyati'",
     "UPDATE users SET verified_by = 'TalantGo' WHERE verified_by = 'CareerFlow'",
+    # two-way sign-up (job seeker / employer) and company tests (2026-10-13)
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_version integer NOT NULL DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS work_industries varchar(24)[] NOT NULL DEFAULT '{}'",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title varchar(120) NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS legal_form varchar(24) NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS size varchar(16) NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS telegram varchar(128) NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS address varchar(200) NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS email varchar(120) NOT NULL DEFAULT ''",
 ]
 
 

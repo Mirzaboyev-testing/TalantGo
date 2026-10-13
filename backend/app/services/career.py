@@ -5,8 +5,9 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import Status, Submission, User
+from ..models import Role, Status, Submission, User
 from . import notify
+from .catalog import COMPANY_SIZES, CONSENT_VERSION, INDUSTRIES, LEGAL_FORMS, REGIONS
 
 VERIFIED_WORK = (Status.peer_verified, Status.mentor_verified)
 
@@ -28,6 +29,38 @@ def completeness(user: User) -> dict:
         "phone": bool(user.phone),
     }
     return {"percent": round(100 * sum(checks.values()) / len(checks)), "missing": [k for k, ok in checks.items() if not ok]}
+
+
+def _full_name(name: str) -> bool:
+    return len([w for w in name.split() if len(w) >= 2]) >= 2
+
+
+def signup_missing(user: User) -> list[str]:
+    """Required sign-up fields still empty, in the order the form shows them. The app keeps the person on the
+    sign-up form until this is empty, and leads them to the first item."""
+    if user.account_type == "university":
+        return []
+    if user.account_type == "employer":
+        c = user.company
+        checks = [("full_name", _full_name(user.full_name)), ("job_title", bool(user.job_title.strip())),
+                  ("phone", bool(user.phone))]
+        if c is None:
+            checks.append(("company", False))
+        else:
+            checks += [("name", len(c.name.strip()) >= 2), ("legal_form", c.legal_form in LEGAL_FORMS),
+                       ("industry", c.industry in INDUSTRIES), ("size", c.size in COMPANY_SIZES),
+                       ("city", c.city in REGIONS), ("stir", bool(c.stir)),
+                       ("description", len(c.description.strip()) >= 20)]
+        checks.append(("consent", user.consent_version >= CONSENT_VERSION))
+        return [k for k, ok in checks if not ok]
+    checks = [("full_name", _full_name(user.full_name)), ("phone", bool(user.phone)),
+              ("university", user.university_id is not None), ("faculty", len(user.faculty.strip()) >= 2),
+              ("course", user.course is not None), ("group", len(user.group_name.strip()) >= 2),
+              ("track", user.track_id is not None)]
+    if user.role == Role.student:          # mentors teach; they are not looking for work
+        checks += [("work_industries", bool(user.work_industries)), ("job_types", bool(user.job_types))]
+    checks.append(("consent", user.consent_version >= CONSENT_VERSION))
+    return [k for k, ok in checks if not ok]
 
 
 def anonymous_code(user: User) -> str:
@@ -63,6 +96,23 @@ def anonymous_card(user: User, verified_tasks: int) -> dict:
         "verified_tasks": verified_tasks,
         "verification": user.verification,
         "verified_by": user.verified_by if user.verification == "verified" else "",
+    }
+
+
+def student_row(user: User, verified_tasks: int) -> dict:
+    """A student as approved employers see them in "Talabalar": name and study details (consent v2),
+    but not the phone number, which opens only after an application or an accepted contact request."""
+    return {
+        **anonymous_card(user, verified_tasks),
+        "full_name": user.full_name,
+        "username": user.username,
+        "photo_url": user.photo_url,
+        "group_name": user.group_name,
+        "bio": user.bio,
+        "work_industries": user.work_industries,
+        "open_to_work": user.open_to_work,
+        "github_url": user.github_url,
+        "linkedin_url": user.linkedin_url,
     }
 
 

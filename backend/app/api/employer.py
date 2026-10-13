@@ -11,7 +11,11 @@ from sqlalchemy import func, select
 from ..models import Application, Company, ContactRequest, Job, Role, Status, Submission, User
 from ..schemas import (ApplicantOut, ApplicationPatch, CompanyIn, CompanyOut, ContactIn, JobIn, JobOut)
 from ..services import notify
-from ..services.career import JOB_KIND_LABEL, anonymous_card, identity
+from ..core.security import create_token
+from ..models import CompanyTest, TestAttempt
+from ..services.career import JOB_KIND_LABEL, anonymous_card, identity, student_row
+from ..services.catalog import CONSENT_VERSION
+from ..services.cv import build_cv
 from .deps import CurrentUser, Session
 from .jobs import job_out
 
@@ -60,12 +64,17 @@ async def edit_company(body: CompanyIn, user: Employer, session: Session) -> Com
     if body.stir and body.stir != company.stir and await session.scalar(
             select(func.count()).select_from(Company).where(Company.stir == body.stir)):
         raise HTTPException(409, "Bu STIR boshqa kompaniyaga tegishli")
-    identity_changed = body.name != company.name or body.stir != company.stir
+    # a new name, or a STIR that replaces an earlier one, has to be checked again; a STIR added for the
+    # first time (older accounts had none) keeps the approval and is only reported to the admins
+    identity_changed = body.name != company.name or bool(company.stir and body.stir != company.stir)
+    first_stir = not company.stir and bool(body.stir)
     for field, value in body.model_dump().items():
         setattr(company, field, value)
     if identity_changed and company.status == "approved":
-        company.status = "pending"              # a new name or STIR has to be checked again
+        company.status = "pending"
     await session.commit()
+    if identity_changed or first_stir:
+        await _notify_admins(session, f"Kompaniya ma'lumotlari o'zgardi: {company.name} (STIR {company.stir}).")
     return company
 
 
@@ -196,7 +205,7 @@ async def talent(user: ApprovedEmployer, session: Session,
 @router.post("/talent/{student_id}/contact", status_code=201)
 async def contact(student_id: int, body: ContactIn, user: ApprovedEmployer, session: Session) -> dict:
     student = await session.get(User, student_id)
-    if student is None or not student.open_to_work or student.account_type != "student" or student.is_blocked:
+    if student is None or student.account_type != "student" or student.is_blocked:
         raise HTTPException(404, "Talaba topilmadi")
     if await session.scalar(select(ContactRequest.id).where(ContactRequest.company_id == user.company_id,
                                                             ContactRequest.student_id == student_id)):
@@ -235,3 +244,122 @@ async def employer_stats(user: Employer, session: Session) -> dict:
     apps = (await session.execute(select(Application.status, func.count()).join(Job)
                                   .where(Job.company_id == user.company_id).group_by(Application.status))).all()
     return {"jobs": dict(jobs), "applications": dict(apps), "kinds": JOB_KIND_LABEL}
+
+
+# --------------------------------------------------------------------------- students (named, by rating)
+
+def _visible_students():
+    """Every student who gave the current consent (v2: approved employers see name, study details,
+    results and CV). Blocked accounts and mentors are left out."""
+    return (User.account_type == "student", User.role == Role.student, User.is_blocked.is_(False),
+            User.consent_version >= CONSENT_VERSION)
+
+
+async def _test_results(session: Session, company_id: int, user_ids: list[int]) -> dict[int, dict]:
+    """The company's own test results per student: tests taken and the share of points earned."""
+    if not user_ids:
+        return {}
+    query = (select(TestAttempt.user_id, func.count(), func.sum(TestAttempt.score), func.sum(TestAttempt.max_score))
+             .join(CompanyTest, CompanyTest.id == TestAttempt.test_id)
+             .where(CompanyTest.company_id == company_id, TestAttempt.status != "in_progress",
+                    TestAttempt.user_id.in_(user_ids))
+             .group_by(TestAttempt.user_id))
+    out = {}
+    for uid, n, score, max_score in (await session.execute(query)).all():
+        out[uid] = {"tests_taken": n, "test_percent": round(100 * (score or 0) / max_score) if max_score else None}
+    return out
+
+
+@router.get("/students")
+async def students(user: ApprovedEmployer, session: Session,
+                   q: str | None = Query(default=None, max_length=80),
+                   university_id: int | None = None, track_id: int | None = None,
+                   course: int | None = Query(default=None, ge=1, le=7),
+                   industry: str | None = Query(default=None, max_length=24),
+                   job_type: str | None = Query(default=None, max_length=16),
+                   skill: str | None = Query(default=None, max_length=40),
+                   verified_only: bool = False, open_only: bool = False,
+                   sort: str = Query(default="rating", pattern="^(rating|tests|new)$")) -> list[dict]:
+    """All students with their name and study details, best first. The rank is by points (verified work)."""
+    verified = _verified_count().label("verified")
+    query = select(User, verified).where(*_visible_students())
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        query = query.where(User.full_name.ilike(like) | User.group_name.ilike(like) | User.faculty.ilike(like))
+    if university_id:
+        query = query.where(User.university_id == university_id)
+    if track_id:
+        query = query.where(User.track_id == track_id)
+    if course:
+        query = query.where(User.course == course)
+    if industry:
+        query = query.where(User.work_industries.contains([industry]))
+    if job_type:
+        query = query.where(User.job_types.contains([job_type]))
+    if skill and skill.strip():
+        query = query.where(User.skills.contains([skill.strip()]))
+    if verified_only:
+        query = query.where(User.verification == "verified")
+    if open_only:
+        query = query.where(User.open_to_work.is_(True))
+    order = (User.created_at.desc(),) if sort == "new" else (User.points.desc(), User.id)
+    rows = (await session.execute(query.order_by(*order).limit(300))).all()
+    tests = await _test_results(session, user.company_id, [u.id for u, _ in rows])
+    # the overall rank among all visible students, by points (equal points share a rank)
+    all_points = (await session.execute(select(User.points).where(*_visible_students())
+                                        .order_by(User.points.desc()))).scalars().all()
+    ranks: dict[int, int] = {}
+    for position, pts in enumerate(all_points, start=1):
+        ranks.setdefault(pts, position)
+    out = [{**student_row(u, n), "rank": ranks.get(u.points, len(all_points)),
+            "tests_taken": tests.get(u.id, {}).get("tests_taken", 0),
+            "test_percent": tests.get(u.id, {}).get("test_percent")} for u, n in rows]
+    if sort == "tests":
+        out.sort(key=lambda r: (r["test_percent"] is None, -(r["test_percent"] or 0), r["rank"]))
+    return out
+
+
+async def _visible_student(session: Session, student_id: int) -> User:
+    if not await session.scalar(select(User.id).where(User.id == student_id, *_visible_students())):
+        raise HTTPException(404, "Talaba topilmadi")
+    return await session.get(User, student_id)
+
+
+@router.get("/students/{student_id}")
+async def student_detail(student_id: int, user: ApprovedEmployer, session: Session) -> dict:
+    """The full profile with the verified-work CV, this company's test results, and whether contact
+    details are shared (the student applied to one of the company's jobs or accepted its request)."""
+    student = await _visible_student(session, student_id)
+    n = await session.scalar(select(func.count()).where(Submission.user_id == student.id,
+                                                        Submission.status.in_([Status.peer_verified, Status.mentor_verified])))
+    applied = await session.scalar(select(func.count()).select_from(Application).join(Job).where(
+        Application.user_id == student.id, Job.company_id == user.company_id))
+    contact = await session.scalar(select(ContactRequest.status).where(
+        ContactRequest.company_id == user.company_id, ContactRequest.student_id == student.id))
+    attempts = (await session.execute(select(TestAttempt).join(CompanyTest, CompanyTest.id == TestAttempt.test_id).where(
+        CompanyTest.company_id == user.company_id, TestAttempt.user_id == student.id,
+        TestAttempt.status != "in_progress").order_by(TestAttempt.submitted_at.desc()))).scalars().all()
+    shared = bool(applied) or contact == "accepted"
+    return {
+        **student_row(student, n),
+        "cv": await build_cv(session, student),
+        "phone": student.phone if shared and student.phone else None,
+        "contact_status": contact,
+        "applied": bool(applied),
+        "tests": [{"attempt_id": a.id, "test_id": a.test_id, "title": a.test.title, "status": a.status,
+                   "score": a.score, "max_score": a.max_score, "submitted_at": a.submitted_at} for a in attempts],
+    }
+
+
+CV_LINK_HOURS = 2
+
+
+def cv_pdf_link(student_id: int) -> str:
+    """A short-lived signed link: it works when opened in an outside browser, where there is no app session."""
+    return f"/api/v1/cv-pdf/{student_id}?t={create_token(str(student_id), 'cvpdf', CV_LINK_HOURS)}"
+
+
+@router.get("/students/{student_id}/cv-link")
+async def student_cv_link(student_id: int, user: ApprovedEmployer, session: Session) -> dict:
+    await _visible_student(session, student_id)
+    return {"url": cv_pdf_link(student_id)}

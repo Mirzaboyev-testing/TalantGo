@@ -72,6 +72,11 @@ class Company(Base):
     website: Mapped[str] = mapped_column(String(256), default="")
     city: Mapped[str] = mapped_column(String(60), default="")
     description: Mapped[str] = mapped_column(Text, default="")
+    legal_form: Mapped[str] = mapped_column(String(24), default="", server_default="")    # catalog.LEGAL_FORMS
+    size: Mapped[str] = mapped_column(String(16), default="", server_default="")          # catalog.COMPANY_SIZES
+    telegram: Mapped[str] = mapped_column(String(128), default="", server_default="")
+    address: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    email: Mapped[str] = mapped_column(String(120), default="", server_default="")
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
     review_note: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -155,6 +160,9 @@ class User(Base):
     is_owner: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     account_type: Mapped[str] = mapped_column(String(16), default="student", server_default="student")
     consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))   # personal-data consent
+    consent_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")   # catalog.CONSENT_VERSION
+    work_industries: Mapped[list[str]] = mapped_column(ARRAY(String(24)), default=list, server_default="{}")
+    job_title: Mapped[str] = mapped_column(String(120), default="", server_default="")   # an employer's position
     # student career profile (what employers filter on)
     university_id: Mapped[int | None] = mapped_column(ForeignKey("universities.id", ondelete="SET NULL"), index=True)
     faculty: Mapped[str] = mapped_column(String(120), default="", server_default="")
@@ -526,4 +534,84 @@ class ChallengeEntry(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     challenge: Mapped[Challenge] = relationship(lazy="selectin")
+    user: Mapped[User] = relationship(lazy="selectin")
+
+
+# --------------------------------------------------------------------------- company tests and surveys
+
+TEST_STATES = ("draft", "pending", "approved", "rejected", "closed")
+TEST_AUDIENCES = ("all", "tracks", "applicants")
+QUESTION_KINDS = ("single", "multi", "text")
+ATTEMPT_STATES = ("in_progress", "submitted", "graded")
+
+
+class CompanyTest(Base):
+    """A test or survey a company gives students. Shown to students only after an admin approves it."""
+    __tablename__ = "company_tests"
+    __table_args__ = (
+        _in("status", TEST_STATES, "company_test_status_valid"),
+        _in("audience", TEST_AUDIENCES, "company_test_audience_valid"),
+        CheckConstraint("time_limit_min IS NULL OR time_limit_min BETWEEN 1 AND 300", name="company_test_time_range"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id", ondelete="SET NULL"))
+    title: Mapped[str] = mapped_column(String(160))
+    description: Mapped[str] = mapped_column(Text, default="")
+    audience: Mapped[str] = mapped_column(String(16), default="all")
+    track_ids: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, server_default="{}")
+    deadline: Mapped[date | None] = mapped_column(Date)
+    time_limit_min: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16), default="draft", index=True)
+    review_note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    company: Mapped[Company] = relationship(lazy="selectin")
+    job: Mapped[Job | None] = relationship(lazy="selectin")
+    questions: Mapped[list["TestQuestion"]] = relationship(order_by="TestQuestion.sort_order", lazy="selectin",
+                                                           cascade="all, delete-orphan")
+
+
+class TestQuestion(Base):
+    """single/multi: options with the indexes of the right ones; text: a written answer the company scores.
+    A question worth 0 points with no right answer is a plain survey question."""
+    __test__ = False                     # not a pytest test class
+    __tablename__ = "test_questions"
+    __table_args__ = (_in("kind", QUESTION_KINDS, "test_question_kind_valid"),
+                      CheckConstraint("points BETWEEN 0 AND 100", name="test_question_points_range"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    test_id: Mapped[int] = mapped_column(ForeignKey("company_tests.id", ondelete="CASCADE"), index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    kind: Mapped[str] = mapped_column(String(8))
+    text: Mapped[str] = mapped_column(Text)
+    options: Mapped[list[str]] = mapped_column(ARRAY(String(300)), default=list, server_default="{}")
+    correct: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, server_default="{}")
+    points: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class TestAttempt(Base):
+    """One student's single go at a test. answers: [{question_id, choice: [int], text, points, comment}]."""
+    __test__ = False
+    __tablename__ = "test_attempts"
+    __table_args__ = (UniqueConstraint("test_id", "user_id"),
+                      _in("status", ATTEMPT_STATES, "test_attempt_status_valid"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    test_id: Mapped[int] = mapped_column(ForeignKey("company_tests.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="in_progress")
+    answers: Mapped[list[dict]] = mapped_column(JSONB, default=list, server_default="[]")
+    score: Mapped[float] = mapped_column(Float, default=0)
+    max_score: Mapped[int] = mapped_column(Integer, default=0)
+    late: Mapped[bool] = mapped_column(Boolean, default=False)
+    feedback: Mapped[str] = mapped_column(Text, default="")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    graded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    test: Mapped[CompanyTest] = relationship(lazy="selectin")
     user: Mapped[User] = relationship(lazy="selectin")

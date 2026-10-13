@@ -3,41 +3,40 @@ import { api, type Me, type University } from "../api";
 import { ErrorText, message } from "../ui";
 import { Consent } from "./Consent";
 import { Icon } from "../icons";
-import CompanyForm from "./employer/CompanyForm";
+import EmployerSignup from "./employer/EmployerSignup";
 
 type Choice = "student" | "employer" | "university" | null;
 
-/** First screen for a new account: who are you? */
+/** First screen for a new account: job seeker or employer. (University staff come with their own link.) */
 export default function Welcome({ me, initial, onStudent, onChanged }: {
   me: Me; initial: Choice; onStudent: () => void; onChanged: (m: Me) => void;
 }) {
   const [choice, setChoice] = useState<Choice>(initial);
 
-  if (choice === "employer") {
-    return (
-      <div>
-        <button className="btn small ghost" onClick={() => setChoice(null)}>Orqaga</button>
-        <h1>Kompaniyani ro'yxatdan o'tkazish</h1>
-        <p className="hint">Kompaniya STIR orqali tekshiriladi. Tasdiqlangach vakansiya joylaysiz va talabalarni qidirasiz. Talabalar uchun bepul, kompaniyalar uchun asosiy imkoniyatlar ham hozircha bepul.</p>
-        <CompanyForm submitLabel="Yuborish" onSubmit={async (c) => onChanged(await api.registerCompany(c))} requireConsent />
-      </div>
-    );
-  }
+  if (choice === "employer") return <EmployerSignup me={me} onSaved={onChanged} onBack={() => setChoice(null)} />;
   if (choice === "university") return <StaffForm onBack={() => setChoice(null)} onChanged={onChanged} />;
 
   return (
     <div>
       <h1>Salom, {me.full_name.split(" ")[0]}!</h1>
-      <p className="hint">TalantGo: talabalar tasdiqlangan ko'nikmalar bilan amaliyot va birinchi ishni topadigan joy. Siz kimsiz?</p>
-      <div className="card tap" onClick={onStudent}>
-        <div className="row"><span className="avatar"><Icon name="school" /></span><div><b>Talabaman</b><div className="hint">Yo'l tanlayman, portfolio yig'aman, amaliyot va ish topaman</div></div></div>
+      <p className="hint">TalantGo: talabalar tasdiqlangan ko'nikmalar bilan amaliyot va birinchi ishni topadigan joy. Kim sifatida ro'yxatdan o'tasiz?</p>
+      <div className="choice-grid">
+        <button className="choice-card" onClick={onStudent}>
+          <span className="avatar"><Icon name="school" /></span>
+          <b>Ish izlovchi</b>
+          <span className="hint">Talabaman: yo'nalish tanlayman, portfolio yig'aman, amaliyot va ish topaman</span>
+        </button>
+        <button className="choice-card" onClick={() => setChoice("employer")}>
+          <span className="avatar"><Icon name="briefcase" /></span>
+          <b>Ish beruvchi</b>
+          <span className="hint">Kompaniyaman: talabalarni reyting bo'yicha ko'raman, vakansiya va test joylayman</span>
+        </button>
       </div>
-      <div className="card tap" onClick={() => setChoice("employer")}>
-        <div className="row"><span className="avatar"><Icon name="briefcase" /></span><div><b>Ish beruvchiman (HR)</b><div className="hint">Stajyor va yosh mutaxassislarni qidiraman</div></div></div>
-      </div>
-      <div className="card tap" onClick={() => setChoice("university")}>
-        <div className="row"><span className="avatar"><Icon name="building" /></span><div><b>Universitet xodimiman</b><div className="hint">Karyera markazi: talabalarni tasdiqlash va hisobotlar</div></div></div>
-      </div>
+      {initial === "university" && (
+        <div className="card tap" style={{ marginTop: 10 }} onClick={() => setChoice("university")}>
+          <div className="row"><span className="avatar"><Icon name="building" /></span><div><b>Universitet xodimiman</b><div className="hint">Karyera markazi: talabalarni tasdiqlash va hisobotlar</div></div></div>
+        </div>
+      )}
     </div>
   );
 }
@@ -86,6 +85,7 @@ export function PendingScreen({ me, onChanged }: { me: Me; onChanged: (m: Me) =>
   const rejected = isEmployer ? me.company?.status === "rejected" : me.staff_status === "rejected";
   const note = isEmployer ? me.company?.review_note : "";
 
+  if (editing && isEmployer) return <EmployerSignup me={me} onSaved={(m) => { onChanged(m); setEditing(false); }} onBack={() => setEditing(false)} />;
   return (
     <div>
       <h1>{rejected ? "So'rov tasdiqlanmadi" : "Tekshirilmoqda"}</h1>
@@ -98,14 +98,10 @@ export function PendingScreen({ me, onChanged }: { me: Me; onChanged: (m: Me) =>
               ? "Admin kompaniyangizni STIR bo'yicha tekshiradi. Odatda 1 ish kuni ichida. Tasdiqlangach botdan xabar keladi."
               : "Ilova egasi universitet bilan bog'lanib tekshiradi. Tasdiqlangach botdan xabar keladi."}
         </p>
-        {isEmployer && <button className="btn small ghost" onClick={() => setEditing(!editing)}>Ma'lumotlarni tahrirlash</button>}
+        {isEmployer && <button className="btn small ghost" onClick={() => setEditing(true)}>Ma'lumotlarni tahrirlash</button>}
       </div>
-      {editing && me.company && (
-        <CompanyForm initial={me.company} submitLabel="Saqlash"
-                     onSubmit={async (c) => { await api.employer.editCompany(c); onChanged(await api.me()); setEditing(false); }} />
-      )}
       <button className="btn ghost" style={{ marginTop: 10 }} onClick={async () => onChanged(await api.backToStudent())}>
-        Talaba sifatida davom etish
+        Ish izlovchi sifatida davom etish
       </button>
     </div>
   );
