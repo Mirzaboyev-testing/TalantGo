@@ -222,7 +222,7 @@ export function AiConversations() {
             <b>{c.full_name}</b>
             <span className="hint">{c.questions} ta savol</span>
           </div>
-          <div className="hint">{c.role === "student" ? "Talaba" : "Mentor"}{c.track ? ` · ${c.track.split(":")[0]}` : ""} · oxirgi: {new Date(c.last_at).toLocaleString()}</div>
+          <div className="hint">{c.account_type === "employer" ? `Kompaniya${c.company ? ` · ${c.company}` : ""}` : c.role === "student" ? "Talaba" : "Mentor"}{c.track ? ` · ${c.track.split(":")[0]}` : ""} · oxirgi: {new Date(c.last_at).toLocaleString()}</div>
         </div>
       ))}
     </div>

@@ -19,6 +19,19 @@ async def _setup(client, make_user):
     return track, [t for t in tasks if t["kind"] == "submission"], users
 
 
+async def _finish_signup(client, user: dict, full_name: str) -> None:
+    """The assistant answers with the student guide only once sign-up is complete."""
+    from sqlalchemy import select
+    from app.core.db import SessionLocal as S
+    from app.models import University
+    async with S() as s:
+        uni = (await s.execute(select(University.id).where(University.short_name == "TDIU"))).scalar_one()
+    r = await client.patch("/api/v1/me", json={
+        "full_name": full_name, "phone": "+998901112233", "university_id": uni, "faculty": "Iqtisodiyot", "course": 2,
+        "group_name": "114-25", "work_industries": ["it"], "job_types": ["internship"], "consent": True}, headers=user["headers"])
+    assert r.json()["signup_missing"] == [], r.text
+
+
 def _xlsx() -> bytes:
     wb = Workbook()
     ws = wb.active
@@ -179,6 +192,7 @@ async def test_admin_ai_settings(client, make_user, monkeypatch):
 
 async def test_careerflow_ai_chat(client, make_user, monkeypatch):
     track, tasks, u = await _setup(client, make_user)
+    await _finish_signup(client, u["Aziza"], "Aziza Karimova")
     h = u["Aziza"]["headers"]
     assert (await client.get("/api/v1/assistant/status", headers=h)).json()["available"] is False
     assert (await client.post("/api/v1/assistant/chat", json={"text": "Salom"}, headers=h)).status_code == 503
@@ -231,6 +245,8 @@ async def test_busy_model_falls_back(monkeypatch):
 
 async def test_each_conversation_is_private_but_admins_can_read_it(client, make_user, monkeypatch):
     track, tasks, u = await _setup(client, make_user)
+    await _finish_signup(client, u["Aziza"], "Aziza Karimova")
+    await _finish_signup(client, u["Bekzod"], "Bekzod Aliyev")
     prompts = []
 
     async def fake_generate(key, model, parts, **kwargs):
@@ -253,8 +269,8 @@ async def test_each_conversation_is_private_but_admins_can_read_it(client, make_
 
     admin = await owner_headers(client)
     people = (await client.get("/api/v1/admin/assistant/users", headers=admin)).json()
-    assert {p["full_name"] for p in people} == {"Aziza", "Bekzod"}
-    aziza = next(p for p in people if p["full_name"] == "Aziza")
+    assert {p["full_name"] for p in people} == {"Aziza Karimova", "Bekzod Aliyev"}
+    aziza = next(p for p in people if p["full_name"] == "Aziza Karimova")
     chat = (await client.get(f"/api/v1/admin/assistant/users/{aziza['user_id']}/messages", headers=admin)).json()
     assert [m["text"] for m in chat] == ["Aziza sirli savol", "OK"]
     log = (await client.get("/api/v1/admin/audit", headers=admin)).json()

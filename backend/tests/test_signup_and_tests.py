@@ -214,3 +214,26 @@ async def test_track_tests_reach_only_that_track(client, make_user):
                               json={"answers": [{"question_id": started["questions"][0]["id"], "text": "Toshkent"}]},
                               headers=second["headers"])).json()
     assert done["status"] == "graded" and done["max_score"] == 0
+
+
+# --------------------------------------------------------------------------- TalantGo AI for every audience
+
+async def test_assistant_picks_the_guide_for_who_is_asking(client, make_user):
+    from app.core.db import SessionLocal
+    from app.models import User
+    from app.services import assistant
+
+    newcomer = await make_user("Yangi Odam")
+    student = await full_student(client, make_user, "Talaba Bir")
+    hr = await approved_employer(client, make_user)
+    expected = {newcomer["id"]: "signup", student["id"]: "student", hr["id"]: "employer"}
+    async with SessionLocal() as s:
+        for uid, kind in expected.items():
+            user = await s.get(User, uid)
+            assert assistant.audience(user) == kind
+            prompt = await assistant.system_prompt(s, user, ai_review_on=False)
+            marker = {"signup": "To'ldirilmagan majburiy maydonlar", "student": "Talabaning holati",
+                      "employer": "Kompaniya: Data Solutions MChJ; holati: tasdiqlangan"}[kind]
+            assert marker in prompt, kind
+    for u, kind in ((newcomer, "signup"), (hr, "employer")):
+        assert (await client.get("/api/v1/assistant/status", headers=u["headers"])).json()["audience"] == kind

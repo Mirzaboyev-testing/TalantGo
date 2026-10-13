@@ -3,15 +3,23 @@ import { api, type AiMessage } from "../api";
 import { Icon } from "../icons";
 import { autoGrow, message, sendsOnEnter } from "../ui";
 
-const STARTERS = [
-  "Bu ilova qanday ishlaydi?",
-  "Keyingi qadamim nima?",
-  "Topshiriqni qanday topshiraman?",
-  "Ball va reyting qanday hisoblanadi?",
-];
+export type AiAudience = "student" | "employer" | "signup";
+
+const STARTERS: Record<AiAudience, string[]> = {
+  student: ["Bu ilova qanday ishlaydi?", "Keyingi qadamim nima?", "Topshiriqni qanday topshiraman?", "Kompaniya testini qanday ishlayman?"],
+  employer: ["Kompaniyani qanday ro'yxatdan o'tkazaman?", "Vakansiyani qanday qo'shaman?", "Test yoki so'rovnoma qanday tuziladi?",
+             "Talabaning CV'sini qanday yuklab olaman?", "Yaxshi stajyorni qanday tanlayman?"],
+  signup: ["Qanday ro'yxatdan o'taman?", "Ish izlovchi yoki ish beruvchi: qaysini tanlay?", "Qaysi maydonlar majburiy?",
+           "TalantGo menga nima beradi?"],
+};
+const INTRO: Record<AiAudience, string> = {
+  student: "Salom! Men TalantGo AI. Ilovadan qanday foydalanish, keyingi qadamingiz, topshiriqlar, Excel, SQL, Power BI va CV haqida so'rashingiz mumkin.",
+  employer: "Salom! Men TalantGo AI. Kompaniyani ro'yxatdan o'tkazish, vakansiya va test tuzish, talabalarni reyting bo'yicha tanlash va CV yuklab olish haqida so'rang.",
+  signup: "Salom! Men TalantGo AI. Qanday ro'yxatdan o'tish, qaysi yo'lni tanlash va formani qanday to'ldirishni tushuntirib beraman.",
+};
 
 /** A small "TalantGo AI" button in the corner; the chat opens over the app and keeps its history until reload. */
-export default function Assistant() {
+export default function Assistant({ audience = "student" }: { audience?: AiAudience }) {
   const [available, setAvailable] = useState(false);
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<AiMessage[]>([]);
@@ -85,9 +93,9 @@ export default function Assistant() {
       <div className="ai-body">
         {loaded && messages.length === 0 && (
           <div className="ai-intro">
-            <p>Salom! Men TalantGo AI. Ilovadan qanday foydalanish, keyingi qadamingiz, topshiriqlar, Excel, SQL, Power BI va CV haqida so'rashingiz mumkin.</p>
+            <p>{INTRO[audience]}</p>
             <div className="ai-starters">
-              {STARTERS.map((s) => <button key={s} className="chip" onClick={() => send(s)}>{s}</button>)}
+              {STARTERS[audience].map((s) => <button key={s} className="chip" onClick={() => send(s)}>{s}</button>)}
             </div>
           </div>
         )}

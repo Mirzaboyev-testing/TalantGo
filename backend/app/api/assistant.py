@@ -34,8 +34,9 @@ async def _key_if_available(session: Session) -> tuple[str, str] | None:
 
 
 @router.get("/assistant/status")
-async def status(_: CurrentUser, session: Session) -> dict:
-    return {"available": await _key_if_available(session) is not None, "daily_limit": assistant.DAILY_LIMIT}
+async def status(user: CurrentUser, session: Session) -> dict:
+    return {"available": await _key_if_available(session) is not None, "daily_limit": assistant.DAILY_LIMIT,
+            "audience": assistant.audience(user)}
 
 
 @router.get("/assistant/messages")
@@ -88,6 +89,7 @@ async def admin_conversations(_: AdminActor, session: Session) -> list[dict]:
         .where(AssistantMessage.role == "user")
         .group_by(User.id).order_by(func.max(AssistantMessage.created_at).desc()).limit(200))).all()
     return [{"user_id": u.id, "full_name": u.full_name, "username": u.username, "role": u.role.value,
+             "account_type": u.account_type, "company": u.company.name if u.company else None,
              "track": u.track.title if u.track else None, "questions": n, "last_at": last} for u, n, last in rows]
 
 

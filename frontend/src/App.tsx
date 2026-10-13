@@ -14,7 +14,7 @@ import EmployerApp from "./screens/employer/EmployerApp";
 import EmployerSignup from "./screens/employer/EmployerSignup";
 import UniversityApp from "./screens/university/UniversityApp";
 import Groups from "./screens/Groups";
-import Assistant from "./screens/Assistant";
+import Assistant, { type AiAudience } from "./screens/Assistant";
 import Shell, { type ShellTab } from "./screens/Shell";
 import WebLogin from "./screens/WebLogin";
 import { announceMove } from "./screens/MovedNotice";
@@ -103,34 +103,42 @@ export default function App() {
   }
   if (!me) return null;
 
+  // TalantGo AI is there from the first screen: people ask how to sign up, then how to use their part of the app
+  const audience: AiAudience = me.account_type === "employer" ? "employer"
+    : me.account_type === "university" || me.signup_missing.length > 0 ? "signup" : "student";
+  const ai = <Assistant key={`${me.id}-${audience}`} audience={audience} />;
+
   // Employers: the sign-up form until every required field is filled, then the admin check, then their app.
   if (me.account_type === "employer") {
-    if (me.signup_missing.length > 0) return <div className="app"><EmployerSignup me={me} onSaved={setMe} /></div>;
-    return me.company?.status === "approved"
+    if (me.signup_missing.length > 0) return <>{ai}<div className="app"><EmployerSignup me={me} onSaved={setMe} /></div></>;
+    return <>{ai}{me.company?.status === "approved"
       ? <EmployerApp me={me} onChanged={setMe} onLogout={logout} />
-      : <div className="app"><PendingScreen me={me} onChanged={setMe} /></div>;
+      : <div className="app"><PendingScreen me={me} onChanged={setMe} /></div>}</>;
   }
   if (me.account_type === "university") {
-    return me.staff_status === "approved"
+    return <>{ai}{me.staff_status === "approved"
       ? <UniversityApp me={me} onLogout={logout} />
-      : <div className="app"><PendingScreen me={me} onChanged={setMe} /></div>;
+      : <div className="app"><PendingScreen me={me} onChanged={setMe} /></div>}</>;
   }
   // a brand-new account first chooses: job seeker or employer
   const isNew = !me.track && !me.has_consent;
   if (isNew && !chosenStudent) {
     const partnerRole = new URLSearchParams(window.location.search).get("role");
-    return <div className="app"><Welcome me={me} initial={partnerRole === "employer" || partnerRole === "university" ? partnerRole : null}
-                                         onStudent={() => setChosenStudent(true)} onChanged={setMe} /></div>;
+    return <>{ai}<div className="app"><Welcome me={me} initial={partnerRole === "employer" || partnerRole === "university" ? partnerRole : null}
+                                         onStudent={() => setChosenStudent(true)} onChanged={setMe} /></div></>;
   }
 
   // job seekers stay on the sign-up form until every required field is filled
   if (me.signup_missing.length > 0 || changingTrack) {
     return (
+      <>
+      {ai}
       <div className="app">
         {isNew && <button className="btn small ghost" onClick={() => setChosenStudent(false)}>Orqaga</button>}
         <Onboarding me={me} onMe={setMe} onDone={async () => { await refreshMe(); setChangingTrack(false); setTab(isNew ? "profile" : "path"); }}
                     onCancel={changingTrack && me.signup_missing.length === 0 ? () => setChangingTrack(false) : undefined} />
       </div>
+      </>
     );
   }
 
@@ -145,7 +153,7 @@ export default function App() {
 
   return (
     <>
-    <Assistant key={me.id} />
+    {ai}
     <Shell tabs={tabs} active={tab} onChange={setTab} onLogout={logout}
            user={{ name: me.full_name, photo: me.photo_url, subtitle: subtitle ?? undefined }}>
       {tab === "path" && <PathScreen me={me} onChanged={refreshMe} onChangeTrack={() => setChangingTrack(true)} />}

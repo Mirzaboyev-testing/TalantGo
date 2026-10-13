@@ -23,7 +23,7 @@ export interface TaskQuestion {
 }
 export interface AiStatus { enabled: boolean; assistant: boolean; model: string; configured: boolean; hint: string | null; models: string[] }
 export interface AiMessage { id: number; role: "user" | "model"; text: string; created_at: string }
-export interface AiConversation { user_id: number; full_name: string; username: string | null; role: Role; track: string | null; questions: number; last_at: string }
+export interface AiConversation { user_id: number; full_name: string; username: string | null; role: Role; track: string | null; questions: number; last_at: string; account_type?: AccountType; company?: string | null }
 export interface Me {
   id: number; full_name: string; username: string | null; photo_url: string | null; role: Role;
   track: Track | null; university: string; group_name: string; bio: string; goals: string[];
