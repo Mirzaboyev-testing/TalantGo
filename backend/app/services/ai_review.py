@@ -25,6 +25,7 @@ log = logging.getLogger("careerflow.ai")
 CONFIG_KEY = "ai_review"
 MODELS = ("gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite")
 FALLBACK_MODEL = "gemini-3.5-flash"          # fast; used when the chosen model is overloaded
+STABLE_MODEL = "gemini-2.5-flash"            # last resort: older and less in demand (3.5/3.8 were overloaded on 2026-10-14)
 API = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 _running: set[asyncio.Task] = set()
 _limit = asyncio.Semaphore(2)            # free-tier keys allow only a few requests a minute
@@ -81,7 +82,7 @@ async def generate(key: str, model: str, parts: list[dict], *, system: str = "",
     elif json_mode:
         body["generationConfig"]["responseMimeType"] = "application/json"
     # a busy or slow model falls back to a fast, widely available one instead of failing the student
-    models = list(dict.fromkeys([model, FALLBACK_MODEL]))
+    models = list(dict.fromkeys([model, FALLBACK_MODEL, STABLE_MODEL]))
     for i, name in enumerate(models):
         try:
             return await _post(key, name, body, timeout)
