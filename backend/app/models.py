@@ -137,7 +137,9 @@ class User(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True)
+    telegram_id: Mapped[int | None] = mapped_column(BigInteger, unique=True)   # None: a website-only account
+    email: Mapped[str | None] = mapped_column(String(160), unique=True)          # website sign-in, stored lower-case
+    password_hash: Mapped[str] = mapped_column(String(255), default="", server_default="")
     username: Mapped[str | None] = mapped_column(String(64))
     full_name: Mapped[str] = mapped_column(String(128))
     photo_url: Mapped[str | None] = mapped_column(String(512))
@@ -615,3 +617,20 @@ class TestAttempt(Base):
 
     test: Mapped[CompanyTest] = relationship(lazy="selectin")
     user: Mapped[User] = relationship(lazy="selectin")
+
+
+class LoginRequest(Base):
+    """Signing in on the website through the bot, or tying a website account to a Telegram account.
+    The website shows a t.me link carrying `code`; the person confirms in the bot; the website polls."""
+    __tablename__ = "login_requests"
+    __table_args__ = (_in("status", ("pending", "claimed", "confirmed", "rejected", "conflict", "used"), "login_request_status_valid"),
+                      _in("purpose", ("login", "link"), "login_request_purpose_valid"))
+
+    code: Mapped[str] = mapped_column(String(32), primary_key=True)
+    purpose: Mapped[str] = mapped_column(String(8), default="login")
+    link_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))   # purpose=link
+    telegram_id: Mapped[int | None] = mapped_column(BigInteger, index=True)     # who opened the link in the bot
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))        # the result
+    status: Mapped[str] = mapped_column(String(12), default="pending")
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

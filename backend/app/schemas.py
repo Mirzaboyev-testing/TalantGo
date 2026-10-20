@@ -212,6 +212,9 @@ class MeOut(ORM):
     work_industries: list[str] = []
     job_title: str = ""
     signup_missing: list[str] = []
+    email: str | None = None
+    has_password: bool = False
+    has_telegram: bool = True
 
 
 class MeUpdate(BaseModel):

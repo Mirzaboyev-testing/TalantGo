@@ -5,6 +5,7 @@ import { Avatar, ErrorText, focusField, isFullName, message, toast } from "../ui
 import CareerProfile from "./CareerProfile";
 import PhoneField from "./PhoneField";
 import InviteCard from "./InviteCard";
+import LoginMethods from "./LoginMethods";
 
 export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; onSaved: (m: Me) => void; onChangeTrack: () => void }) {
   const [form, setForm] = useState({
@@ -120,6 +121,7 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
           <button className="btn ghost" onClick={onChangeTrack}>Yo'nalishni o'zgartirish</button>
         </div>
       </div>
+      <LoginMethods me={me} onChanged={onSaved} />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { ErrorText, message, toast } from "../../ui";
 import EmployerSignup from "./EmployerSignup";
 import Students, { downloadCv, StudentSheet } from "./Students";
 import Tests from "./Tests";
+import LoginMethods from "../LoginMethods";
 import Groups from "../Groups";
 import Shell, { type ShellTab } from "../Shell";
 import { Icon } from "../../icons";
@@ -44,7 +45,7 @@ export default function EmployerApp({ me, onChanged, onLogout }: { me: Me; onCha
         {tab === "jobs" && <JobsTab />}
         {tab === "tests" && <Tests key={attempt ?? "list"} openAttempt={attempt} />}
         {tab === "groups" && <Groups />}
-        {tab === "profile" && <EmployerSignup me={me} onSaved={onChanged} />}
+        {tab === "profile" && <><EmployerSignup me={me} onSaved={onChanged} /><LoginMethods me={me} onChanged={onChanged} /></>}
     </Shell>
   );
 }

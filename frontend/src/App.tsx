@@ -89,8 +89,7 @@ export default function App() {
 
   if (auth.kind === "loading") return <div className="center hint">Yuklanmoqda…</div>;
   if (auth.kind === "login") {
-    return <WebLogin dev={auth.dev} onTelegram={(u) => signIn(() => api.telegramWebLogin(u))}
-                     onDev={(id, name) => signIn(() => api.devLogin(id, name))} />;
+    return <WebLogin dev={auth.dev} onSignIn={signIn} onDev={(id, name) => signIn(() => api.devLogin(id, name))} />;
   }
   if (auth.kind === "error") {
     return (

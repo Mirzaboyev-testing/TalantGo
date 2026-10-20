@@ -40,7 +40,8 @@ async def _claim_week(session, week: str) -> bool:
 
 async def build_messages(session) -> list[tuple[int, str]]:
     students = (await session.execute(select(User).where(
-        User.account_type == "student", User.track_id.isnot(None), User.is_blocked.is_(False)))).scalars().all()
+        User.account_type == "student", User.track_id.isnot(None), User.is_blocked.is_(False),
+        User.telegram_id.isnot(None)))).scalars().all()
     out = []
     for u in students:
         done = set((await session.execute(select(Submission.task_id).where(
@@ -103,7 +104,7 @@ async def nudge_unfinished(now: datetime) -> int:
             return 0
         since = max(datetime.fromisoformat(row.value["since"]), now - NUDGE_WINDOW)
         people = (await session.execute(select(User).where(
-            User.account_type == "student", User.is_blocked.is_(False), User.onboarding_nudged_at.is_(None),
+            User.account_type == "student", User.is_blocked.is_(False), User.onboarding_nudged_at.is_(None), User.telegram_id.isnot(None),
             User.created_at >= since, User.created_at <= now - NUDGE_AFTER, unfinished_signup()))).scalars().all()
         for user in people:
             user.onboarding_nudged_at = now      # marked before sending: a crash never sends twice

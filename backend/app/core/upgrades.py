@@ -66,6 +66,11 @@ STATEMENTS = [
     "ALTER TABLE companies ADD COLUMN IF NOT EXISTS telegram varchar(128) NOT NULL DEFAULT ''",
     "ALTER TABLE companies ADD COLUMN IF NOT EXISTS address varchar(200) NOT NULL DEFAULT ''",
     "ALTER TABLE companies ADD COLUMN IF NOT EXISTS email varchar(120) NOT NULL DEFAULT ''",
+    # website sign-in with email and password, accounts without Telegram (2026-10-20)
+    "ALTER TABLE users ALTER COLUMN telegram_id DROP NOT NULL",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS email varchar(160)",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash varchar(255) NOT NULL DEFAULT ''",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email_unique ON users (email)",
 ]
 
 

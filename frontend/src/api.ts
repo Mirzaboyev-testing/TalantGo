@@ -37,7 +37,11 @@ export interface Me {
   phone: string; phone_verified: boolean; show_phone: boolean; invite_code: string; invited_count: number; headline: string;
   completeness: { percent: number; missing: string[] };
   consent_current: boolean; work_industries: string[]; job_title: string; signup_missing: string[];
+  email: string | null; has_password: boolean; has_telegram: boolean;
 }
+export interface BotLink { code: string; url: string; expires_in: number }
+export type BotLoginStatus = { status: "pending" | "claimed" | "rejected" | "conflict" | "used" | "expired"; note?: string } |
+  { status: "confirmed"; token: string };
 export type AccountType = "student" | "employer" | "university";
 export type Verification = "none" | "pending" | "verified" | "rejected";
 export type JobKind = "internship" | "part_time" | "junior" | "project";
@@ -247,6 +251,14 @@ export const api = {
   devLogin: (telegram_id: number, full_name: string) =>
     request<{ token: string }>("POST", "/auth/dev", { telegram_id, full_name }),
   me: () => request<Me>("GET", "/me"),
+  botLoginStart: () => request<BotLink>("POST", "/auth/bot-login"),
+  botLoginStatus: (code: string) => request<BotLoginStatus>("GET", `/auth/bot-login/${encodeURIComponent(code)}`),
+  emailRegister: (full_name: string, email: string, password: string) =>
+    request<{ token: string }>("POST", "/auth/register", { full_name, email, password }),
+  emailLogin: (email: string, password: string) => request<{ token: string }>("POST", "/auth/login", { email, password }),
+  setPassword: (email: string, password: string, current_password: string) =>
+    request<Me>("PUT", "/me/password", { email, password, current_password }),
+  telegramLinkStart: () => request<BotLink>("POST", "/me/telegram-link"),
   updateMe: (changes: Partial<Omit<Me, "track" | "university_ref" | "company" | "staff_university" | "completeness">> &
     { track_id?: number | null; university_id?: number | null; consent?: boolean }) => request<Me>("PATCH", "/me", changes),
   tracks: () => request<Track[]>("GET", "/tracks"),

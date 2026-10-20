@@ -42,7 +42,8 @@ async def me_out(session: Session, user: User) -> MeOut:
         invite_code=f"r{user.id}", headline=user.headline,
         invited_count=await session.scalar(select(func.count()).select_from(User).where(User.referred_by_id == user.id)),
         completeness=completeness(user), consent_current=user.consent_version >= CONSENT_VERSION,
-        work_industries=user.work_industries, job_title=user.job_title, signup_missing=signup_missing(user))
+        work_industries=user.work_industries, job_title=user.job_title, signup_missing=signup_missing(user),
+        email=user.email, has_password=bool(user.password_hash), has_telegram=user.telegram_id is not None)
 
 
 # Changing any of these after verification means the old check no longer covers the profile.
@@ -239,6 +240,45 @@ async def request_verification(user: CurrentUser, session: Session) -> MeOut:
     notify.send(list(staff), f"Yangi talaba tasdiqlashni kutmoqda: {user.full_name}, {user.faculty}, {user.course}-kurs.")
     await session.refresh(user)
     return await me_out(session, user)
+
+
+class PasswordIn(BaseModel):
+    email: str = Field(max_length=160)
+    password: str = Field(min_length=8, max_length=128)
+    current_password: str = Field(default="", max_length=128)
+
+
+@router.put("/me/password", response_model=MeOut)
+async def set_password(body: PasswordIn, user: CurrentUser, session: Session) -> MeOut:
+    """Email and password for the website, on the same account as the bot."""
+    from ..services.admin_accounts import check_password, hash_password
+    from .auth import _email
+    try:
+        email = _email(body.email)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if user.password_hash and not check_password(body.current_password, user.password_hash):
+        raise HTTPException(403, "Joriy parol noto'g'ri")
+    if await session.scalar(select(User.id).where(User.email == email, User.id != user.id)):
+        raise HTTPException(409, "Bu email boshqa akkauntga bog'langan")
+    user.email, user.password_hash = email, hash_password(body.password)
+    await session.commit()
+    await session.refresh(user)
+    return await me_out(session, user)
+
+
+@router.post("/me/telegram-link")
+async def telegram_link(user: CurrentUser, session: Session) -> dict:
+    """A one-time bot link that ties this (website) account to the Telegram account that confirms it."""
+    from ..services import bots, telegram_bot, web_login
+    if user.telegram_id is not None:
+        raise HTTPException(409, "Telegram allaqachon ulangan")
+    username = await bots.username(session)
+    if not username:
+        raise HTTPException(503, "Bot hali sozlanmagan")
+    code = await web_login.create(session, "link", user.id)
+    return {"code": code, "url": telegram_bot.start_link(username, web_login.PREFIX + code),
+            "expires_in": int(web_login.TTL.total_seconds())}
 
 
 @router.get("/catalog")

@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from ..core.config import settings
 from ..models import User
-from ..services import bots, telegram_bot
+from ..services import bots, telegram_bot, web_login
 from ..services.cv import build_cv
 from .deps import Session
 
@@ -59,6 +59,17 @@ async def webhook(update: dict, session: Session,
                 await telegram_bot.send_moved(token, message["chat"]["id"], new_username, payload)
             except telegram_bot.BotError as exc:
                 log.warning("old bot could not answer: %s", exc)
+        return {"ok": True}
+    if private and sender and (text.startswith("/start " + web_login.PREFIX) or text in (web_login.YES, web_login.NO)):
+        from .auth import _upsert
+        try:
+            if text.startswith("/start"):
+                await web_login.on_start(session, token, message["chat"]["id"], message["from"],
+                                         text.removeprefix("/start").strip()[len(web_login.PREFIX):])
+            else:
+                await web_login.on_answer(session, token, message["chat"]["id"], message["from"], text == web_login.YES, _upsert)
+        except telegram_bot.BotError as exc:
+            log.warning("website sign-in message failed: %s", exc)
         return {"ok": True}
     if text.startswith("/start") and private and sender:
         payload = text.removeprefix("/start").strip()
