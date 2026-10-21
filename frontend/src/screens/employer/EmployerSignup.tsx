@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { api, loadCatalog, type Catalog, type Me } from "../../api";
 import { Field, Req, useRequired, type Check } from "../../form";
-import { haptic } from "../../tg";
+import { ask, haptic } from "../../tg";
+import { LogoutLink } from "../../ui";
 import { ErrorText, isFullName, message, toast } from "../../ui";
 import { Consent } from "../Consent";
 import PhoneField from "../PhoneField";
@@ -25,7 +26,9 @@ function guessRegion(value: string, catalog: Catalog | null): string {
  * Employer sign-up: the person and the company on one page. Without a company it creates one (sent to an
  * admin for the STIR check); with a company it edits both, which is also the employer's "Profilim".
  */
-export default function EmployerSignup({ me, onSaved, onBack }: { me: Me; onSaved: (m: Me) => void; onBack?: () => void }) {
+export default function EmployerSignup({ me, onSaved, onBack, onLogout }: {
+  me: Me; onSaved: (m: Me) => void; onBack?: () => void; onLogout?: () => void;
+}) {
   const c = me.company;
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [f, setF] = useState({
@@ -71,6 +74,9 @@ export default function EmployerSignup({ me, onSaved, onBack }: { me: Me; onSave
       description: f.description.trim(), website: f.website.trim(), telegram: f.telegram.trim(), address: f.address.trim(),
       email: f.email.trim(),
     };
+    const identityChanged = c && (company.name !== c.name || Boolean(c.stir && company.stir !== c.stir));
+    if (c?.status === "approved" && identityChanged &&
+        !(await ask("Kompaniya nomi yoki STIR o'zgarsa, kompaniya qayta tekshiriladi va tasdiqlanguncha vakansiyalaringiz yashiriladi. Davom etamizmi?"))) return;
     setBusy(true); setError("");
     try {
       let saved: Me;
@@ -96,10 +102,13 @@ export default function EmployerSignup({ me, onSaved, onBack }: { me: Me; onSave
 
   return (
     <div>
+      <LogoutLink onLogout={onLogout} />
       {onBack && <button className="btn small ghost" onClick={onBack}>Orqaga</button>}
       <h1>{c ? "Profilim" : "Ish beruvchi sifatida ro'yxatdan o'tish"}</h1>
       {!c && <p className="hint">Kompaniyani admin STIR bo'yicha tekshiradi (odatda 1 ish kuni). Tasdiqlangach talabalar ro'yxati, vakansiyalar va testlar ochiladi.</p>}
-      {c && c.status !== "approved" && <p className="notice">Kompaniya tekshiruvda. Nom yoki STIR o'zgarsa, qayta tekshiriladi.</p>}
+      {c?.status === "pending" && <p className="notice">Kompaniya tekshiruvda.</p>}
+      {c?.status === "rejected" && <p className="notice">Kompaniya tasdiqlanmadi{c.review_note ? `: ${c.review_note}` : ""}. Tuzatib saqlasangiz, qayta tekshiruvga yuboriladi.</p>}
+      {c?.status === "approved" && <p className="hint">Kompaniya nomi yoki STIR o'zgarsa, kompaniya qayta tekshiriladi.</p>}
       <p className="form-note"><Req />belgisi bor maydonlar majburiy.</p>
 
       <h2>1. Mas'ul shaxs</h2>

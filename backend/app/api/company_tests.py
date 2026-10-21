@@ -265,7 +265,7 @@ async def delete_test(test_id: int, user: Employer, session: Session) -> None:
 
 
 @employer_router.get("/tests/{test_id}/results")
-async def results(test_id: int, user: Employer, session: Session) -> dict:
+async def results(test_id: int, user: ApprovedEmployer, session: Session) -> dict:
     """Everyone who finished the test, best score first (equal scores share a place)."""
     test = await _own_test(session, user, test_id)
     attempts = (await session.execute(select(TestAttempt).where(
@@ -290,13 +290,13 @@ async def _own_attempt(session: Session, user: User, attempt_id: int) -> TestAtt
 
 
 @employer_router.get("/test-attempts/{attempt_id}")
-async def attempt_detail(attempt_id: int, user: Employer, session: Session) -> dict:
+async def attempt_detail(attempt_id: int, user: ApprovedEmployer, session: Session) -> dict:
     attempt = await _own_attempt(session, user, attempt_id)
     return {**attempt_out(attempt, with_correct=True), "student": _student_brief(attempt.user)}
 
 
 @employer_router.post("/test-attempts/{attempt_id}/grade")
-async def grade(attempt_id: int, body: GradingIn, user: Employer, session: Session) -> dict:
+async def grade(attempt_id: int, body: GradingIn, user: ApprovedEmployer, session: Session) -> dict:
     """Points for written answers (and, if the company wants, a correction of an automatic score)."""
     attempt = await _own_attempt(session, user, attempt_id)
     questions = {q.id: q for q in attempt.test.questions}

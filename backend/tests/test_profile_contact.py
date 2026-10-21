@@ -16,7 +16,7 @@ async def test_phone_typed_by_hand_is_unverified_and_hidden_by_default(client, m
         tdiu = (await s.execute(select(University.id).where(University.short_name == "TDIU"))).scalar_one()
     for u in (a, b):
         await client.patch("/api/v1/me", json={"track_id": track["id"], "university_id": tdiu, "course": 2,
-                                               "faculty": "Iqtisodiyot"}, headers=u["headers"])
+                                               "faculty": "Iqtisodiyot", "consent": True}, headers=u["headers"])
     assert (await client.patch("/api/v1/me", json={"phone": "901234567"}, headers=a["headers"])).status_code == 422
     me = (await client.patch("/api/v1/me", json={"phone": "+998901234567"}, headers=a["headers"])).json()
     assert me["phone"] == "+998901234567" and me["phone_verified"] is False and me["show_phone"] is False

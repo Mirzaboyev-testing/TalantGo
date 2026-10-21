@@ -154,19 +154,25 @@ function SubmitForm({ task, resubmit, onSubmitted }: { task: Task; resubmit: boo
     if (input.current) input.current.value = "";
   }
 
+  const uploaded = useRef(new Map<File, number>());
+
   async function send() {
     setError("");
     try {
       const ids: number[] = [];
       for (const [i, f] of picked.entries()) {
         setBusy(`Fayl yuklanmoqda ${i + 1}/${picked.length}…`);
-        ids.push((await api.upload(f)).id);
+        // a retry after a failed submit reuses what was already uploaded instead of uploading it again
+        let id = uploaded.current.get(f);
+        if (id === undefined) { id = (await api.upload(f)).id; uploaded.current.set(f, id); }
+        ids.push(id);
       }
       setBusy("Yuborilmoqda…");
       await api.submit(task.id, url.trim(), note.trim(), ids);
       haptic("success");
       toast("Ish topshirildi");
       setPicked([]); setUrl(""); setNote("");
+      uploaded.current.clear();
       await onSubmitted();
     } catch (e) {
       haptic("error");

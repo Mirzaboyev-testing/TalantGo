@@ -33,7 +33,9 @@ WELCOME_CAPTION = (
 
 
 class BotError(RuntimeError):
-    pass
+    def __init__(self, text: str, retry_after: int = 0):
+        super().__init__(text)
+        self.retry_after = retry_after
 
 
 async def call(token: str, method: str, **params) -> dict:
@@ -44,7 +46,7 @@ async def call(token: str, method: str, **params) -> dict:
         except (httpx.HTTPError, ValueError) as exc:
             raise BotError(f"Telegram bilan aloqa yo'q: {exc.__class__.__name__}") from exc
     if not data.get("ok"):
-        raise BotError(data.get("description", "Telegram xatosi"))
+        raise BotError(data.get("description", "Telegram xatosi"), int((data.get("parameters") or {}).get("retry_after") or 0))
     return data["result"]
 
 
@@ -54,11 +56,18 @@ async def send_any(tokens: list[str], method: str, note: str = "", **params) -> 
     if not tokens:
         raise BotError("Bot sozlanmagan")
     error: BotError | None = None
+    import asyncio
     for i, token in enumerate(tokens):
         sent = {**params, "text": params["text"] + note} if i and note and "text" in params else params
         try:
             return await call(token, method, **sent)
         except BotError as exc:
+            if exc.retry_after:                # flood limit: wait and try the same bot once more
+                await asyncio.sleep(min(exc.retry_after, 30))
+                try:
+                    return await call(token, method, **sent)
+                except BotError as again:
+                    exc = again
             error = exc
     raise error
 

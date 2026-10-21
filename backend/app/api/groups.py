@@ -170,7 +170,7 @@ async def group_detail(group_id: int, user: CurrentUser, session: Session) -> di
     return {**await _group_card(session, group, member, user),
             "invite_code": group.invite_code if group.is_private else None,
             "member_list": [{"user_id": m.user_id, "name": m.user.full_name, "badge": badge(m.user), "role": m.role,
-                             "username": m.user.username} for m in members]}
+                             "username": None if group.is_official else m.user.username} for m in members]}
 
 
 @router.patch("/{group_id}")

@@ -1,10 +1,12 @@
 """Signing in on the website through the bot, and tying an email account to a Telegram account.
 
-The website asks for a code and shows a t.me link (?start=login_<code>). In the bot the person sees what is
-being asked and confirms with a reply-keyboard button (a plain message, so the webhook needs no extra update
-types). The website polls the code and receives a session once the request is confirmed.
+1. The website asks for a code and shows a t.me link (?start=login_<code>).
+2. In the bot the person sees what is asked and confirms with a reply-keyboard button (a plain message, so the
+   webhook needs no extra update types).
+3. The bot then shows a 6-digit PIN that has to be typed on that same website. Only the browser that asked can
+   finish, so a link sent by someone else gives them nothing (the PIN stays in the victim's chat).
 
-purpose="login": the Telegram account signs in on the website (created if new).
+purpose="login": the Telegram account signs in on the website (a new account is created if there is none).
 purpose="link":  a website account (email and password) gets this Telegram account, so the bot and the
                  website open the same profile.
 """
@@ -17,10 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..models import LoginRequest, Submission, User
 from . import telegram_bot
 
-TTL = timedelta(minutes=5)
+TTL = timedelta(minutes=10)
 PREFIX = "login_"
 YES = "✅ Ha, tasdiqlayman"
 NO = "❌ Yo'q"
+MAX_PIN_TRIES = 5
 
 
 def _expired(req: LoginRequest) -> bool:
@@ -46,28 +49,25 @@ async def on_start(session: AsyncSession, token: str, chat_id: int, sender: dict
     if req is None or req.status != "pending" or _expired(req):
         await _reply(token, chat_id, "Bu havola eskirgan. Saytda tugmani qaytadan bosing.")
         return
-    req.telegram_id, req.status = int(sender["id"]), "claimed"
+    req.telegram_id, req.tg_username, req.status = int(sender["id"]), sender.get("username"), "claimed"
     await session.commit()
+    warning = "Agar bu havolani sizga boshqa odam yuborgan bo'lsa, «Yo'q» ni bosing."
     if req.purpose == "link":
         target = await session.get(User, req.link_user_id)
-        text = (f"TalantGo profilingizni ({target.email if target else 'sayt akkaunti'}) shu Telegram akkauntga ulash so'rovi.\n\n"
-                "Ulangach bot va sayt bitta akkaunt bilan ishlaydi. Agar bu so'rovni siz yubormagan bo'lsangiz, «Yo'q» ni bosing.")
+        text = (f"TalantGo profilini ({target.email if target else 'sayt akkaunti'}) shu Telegram akkauntga ulash so'rovi. "
+                f"Ulangach bot va sayt bitta akkaunt bilan ishlaydi.\n\n{warning}")
     else:
-        text = ("Kompyuterdagi TalantGo saytiga shu Telegram akkaunt bilan kirish so'rovi.\n\n"
-                "Agar hozir saytda «Telegram orqali davom etish» ni siz bosgan bo'lsangiz, tasdiqlang. "
-                "Aks holda «Yo'q» ni bosing.")
+        exists = await session.scalar(select(User.id).where(User.telegram_id == int(sender["id"])))
+        text = "Kompyuterdagi TalantGo saytiga shu Telegram akkaunt bilan kirish so'rovi."
+        if not exists:
+            text += ("\n\nBu Telegram'ga bog'langan profil yo'q: tasdiqlasangiz, yangi akkaunt ochiladi. Agar saytda "
+                     "email bilan ro'yxatdan o'tgan bo'lsangiz, «Yo'q» ni bosing, email bilan kiring va «Profil» "
+                     "bo'limida Telegram'ni ulang.")
+        text += f"\n\n{warning}"
     await _reply(token, chat_id, text, keyboard=True)
 
 
-async def _bare(session: AsyncSession, user: User) -> bool:
-    """An account someone opened in the bot but never used: safe to retire when linking."""
-    if user.track_id or user.consent_at or user.company_id or user.staff_university_id or user.email:
-        return False
-    return not await session.scalar(select(func.count()).select_from(Submission).where(Submission.user_id == user.id))
-
-
-async def on_answer(session: AsyncSession, token: str, chat_id: int, sender: dict, yes: bool, upsert) -> None:
-    """`upsert(session, telegram_id, full_name, username, photo_url)` creates or refreshes a Telegram account."""
+async def on_answer(session: AsyncSession, token: str, chat_id: int, sender: dict, yes: bool) -> None:
     req = (await session.execute(select(LoginRequest).where(
         LoginRequest.telegram_id == int(sender["id"]), LoginRequest.status == "claimed")
         .order_by(LoginRequest.created_at.desc()).limit(1))).scalar_one_or_none()
@@ -79,46 +79,72 @@ async def on_answer(session: AsyncSession, token: str, chat_id: int, sender: dic
         await session.commit()
         await _reply(token, chat_id, "Bekor qilindi. Hech kim akkauntingizga kirmadi.")
         return
-    tg_id = int(sender["id"])
-    full_name = " ".join(filter(None, [sender.get("first_name"), sender.get("last_name")])) or "Talaba"
-    if req.purpose == "login":
-        user = await upsert(session, tg_id, full_name[:128], sender.get("username"), None)
-        req.user_id, req.status = user.id, "confirmed"
-        await session.commit()
-        await _reply(token, chat_id, "Tayyor! Kompyuterdagi brauzerga qayting: sayt o'zi ochiladi.")
-        return
-    target = await session.get(User, req.link_user_id)
-    other = (await session.execute(select(User).where(User.telegram_id == tg_id))).scalar_one_or_none()
-    if target is None:
-        req.status = "rejected"
-    elif other is not None and other.id != target.id:
-        if await _bare(session, other):
-            other.telegram_id, other.is_blocked = None, True          # the empty bot-only account steps aside
-        else:
-            req.status, req.note = "conflict", "Bu Telegram akkaunt boshqa TalantGo profiliga ulangan va unda ma'lumotlar bor."
-    if req.status == "claimed" and target is not None:
-        await session.flush()
-        target.telegram_id, target.username = tg_id, sender.get("username")
-        req.user_id, req.status = target.id, "confirmed"
+    req.status, req.pin, req.attempts = "confirmed", f"{secrets.randbelow(10 ** 6):06d}", 0
+    req.note = " ".join(filter(None, [sender.get("first_name"), sender.get("last_name")]))[:128]
     await session.commit()
-    if req.status == "confirmed":
-        await _reply(token, chat_id, "Tayyor! Telegram profilingizga ulandi: endi bot va sayt bitta akkaunt bilan ishlaydi.")
-    elif req.status == "conflict":
-        await _reply(token, chat_id, "Ulab bo'lmadi: bu Telegram akkaunt boshqa TalantGo profiliga ulangan va unda "
-                                     "ma'lumotlar bor. O'sha profilga kirib, «Profil» bo'limida email va parol qo'shing.")
-    else:
-        await _reply(token, chat_id, "So'rov bekor qilindi.")
+    await _reply(token, chat_id, f"Saytga shu kodni kiriting: {req.pin}\n\n"
+                                 "Kodni hech kimga bermang: TalantGo xodimlari ham uni hech qachon so'ramaydi.")
 
 
-async def poll(session: AsyncSession, code: str) -> tuple[str, int | None, str]:
-    """(status, user_id when a login session should be issued now, note). A confirmed request is used once."""
+async def poll(session: AsyncSession, code: str) -> tuple[str, str]:
+    """The request's state as the website sees it: pending, claimed, awaiting_pin, rejected, conflict, used, expired."""
     req = await session.get(LoginRequest, code)
-    if req is None:
-        return "expired", None, ""
-    if req.status in ("pending", "claimed") and _expired(req):
-        return "expired", None, ""
+    if req is None or (req.status in ("pending", "claimed", "confirmed") and _expired(req)):
+        return "expired", ""
     if req.status == "confirmed":
-        req.status = "used"
+        return "awaiting_pin", ""
+    return req.status, req.note if req.status == "conflict" else ""
+
+
+async def _bare(session: AsyncSession, user: User) -> bool:
+    """An account someone opened in the bot but never used: safe to retire when linking."""
+    if user.track_id or user.consent_at or user.company_id or user.staff_university_id or user.email:
+        return False
+    return not await session.scalar(select(func.count()).select_from(Submission).where(Submission.user_id == user.id))
+
+
+async def _check_pin(session: AsyncSession, req: LoginRequest | None, pin: str, purpose: str) -> LoginRequest:
+    from fastapi import HTTPException
+    if req is None or req.purpose != purpose or req.status != "confirmed" or _expired(req):
+        raise HTTPException(410, "So'rov eskirgan. Tugmani qaytadan bosing.")
+    if not secrets.compare_digest(pin.strip(), req.pin):
+        req.attempts += 1
+        if req.attempts >= MAX_PIN_TRIES:
+            req.status = "rejected"
         await session.commit()
-        return "confirmed", req.user_id, ""
-    return req.status, None, req.note
+        raise HTTPException(400, "Kod noto'g'ri" + ("" if req.status == "confirmed" else ". Urinishlar tugadi, qaytadan boshlang."))
+    return req
+
+
+async def verify_login(session: AsyncSession, code: str, pin: str, upsert) -> int:
+    """The PIN from the bot, typed on the website that asked: returns the account to sign in."""
+    req = await _check_pin(session, await session.get(LoginRequest, code), pin, "login")
+    user = await upsert(session, req.telegram_id, req.note or "Talaba", req.tg_username, None)
+    req.user_id, req.status = user.id, "used"
+    await session.commit()
+    return user.id
+
+
+async def verify_link(session: AsyncSession, code: str, pin: str, user: User) -> None:
+    """Ties the Telegram account that confirmed in the bot to `user` (the signed-in website account)."""
+    from fastapi import HTTPException
+    req = await session.get(LoginRequest, code)
+    if req is not None and req.link_user_id != user.id:
+        req = None
+    req = await _check_pin(session, req, pin, "link")
+    tg_id = req.telegram_id
+    if user.telegram_id not in (None, tg_id):
+        req.status = "conflict"
+        await session.commit()
+        raise HTTPException(409, "Bu profilga boshqa Telegram akkaunt ulangan")
+    other = (await session.execute(select(User).where(User.telegram_id == tg_id))).scalar_one_or_none()
+    if other is not None and other.id != user.id:
+        if not await _bare(session, other):
+            req.status, req.note = "conflict", "Bu Telegram akkaunt boshqa TalantGo profiliga ulangan va unda ma'lumotlar bor."
+            await session.commit()
+            raise HTTPException(409, req.note + " O'sha profilga Telegram orqali kirib, «Profil» bo'limida email va parol qo'shing.")
+        other.telegram_id, other.is_blocked = None, True          # the empty bot-only account steps aside
+        await session.flush()
+    user.telegram_id, user.username = tg_id, req.tg_username
+    req.user_id, req.status = user.id, "used"
+    await session.commit()

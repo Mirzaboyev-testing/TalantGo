@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { absoluteUrl, api, ATTEMPT_STATUS, courseLabel, formatPhone, JOB_KIND, loadCatalog, VERIFICATION_LABEL,
          type Catalog, type JobKind, type StudentDetail, type StudentRow, type Track, type University } from "../../api";
-import { haptic, openLink } from "../../tg";
+import { haptic, openAfter, openLink } from "../../tg";
 import { Avatar, ErrorText, Sheet, message, toast } from "../../ui";
 
 /** Opens the signed PDF link; in Telegram it opens in the phone's browser, which saves the file. */
 export async function downloadCv(studentId: number): Promise<void> {
   try {
-    const { url } = await api.employer.cvLink(studentId);
-    openLink(absoluteUrl(url));
+    await openAfter(async () => absoluteUrl((await api.employer.cvLink(studentId)).url));
   } catch (e) {
     toast(message(e), "error");
   }
@@ -146,7 +145,7 @@ export function StudentSheet({ id, catalog, onClose, onTest }: {
     try {
       await api.employer.contact(id, msg.trim());
       haptic("success");
-      toast("So'rov botdan talabaga yuborildi");
+      toast("So'rov talabaga yuborildi");
       setWriting(false);
       void load();
     } catch (e) {

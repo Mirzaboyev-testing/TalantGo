@@ -23,9 +23,8 @@ export default function WebLogin({ dev, onSignIn, onDev }: {
   const [devId, setDevId] = useState("1001");
   const { errors, check, clear, cls } = useRequired();
 
-  const bot = useBotLink(api.botLoginStart, useCallback((s) => {
-    if (s.status === "confirmed") onSignIn(() => Promise.resolve({ token: s.token }));
-  }, [onSignIn]));
+  const bot = useBotLink(api.botLoginStart, api.botLoginVerify,
+                         useCallback((r: { token: string }) => onSignIn(() => Promise.resolve(r)), [onSignIn]));
 
   const set = (k: keyof typeof f, id: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setF({ ...f, [k]: e.target.value });
@@ -61,7 +60,7 @@ export default function WebLogin({ dev, onSignIn, onDev }: {
         <div className="card" style={{ marginTop: 18 }}>
           <button className="btn" disabled={bot.state !== "idle"} onClick={bot.begin}>Telegram orqali davom etish</button>
           <p className="hint" style={{ marginBottom: 0 }}>Bot va sayt bitta akkaunt bilan ishlaydi. Yangi bo'lsangiz, akkaunt o'zi ochiladi.</p>
-          {bot.link && bot.state !== "idle" && <BotWaiting link={bot.link} state={bot.state} onCancel={bot.stop} />}
+          {bot.link && bot.state !== "idle" && <BotWaiting link={bot.link} state={bot.state} onCancel={bot.stop} onPin={bot.submitPin} />}
           <ErrorText error={bot.error} />
         </div>
 
@@ -98,7 +97,7 @@ export default function WebLogin({ dev, onSignIn, onDev }: {
           <p className="hint" style={{ marginBottom: 0 }}>
             {mode === "register"
               ? "Keyin «Profil» bo'limida Telegram'ni ulasangiz, bot ham shu akkauntni ochadi."
-              : "Parolni unutdingizmi? «Telegram orqali davom etish» bilan kiring va «Profil» bo'limida yangi parol qo'ying."}
+              : "Parolni unutdingizmi? Telegram ulangan bo'lsa, «Telegram orqali davom etish» bilan kirib «Profil» bo'limida yangi parol qo'ying. Aks holda TalantGo admini vaqtinchalik parol beradi."}
           </p>
         </div>
 

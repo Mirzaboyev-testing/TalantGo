@@ -55,6 +55,20 @@ export function boot(): void {
   if (app?.isVersionAtLeast?.("7.10")) app.setBottomBarColor?.("#ffffff");
 }
 
+/** Opens a link whose address is fetched first (CV PDF). On the website the window is opened inside the
+ *  click, before the request, so browsers do not block it as a pop-up. */
+export async function openAfter(getUrl: () => Promise<string>): Promise<void> {
+  if (insideTelegram) return openLink(await getUrl());
+  const win = window.open("", "_blank");
+  try {
+    const url = await getUrl();
+    if (win) win.location.href = url; else window.location.href = url;     // a PDF download keeps this page
+  } catch (e) {
+    win?.close();
+    throw e;
+  }
+}
+
 export function openLink(url: string): void {
   if (url.startsWith("https://t.me/")) {
     if (app?.openTelegramLink && insideTelegram) return app.openTelegramLink(url);

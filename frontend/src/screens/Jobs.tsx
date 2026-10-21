@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, APPLICATION_STATUS, JOB_KIND, salary, WORK_MODE, type Job, type JobKind, type Me, type MyApplication,
          type StudentContact } from "../api";
-import { haptic } from "../tg";
+import { ask, haptic } from "../tg";
 import { ErrorText, Sheet, message } from "../ui";
 import StudentTests from "./StudentTests";
 
@@ -89,6 +89,14 @@ export default function JobsScreen({ me, onOpenProfile }: { me: Me; onOpenProfil
               </div>
               <b>{a.job.title}</b>
               <div className="hint">{new Date(a.created_at).toLocaleDateString()} da topshirilgan</div>
+              {(a.status === "new" || a.status === "viewed") && (
+                <button className="btn small ghost" style={{ marginTop: 8 }} onClick={async (e) => {
+                  e.stopPropagation();
+                  if (!(await ask("Ariza qaytarib olinsinmi?"))) return;
+                  try { await api.withdraw(a.id); setMine((cur) => cur?.filter((x) => x.id !== a.id) ?? null); }
+                  catch (err) { setError(message(err)); }
+                }}>Arizani qaytarib olish</button>
+              )}
             </div>
           ))}
         </>

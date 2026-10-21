@@ -70,10 +70,13 @@ async def edit_company(body: CompanyIn, user: Employer, session: Session) -> Com
     first_stir = not company.stir and bool(body.stir)
     for field, value in body.model_dump().items():
         setattr(company, field, value)
-    if identity_changed and company.status == "approved":
-        company.status = "pending"
+    resubmitted = company.status == "rejected"          # fixing a rejected company sends it back for review
+    if resubmitted or (identity_changed and company.status == "approved"):
+        company.status, company.review_note = "pending", ""
     await session.commit()
-    if identity_changed or first_stir:
+    if resubmitted:
+        await _notify_admins(session, f"Rad etilgan kompaniya ma'lumotlarini tuzatib qayta yubordi: {company.name} (STIR {company.stir}).")
+    elif identity_changed or first_stir:
         await _notify_admins(session, f"Kompaniya ma'lumotlari o'zgardi: {company.name} (STIR {company.stir}).")
     return company
 
@@ -126,7 +129,7 @@ async def close_job(job_id: int, user: Employer, session: Session) -> JobOut:
 
 
 @router.get("/jobs/{job_id}/applicants", response_model=list[ApplicantOut])
-async def applicants(job_id: int, user: Employer, session: Session) -> list[ApplicantOut]:
+async def applicants(job_id: int, user: ApprovedEmployer, session: Session) -> list[ApplicantOut]:
     await _own_job(session, user, job_id)
     verified = _verified_count().label("verified")
     rows = (await session.execute(select(Application, verified).join(User, User.id == Application.user_id)
@@ -151,7 +154,7 @@ STATUS_MESSAGE = {
 
 
 @router.patch("/applications/{application_id}", response_model=ApplicantOut)
-async def update_application(application_id: int, body: ApplicationPatch, user: Employer, session: Session) -> ApplicantOut:
+async def update_application(application_id: int, body: ApplicationPatch, user: ApprovedEmployer, session: Session) -> ApplicantOut:
     app = await session.get(Application, application_id)
     if app is None or app.job.company_id != user.company_id:
         raise HTTPException(404, "Ariza topilmadi")
@@ -204,9 +207,7 @@ async def talent(user: ApprovedEmployer, session: Session,
 
 @router.post("/talent/{student_id}/contact", status_code=201)
 async def contact(student_id: int, body: ContactIn, user: ApprovedEmployer, session: Session) -> dict:
-    student = await session.get(User, student_id)
-    if student is None or student.account_type != "student" or student.is_blocked:
-        raise HTTPException(404, "Talaba topilmadi")
+    student = await _visible_student(session, student_id)
     if await session.scalar(select(ContactRequest.id).where(ContactRequest.company_id == user.company_id,
                                                             ContactRequest.student_id == student_id)):
         raise HTTPException(409, "Bu talabaga allaqachon so'rov yuborgansiz")
@@ -227,7 +228,7 @@ async def contact(student_id: int, body: ContactIn, user: ApprovedEmployer, sess
 
 
 @router.get("/contacts")
-async def contacts(user: Employer, session: Session) -> list[dict]:
+async def contacts(user: ApprovedEmployer, session: Session) -> list[dict]:
     verified = _verified_count().label("verified")
     rows = (await session.execute(select(ContactRequest, verified).join(User, User.id == ContactRequest.student_id)
                                   .where(ContactRequest.company_id == user.company_id)
@@ -319,8 +320,15 @@ async def students(user: ApprovedEmployer, session: Session,
     return out
 
 
-async def _visible_student(session: Session, student_id: int) -> User:
-    if not await session.scalar(select(User.id).where(User.id == student_id, *_visible_students())):
+async def _visible_student(session: Session, student_id: int, company_id: int | None = None) -> User:
+    """A student in the named list, or (for this company) one who applied to its job or took its test."""
+    visible = await session.scalar(select(User.id).where(User.id == student_id, *_visible_students()))
+    if not visible and company_id:
+        visible = (await session.scalar(select(Application.id).join(Job).where(
+            Application.user_id == student_id, Job.company_id == company_id).limit(1))) or \
+            (await session.scalar(select(TestAttempt.id).join(CompanyTest, CompanyTest.id == TestAttempt.test_id).where(
+                TestAttempt.user_id == student_id, CompanyTest.company_id == company_id).limit(1)))
+    if not visible:
         raise HTTPException(404, "Talaba topilmadi")
     return await session.get(User, student_id)
 
@@ -329,7 +337,7 @@ async def _visible_student(session: Session, student_id: int) -> User:
 async def student_detail(student_id: int, user: ApprovedEmployer, session: Session) -> dict:
     """The full profile with the verified-work CV, this company's test results, and whether contact
     details are shared (the student applied to one of the company's jobs or accepted its request)."""
-    student = await _visible_student(session, student_id)
+    student = await _visible_student(session, student_id, user.company_id)
     n = await session.scalar(select(func.count()).where(Submission.user_id == student.id,
                                                         Submission.status.in_([Status.peer_verified, Status.mentor_verified])))
     applied = await session.scalar(select(func.count()).select_from(Application).join(Job).where(
@@ -361,5 +369,5 @@ def cv_pdf_link(student_id: int) -> str:
 
 @router.get("/students/{student_id}/cv-link")
 async def student_cv_link(student_id: int, user: ApprovedEmployer, session: Session) -> dict:
-    await _visible_student(session, student_id)
+    await _visible_student(session, student_id, user.company_id)
     return {"url": cv_pdf_link(student_id)}

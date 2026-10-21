@@ -1,5 +1,7 @@
 """Website sign-in without the Telegram widget: through the bot, or with email and password, and one account
 for both (a website account can be tied to Telegram, a Telegram account can get an email and password)."""
+import re
+
 from app.services import web_login
 from app.services.telegram_bot import webhook_secret
 from tests.test_bot_move import NEW, _login, _switch
@@ -7,6 +9,10 @@ from tests.test_bot_move import NEW, _login, _switch
 
 def msg(text: str, tg_id: int, first="Aziza", last="Karimova") -> dict:
     return {"message": {"from": {"id": tg_id, "first_name": first, "last_name": last}, "chat": {"id": tg_id, "type": "private"}, "text": text}}
+
+
+def pin_from(calls) -> str:
+    return re.search(r"\b(\d{6})\b", calls[-1][2]["text"]).group(1)
 
 
 async def bot(client, text: str, tg_id: int):
@@ -41,11 +47,23 @@ async def test_sign_in_on_the_website_through_the_bot(client, monkeypatch):
     assert "keyboard" in calls[-1][2]["reply_markup"]            # the bot asks to confirm
     assert (await client.get(f"/api/v1/auth/bot-login/{code}")).json()["status"] == "claimed"
     await bot(client, web_login.YES, 9001)
-    done = (await client.get(f"/api/v1/auth/bot-login/{code}")).json()
-    assert done["status"] == "confirmed"
+    assert (await client.get(f"/api/v1/auth/bot-login/{code}")).json()["status"] == "awaiting_pin"
+    pin = pin_from(calls)                                    # the bot shows a PIN, typed on the website that asked
+    wrong = "000000" if pin != "000000" else "111111"
+    assert (await client.post(f"/api/v1/auth/bot-login/{code}/verify", json={"pin": wrong})).status_code == 400
+    done = (await client.post(f"/api/v1/auth/bot-login/{code}/verify", json={"pin": pin})).json()
     me = (await client.get("/api/v1/me", headers={"Authorization": f"Bearer {done['token']}"})).json()
     assert me["full_name"] == "Aziza Karimova" and me["has_telegram"]
     assert (await client.get(f"/api/v1/auth/bot-login/{code}")).json()["status"] == "used"   # one session per code
+    assert (await client.post(f"/api/v1/auth/bot-login/{code}/verify", json={"pin": pin})).status_code == 410
+
+    # a link someone else made gives them nothing: without the PIN from the victim's chat there is no session
+    code3 = (await client.post("/api/v1/auth/bot-login")).json()["code"]
+    await bot(client, f"/start {web_login.PREFIX}{code3}", 9001)
+    await bot(client, web_login.YES, 9001)
+    for _ in range(web_login.MAX_PIN_TRIES):
+        await client.post(f"/api/v1/auth/bot-login/{code3}/verify", json={"pin": wrong if wrong != pin_from(calls) else "222222"})
+    assert (await client.get(f"/api/v1/auth/bot-login/{code3}")).json()["status"] == "rejected"
 
     # "No" signs nobody in
     code2 = (await client.post("/api/v1/auth/bot-login")).json()["code"]
@@ -55,7 +73,7 @@ async def test_sign_in_on_the_website_through_the_bot(client, monkeypatch):
 
 
 async def test_email_account_tied_to_telegram_is_one_account(client, monkeypatch):
-    await _switch(client, monkeypatch)
+    calls, _, _ = await _switch(client, monkeypatch)
     token = (await client.post("/api/v1/auth/register", json={"full_name": "Jasur Toshmatov", "email": "jasur@mail.uz",
                                                               "password": "parol-12345"})).json()["token"]
     h = {"Authorization": f"Bearer {token}"}
@@ -66,8 +84,11 @@ async def test_email_account_tied_to_telegram_is_one_account(client, monkeypatch
     code = (await client.post("/api/v1/me/telegram-link", headers=h)).json()["code"]
     await bot(client, f"/start {web_login.PREFIX}{code}", 9100)
     await bot(client, web_login.YES, 9100)
-    assert (await client.get(f"/api/v1/auth/bot-login/{code}")).json()["status"] == "confirmed"
-    me = (await client.get("/api/v1/me", headers=h)).json()
+    other = (await client.post("/api/v1/auth/register", json={"full_name": "Boshqa Odam", "email": "boshqa@mail.uz",
+                                                              "password": "parol-12345"})).json()["token"]
+    assert (await client.post(f"/api/v1/me/telegram-link/{code}/verify", json={"pin": pin_from(calls)},
+                              headers={"Authorization": f"Bearer {other}"})).status_code == 410   # only the account that asked
+    me = (await client.post(f"/api/v1/me/telegram-link/{code}/verify", json={"pin": pin_from(calls)}, headers=h)).json()
     assert me["has_telegram"] and me["full_name"] == "Jasur Toshmatov"          # the typed name is kept
 
     # the Telegram app now opens the very same account
@@ -77,7 +98,7 @@ async def test_email_account_tied_to_telegram_is_one_account(client, monkeypatch
 
 
 async def test_linking_never_swallows_an_account_with_data(client, monkeypatch):
-    await _switch(client, monkeypatch)
+    calls, _, _ = await _switch(client, monkeypatch)
     tg = (await _login(client, NEW, 9300)).json()["token"]
     await client.patch("/api/v1/me", json={"consent": True}, headers={"Authorization": f"Bearer {tg}"})
     token = (await client.post("/api/v1/auth/register", json={"full_name": "Madina Yusupova", "email": "madina@mail.uz",
@@ -85,8 +106,10 @@ async def test_linking_never_swallows_an_account_with_data(client, monkeypatch):
     code = (await client.post("/api/v1/me/telegram-link", headers={"Authorization": f"Bearer {token}"})).json()["code"]
     await bot(client, f"/start {web_login.PREFIX}{code}", 9300)
     await bot(client, web_login.YES, 9300)
-    r = (await client.get(f"/api/v1/auth/bot-login/{code}")).json()
-    assert r["status"] == "conflict" and "boshqa" in r["note"]
+    r = await client.post(f"/api/v1/me/telegram-link/{code}/verify", json={"pin": pin_from(calls)},
+                          headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 409 and "boshqa" in r.json()["detail"]
+    assert (await client.get(f"/api/v1/auth/bot-login/{code}")).json()["status"] == "conflict"
 
 
 async def test_telegram_account_gets_email_and_password(client, monkeypatch):
@@ -100,3 +123,21 @@ async def test_telegram_account_gets_email_and_password(client, monkeypatch):
     # changing it later needs the current password
     r = await client.put("/api/v1/me/password", json={"email": "aziza@mail.uz", "password": "boshqa-parol-2"}, headers=h)
     assert r.status_code == 403
+
+
+async def test_bad_start_payload_never_breaks_the_webhook(client, monkeypatch):
+    await _switch(client, monkeypatch)
+    await bot(client, "/start r99999999999", 9500)            # out of range id: ignored, Telegram gets 200
+    await bot(client, "/start login_nonexistent", 9500)
+
+
+async def test_admin_can_reset_a_website_password(client):
+    from tests.conftest import owner_headers
+    token = (await client.post("/api/v1/auth/register", json={"full_name": "Kamola Ismoilova", "email": "kamola@mail.uz",
+                                                              "password": "parol-12345"})).json()["token"]
+    me = (await client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})).json()
+    admin = await owner_headers(client)
+    users = (await client.get("/api/v1/admin/users", params={"q": "kamola@"}, headers=admin)).json()
+    assert users[0]["email"] == "kamola@mail.uz" and users[0]["has_telegram"] is False
+    temp = (await client.post(f"/api/v1/admin/users/{me['id']}/reset-password", headers=admin)).json()["temporary_password"]
+    assert (await client.post("/api/v1/auth/login", json={"email": "kamola@mail.uz", "password": temp})).status_code == 200

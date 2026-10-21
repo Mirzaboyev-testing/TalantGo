@@ -85,7 +85,9 @@ function JobsTab() {
             {j.status !== "closed" && <button className="btn small ghost" onClick={() => setEditing(j)}>Tahrirlash</button>}
             {j.status !== "closed" && (
               <button className="btn small ghost" onClick={async () => {
-                if (await ask("Vakansiya yopilsinmi? Talabalar uni boshqa ko'rmaydi.")) { await api.employer.closeJob(j.id); void load(); }
+                if (await ask("Vakansiya yopilsinmi? Talabalar uni boshqa ko'rmaydi.")) {
+                  try { await api.employer.closeJob(j.id); void load(); } catch (e) { setError(message(e)); }
+                }
               }}>Yopish</button>
             )}
           </div>
@@ -258,6 +260,7 @@ function Applicants({ job, onBack }: { job: Job; onBack: () => void }) {
           {a.note && <p style={{ whiteSpace: "pre-line" }}>«{a.note}»</p>}
           <div className="row wrap" style={{ marginTop: 8 }}>
             {a.identity.username && <button className="btn small" onClick={() => openLink(`https://t.me/${a.identity.username}`)}>Telegram'da yozish</button>}
+            {a.identity.phone && <span className="hint">Tel: {a.identity.phone}</span>}
             <button className="btn small ghost" onClick={() => setProfile(a.card.id)}>Profil</button>
             <button className="btn small ghost" onClick={() => downloadCv(a.card.id)}>CV (PDF)</button>
             {NEXT_STATUS.filter(([s]) => s !== a.status).map(([s, label, kind]) => (
@@ -296,6 +299,7 @@ function CardBody({ card }: { card: TalentCard }) {
 
 function ContactsTab() {
   const [items, setItems] = useState<EmployerContact[] | null>(null);
+  const [profile, setProfile] = useState<number | null>(null);
   const [error, setError] = useState("");
   useEffect(() => { api.employer.contacts().then(setItems, (e) => setError(message(e))); }, []);
   return (
@@ -314,12 +318,15 @@ function ContactsTab() {
           <CardBody card={c.card} />
           {c.identity && (
             <div className="row wrap" style={{ marginTop: 8 }}>
+              {c.identity.phone && <span className="hint">Tel: {c.identity.phone}</span>}
               {c.identity.username && <button className="btn small" onClick={() => openLink(`https://t.me/${c.identity!.username}`)}>Telegram'da yozish</button>}
-              {c.identity.cv_url && <button className="btn small ghost" onClick={() => openLink(c.identity!.cv_url!)}>CV</button>}
+              <button className="btn small ghost" onClick={() => setProfile(c.card.id)}>Profil</button>
+              <button className="btn small ghost" onClick={() => downloadCv(c.card.id)}>CV (PDF)</button>
             </div>
           )}
         </div>
       ))}
+      {profile && <StudentSheet id={profile} catalog={null} onClose={() => setProfile(null)} />}
     </div>
   );
 }

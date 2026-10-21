@@ -1,4 +1,5 @@
 """Server-rendered pages that live outside the Telegram app: the shareable CV and the bot webhook."""
+import hmac
 import logging
 from pathlib import Path
 
@@ -31,12 +32,23 @@ async def webhook(update: dict, session: Session,
                   x_telegram_bot_api_secret_token: str | None = Header(default=None)) -> dict:
     current, previous = await bots.current_and_previous(session)
     secret = x_telegram_bot_api_secret_token
-    if current and secret == telegram_bot.webhook_secret(current):
+    def same(token: str | None) -> bool:
+        return bool(token and secret) and hmac.compare_digest(secret, telegram_bot.webhook_secret(token))
+    if same(current):
         token, old_bot = current, False
-    elif previous and secret == telegram_bot.webhook_secret(previous):
+    elif same(previous):
         token, old_bot = previous, True
     else:
         raise HTTPException(403)
+    try:
+        return await _handle(update, session, token, old_bot)
+    except Exception:                          # a 500 would make Telegram redeliver the same update forever
+        log.exception("webhook update failed")
+        await session.rollback()
+        return {"ok": True}
+
+
+async def _handle(update: dict, session: Session, token: str, old_bot: bool) -> dict:
     message = update.get("message") or {}
     contact = message.get("contact")
     sender = (message.get("from") or {}).get("id")
@@ -61,20 +73,19 @@ async def webhook(update: dict, session: Session,
                 log.warning("old bot could not answer: %s", exc)
         return {"ok": True}
     if private and sender and (text.startswith("/start " + web_login.PREFIX) or text in (web_login.YES, web_login.NO)):
-        from .auth import _upsert
         try:
             if text.startswith("/start"):
                 await web_login.on_start(session, token, message["chat"]["id"], message["from"],
-                                         text.removeprefix("/start").strip()[len(web_login.PREFIX):])
+                                         text.removeprefix("/start").strip()[len(web_login.PREFIX):][:40])
             else:
-                await web_login.on_answer(session, token, message["chat"]["id"], message["from"], text == web_login.YES, _upsert)
+                await web_login.on_answer(session, token, message["chat"]["id"], message["from"], text == web_login.YES)
         except telegram_bot.BotError as exc:
             log.warning("website sign-in message failed: %s", exc)
         return {"ok": True}
     if text.startswith("/start") and private and sender:
         payload = text.removeprefix("/start").strip()
         role = {"hr": "employer", "uni": "university"}.get(payload)
-        if payload.startswith("r") and payload[1:].isdigit():
+        if payload.startswith("r") and payload[1:].isdigit() and 0 < int(payload[1:]) < 2 ** 31:
             await _remember_referral(session, message["from"], int(payload[1:]))
         join = payload[1:] if payload.startswith("g") and len(payload) > 4 else None
         try:

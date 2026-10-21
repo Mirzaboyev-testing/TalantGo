@@ -1,10 +1,12 @@
+import asyncio
 import re
 import time
 from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from sqlalchemy.exc import IntegrityError
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 from sqlalchemy import select
 
@@ -116,10 +118,19 @@ async def bot_login_start(session: Session) -> dict:
 
 @router.get("/bot-login/{code}")
 async def bot_login_status(code: str, session: Session) -> dict:
-    status, user_id, note = await web_login.poll(session, code[:40])
-    if status == "confirmed" and user_id:
-        return {"status": "confirmed", "token": create_token(str(user_id), "user", USER_TOKEN_HOURS)}
+    status, note = await web_login.poll(session, code[:40])
     return {"status": status, "note": note}
+
+
+class PinIn(BaseModel):
+    pin: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+@router.post("/bot-login/{code}/verify", response_model=TokenOut)
+async def bot_login_verify(code: str, body: PinIn, session: Session) -> TokenOut:
+    """The PIN the bot showed after "Ha": only the browser that asked can finish the sign-in."""
+    user_id = await web_login.verify_login(session, code[:40], body.pin, _upsert)
+    return TokenOut(token=create_token(str(user_id), "user", USER_TOKEN_HOURS))
 
 
 # --------------------------------------------------------------------------- website: email and password
@@ -149,34 +160,58 @@ class LoginIn(BaseModel):
     password: str = Field(max_length=128)
 
 
-FAILS_ALLOWED, FAIL_WINDOW = 8, 15 * 60
+FAILS_ALLOWED, FAIL_WINDOW = 8, 15 * 60       # wrong passwords per email
+IP_LOGINS, IP_REGISTERS, IP_WINDOW = 40, 10, 60 * 60
 _fails: dict[str, list[float]] = defaultdict(list)
+_by_ip: dict[str, list[float]] = defaultdict(list)
+
+
+def _recent(store: dict[str, list[float]], key: str, window: float) -> list[float]:
+    now = time.time()
+    if len(store) > 20_000:                    # keeps memory bounded: forget keys with nothing recent
+        for k in [k for k, v in store.items() if not v or now - v[-1] > window]:
+            store.pop(k, None)
+    store[key] = [t for t in store.get(key, []) if now - t < window]
+    return store[key]
 
 
 def _check_rate(email: str) -> None:
-    now = time.time()
-    _fails[email] = [t for t in _fails[email] if now - t < FAIL_WINDOW]
-    if len(_fails[email]) >= FAILS_ALLOWED:
+    if len(_recent(_fails, email, FAIL_WINDOW)) >= FAILS_ALLOWED:
         raise HTTPException(429, "Juda ko'p noto'g'ri urinish. 15 daqiqadan keyin qayta urinib ko'ring.")
 
 
+def _check_ip(request: Request, limit: int, kind: str) -> None:
+    ip = f"{kind}:{request.client.host if request.client else '-'}"
+    hits = _recent(_by_ip, ip, IP_WINDOW)
+    if len(hits) >= limit:
+        raise HTTPException(429, "Juda ko'p urinish. Birozdan keyin qayta urinib ko'ring.")
+    hits.append(time.time())
+
+
 @router.post("/register", response_model=TokenOut, status_code=201)
-async def register(body: RegisterIn, session: Session) -> TokenOut:
+async def register(body: RegisterIn, request: Request, session: Session) -> TokenOut:
     """A website account without Telegram. Telegram can be tied to it later from the profile."""
+    _check_ip(request, IP_REGISTERS, "register")
+    taken = HTTPException(409, "Bu email bilan akkaunt bor. «Kirish» bo'limidan kiring.")
     if await session.scalar(select(User.id).where(User.email == body.email)):
-        raise HTTPException(409, "Bu email bilan akkaunt bor. «Kirish» bo'limidan kiring.")
-    user = User(telegram_id=None, email=body.email, password_hash=hash_password(body.password),
+        raise taken
+    user = User(telegram_id=None, email=body.email, password_hash=await asyncio.to_thread(hash_password, body.password),
                 full_name=" ".join(body.full_name.split()), name_set_by_user=True, last_seen_at=datetime.now(UTC))
     session.add(user)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as exc:              # the same email registered at the same moment
+        await session.rollback()
+        raise taken from exc
     return TokenOut(token=create_token(str(user.id), "user", USER_TOKEN_HOURS))
 
 
 @router.post("/login", response_model=TokenOut)
-async def login(body: LoginIn, session: Session) -> TokenOut:
+async def login(body: LoginIn, request: Request, session: Session) -> TokenOut:
     _check_rate(body.email)
+    _check_ip(request, IP_LOGINS, "login")
     user = (await session.execute(select(User).where(User.email == body.email))).scalar_one_or_none()
-    if user is None or not user.password_hash or not check_password(body.password, user.password_hash):
+    if user is None or not user.password_hash or not await asyncio.to_thread(check_password, body.password, user.password_hash):
         _fails[body.email].append(time.time())
         raise HTTPException(401, "Email yoki parol noto'g'ri")
     if user.is_blocked:

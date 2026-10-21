@@ -40,8 +40,7 @@ export interface Me {
   email: string | null; has_password: boolean; has_telegram: boolean;
 }
 export interface BotLink { code: string; url: string; expires_in: number }
-export type BotLoginStatus = { status: "pending" | "claimed" | "rejected" | "conflict" | "used" | "expired"; note?: string } |
-  { status: "confirmed"; token: string };
+export type BotLoginStatus = { status: "pending" | "claimed" | "awaiting_pin" | "rejected" | "conflict" | "used" | "expired"; note?: string };
 export type AccountType = "student" | "employer" | "university";
 export type Verification = "none" | "pending" | "verified" | "rejected";
 export type JobKind = "internship" | "part_time" | "junior" | "project";
@@ -128,7 +127,7 @@ export interface TalentCard {
   track_icon: string; skills: string[]; languages: string[]; job_types: string[]; city: string; points: number;
   verified_tasks: number; verification: Verification; verified_by: string; contact_status?: string | null;
 }
-export interface Identity { full_name: string; username: string | null; photo_url: string | null; cv_url: string | null; github_url: string; linkedin_url: string }
+export interface Identity { full_name: string; username: string | null; photo_url: string | null; cv_url: string | null; github_url: string; linkedin_url: string; phone?: string | null }
 export interface Applicant { id: number; status: string; note: string; employer_note: string; created_at: string; card: TalentCard; identity: Identity }
 export interface EmployerContact { id: number; status: string; message: string; created_at: string; job_title: string | null; card: TalentCard; identity: Identity | null }
 export interface StudentContact { id: number; company: string; industry: string; message: string; job_title: string | null; status: string; created_at: string }
@@ -155,6 +154,7 @@ export interface AdminUser {
   track_id: number | null; university: string; group_name: string; points: number; verified_tasks: number;
   verification: Verification;
   last_seen_at: string | null; created_at: string;
+  account_type: AccountType; email: string | null; has_telegram: boolean;
 }
 export interface AdminSubmission {
   id: number; status: Status; round: number; points_awarded: number; proof_url: string; note: string;
@@ -181,15 +181,38 @@ export class ApiError extends Error {
 let userToken = "";
 let adminToken = "";
 let onAdminUnauthorized: () => void = () => {};
+let onUserUnauthorized: () => void = () => {};
+/** The website returns to the sign-in screen when a user session has run out. */
+export const setUserUnauthorizedHandler = (fn: () => void) => { onUserUnauthorized = fn; };
 export const setAdminUnauthorizedHandler = (fn: () => void) => { onAdminUnauthorized = fn; };
 export const setUserToken = (t: string) => { userToken = t; };
 export const setAdminToken = (t: string) => { adminToken = t; };
 
+// Field names the server reports, in the words the forms use.
+const FIELD: Record<string, string> = {
+  email: "email", phone: "telefon", hours_per_week: "soat/hafta", time_limit_min: "vaqt chegarasi", salary_from: "maosh",
+  salary_to: "maosh", stir: "STIR", website: "sayt", pin: "kod", password: "parol", full_name: "ism va familiya",
+  description: "tavsif", title: "nomi", points: "ball", gpa: "GPA", graduation_year: "bitirish yili",
+};
+
 function describe(detail: unknown): string {
   if (typeof detail === "string") return detail;
   if (Array.isArray(detail) && detail.length) {
-    const first = detail[0] as { msg?: string };
-    return (first.msg ?? "Ma'lumot noto'g'ri").replace(/^Value error, /, "");
+    const first = detail[0] as { msg?: string; type?: string; loc?: (string | number)[]; ctx?: Record<string, unknown> };
+    const key = String(first.loc?.[first.loc.length - 1] ?? "");
+    const field = FIELD[key] ?? "maydon";
+    // the server's own Uzbek messages come as "Value error, ..."; the generic ones are translated here
+    if (first.msg?.startsWith("Value error, ")) return first.msg.replace(/^Value error, /, "");
+    switch (first.type) {
+      case "string_pattern_mismatch": return `${field}: format noto'g'ri`;
+      case "string_too_short": return `${field}: kamida ${first.ctx?.min_length ?? ""} belgi kerak`;
+      case "string_too_long": return `${field}: juda uzun`;
+      case "greater_than_equal": case "greater_than": return `${field}: qiymat juda kichik`;
+      case "less_than_equal": case "less_than": return `${field}: qiymat juda katta`;
+      case "missing": return `${field}: to'ldirilmagan`;
+      case "int_parsing": case "float_parsing": return `${field}: son kiriting`;
+    }
+    return "Ma'lumot noto'g'ri";
   }
   return "Kutilmagan xato";
 }
@@ -209,6 +232,7 @@ async function request<T>(method: string, path: string, body?: unknown, admin = 
   }
   const data = resp.headers.get("content-type")?.includes("json") ? await resp.json() : null;
   if (resp.status === 401 && admin) onAdminUnauthorized();
+  if (resp.status === 401 && !admin && token && !path.startsWith("/auth/")) onUserUnauthorized();
   if (!resp.ok) throw new ApiError(resp.status, describe(data?.detail));
   return data as T;
 }
@@ -253,6 +277,8 @@ export const api = {
   me: () => request<Me>("GET", "/me"),
   botLoginStart: () => request<BotLink>("POST", "/auth/bot-login"),
   botLoginStatus: (code: string) => request<BotLoginStatus>("GET", `/auth/bot-login/${encodeURIComponent(code)}`),
+  botLoginVerify: (code: string, pin: string) => request<{ token: string }>("POST", `/auth/bot-login/${encodeURIComponent(code)}/verify`, { pin }),
+  telegramLinkVerify: (code: string, pin: string) => request<Me>("POST", `/me/telegram-link/${encodeURIComponent(code)}/verify`, { pin }),
   emailRegister: (full_name: string, email: string, password: string) =>
     request<{ token: string }>("POST", "/auth/register", { full_name, email, password }),
   emailLogin: (email: string, password: string) => request<{ token: string }>("POST", "/auth/login", { email, password }),
@@ -392,6 +418,7 @@ export const api = {
     updateAccount: (id: number, changes: { role?: "owner" | "admin"; status?: "active" | "disabled" }) =>
       request<AdminAccount>("PATCH", `/admin/accounts/${id}`, changes, true),
     resetPassword: (id: number) => request<{ temporary_password: string }>("POST", `/admin/accounts/${id}/reset-password`, undefined, true),
+    resetUserPassword: (id: number) => request<{ temporary_password: string; email: string }>("POST", `/admin/users/${id}/reset-password`, undefined, true),
     groups: () => request<AdminGroup[]>("GET", "/admin/groups", undefined, true),
     groupMessages: (id: number) => request<{ id: number; author: string; text: string; deleted: boolean; created_at: string }[]>("GET", `/admin/groups/${id}/messages`, undefined, true),
     deleteGroupMessage: (messageId: number) => request<null>("DELETE", `/admin/group-messages/${messageId}`, undefined, true),

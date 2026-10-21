@@ -237,3 +237,26 @@ async def test_assistant_picks_the_guide_for_who_is_asking(client, make_user):
             assert marker in prompt, kind
     for u, kind in ((newcomer, "signup"), (hr, "employer")):
         assert (await client.get("/api/v1/assistant/status", headers=u["headers"])).json()["audience"] == kind
+
+
+async def test_rejected_company_can_fix_and_resubmit(client, make_user):
+    hr = await make_employer(client, make_user)
+    admin = await owner(client)
+    await client.post(f"/api/v1/admin/companies/{hr['company_id']}/review", json={"approve": False, "note": "STIR topilmadi"}, headers=admin)
+    assert (await client.get("/api/v1/employer/students", headers=hr["headers"])).status_code == 403
+    c = (await client.patch("/api/v1/employer/company", json={**COMPANY, "stir": "301234567"}, headers=hr["headers"])).json()
+    assert c["status"] == "pending" and c["review_note"] == ""
+
+
+async def test_leaving_a_pending_company_request_can_be_undone(client, make_user):
+    hr = await make_employer(client, make_user)
+    me = (await client.post("/api/v1/me/account-type/student", headers=hr["headers"])).json()
+    assert me["account_type"] == "student" and me["company"] is None
+    await client.patch("/api/v1/me", json={"phone": "+998901234567"}, headers=hr["headers"])
+    from tests.test_career import EMPLOYER
+    assert (await client.post("/api/v1/me/company", json=EMPLOYER, headers=hr["headers"])).status_code == 201
+
+
+async def test_only_students_who_agreed_appear_in_peers(client, make_user):
+    hr = await approved_employer(client, make_user)
+    assert (await client.get("/api/v1/peers", params={"goal": "SQL"}, headers=hr["headers"])).status_code == 403

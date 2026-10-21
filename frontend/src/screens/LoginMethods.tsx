@@ -16,11 +16,9 @@ export default function LoginMethods({ me, onChanged }: { me: Me; onChanged: (m:
   const [error, setError] = useState("");
   const { errors, check, clear, cls } = useRequired();
 
-  const link = useBotLink(api.telegramLinkStart, useCallback(async (s) => {
-    if (s.status === "confirmed") {
-      onChanged(await api.me());
-      toast("Telegram ulandi: bot va sayt endi bitta akkaunt");
-    }
+  const link = useBotLink(api.telegramLinkStart, api.telegramLinkVerify, useCallback((m: Me) => {
+    onChanged(m);
+    toast("Telegram ulandi: bot va sayt endi bitta akkaunt");
   }, [onChanged]));
 
   async function save() {
@@ -53,7 +51,10 @@ export default function LoginMethods({ me, onChanged }: { me: Me; onChanged: (m:
         {me.has_telegram ? <span className="badge peer_verified">Ulangan</span>
           : <button className="btn small" disabled={link.state !== "idle"} onClick={link.begin}>Telegram'ni ulash</button>}
       </div>
-      {link.link && link.state !== "idle" && <BotWaiting link={link.link} state={link.state} onCancel={link.stop} />}
+      {!me.has_telegram && link.state === "idle" && (
+        <div className="hint">Telegram ulansa, ariza, test va tasdiq haqidagi xabarlar botga keladi.</div>
+      )}
+      {link.link && link.state !== "idle" && <BotWaiting link={link.link} state={link.state} onCancel={link.stop} onPin={link.submitPin} />}
       <ErrorText error={link.error} />
 
       <div className="row between" style={{ marginTop: 12 }}>

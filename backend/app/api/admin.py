@@ -79,7 +79,8 @@ async def users(_: AdminActor, session: Session,
     query = select(User, verified)
     if q:
         like = f"%{q.strip()}%"
-        query = query.where(User.full_name.ilike(like) | User.username.ilike(like) | User.group_name.ilike(like))
+        query = query.where(User.full_name.ilike(like) | User.username.ilike(like) | User.group_name.ilike(like)
+                            | User.email.ilike(like))
     if role:
         query = query.where(User.role == role)
     if track_id:
@@ -87,7 +88,23 @@ async def users(_: AdminActor, session: Session,
     if blocked is not None:
         query = query.where(User.is_blocked.is_(blocked))
     rows = (await session.execute(query.order_by(User.created_at.desc()).limit(500))).all()
-    return [AdminUserOut.model_validate(u).model_copy(update={"verified_tasks": n}) for u, n in rows]
+    return [AdminUserOut.model_validate(u).model_copy(update={"verified_tasks": n, "has_telegram": u.telegram_id is not None})
+            for u, n in rows]
+
+
+@router.post("/users/{user_id}/reset-password")
+async def reset_user_password(user_id: int, actor: AdminActor, session: Session) -> dict:
+    """For a website account whose owner forgot the password: a temporary one to hand over."""
+    import asyncio
+    from ..services.admin_accounts import hash_password
+    user = await session.get(User, user_id)
+    if user is None or not user.email:
+        raise HTTPException(404, "Bu foydalanuvchida email bilan kirish yo'q")
+    temporary = secrets.token_urlsafe(9)
+    user.password_hash = await asyncio.to_thread(hash_password, temporary)
+    audit(session, actor, "user.password_reset", f"{user.full_name} (#{user.id})", user.email)
+    await session.commit()
+    return {"temporary_password": temporary, "email": user.email}
 
 
 @router.patch("/users/{user_id}", response_model=AdminUserOut)
@@ -111,7 +128,7 @@ async def update_user(user_id: int, body: UserPatch, actor: AdminActor, session:
     await session.commit()
     verified = await session.scalar(select(func.count()).where(Submission.user_id == user.id,
                                                                Submission.status.in_(VERIFIED)))
-    return AdminUserOut.model_validate(user).model_copy(update={"verified_tasks": verified})
+    return AdminUserOut.model_validate(user).model_copy(update={"has_telegram": user.telegram_id is not None}).model_copy(update={"verified_tasks": verified})
 
 
 @router.post("/users/{user_id}/points")
@@ -313,6 +330,12 @@ async def save_bot_token(body: BotTokenIn, actor: OwnerActor, session: Session) 
                 old_username = (await telegram_bot.call(current, "getMe")).get("username")
             except telegram_bot.BotError:
                 old_username = None
+        replaced = await settings_store.get_value(session, settings_store.PREVIOUS_BOT_TOKEN)
+        if replaced and replaced not in (current, body.token):
+            try:                               # the bot two changes ago stops receiving updates it can't answer
+                await telegram_bot.call(replaced, "deleteWebhook")
+            except telegram_bot.BotError:
+                pass
         await settings_store.set_value(session, settings_store.PREVIOUS_BOT_TOKEN, current)
         await bots.set_info(session, previous_username=old_username)
         audit(session, actor, "bot.token", f"@{old_username} -> @{me.get('username')}",
@@ -501,7 +524,7 @@ async def inbox(_: AdminActor, session: Session) -> dict:
     """Counts behind the badges: everything that waits for an admin decision."""
     count = lambda model, *where: session.scalar(select(func.count()).select_from(model).where(*where))  # noqa: E731
     return {
-        "verifications": await count(User, User.verification == "pending"),
+        "verifications": await count(User, User.verification == "pending", User.account_type == "student"),
         "companies": await count(Company, Company.status == "pending"),
         "jobs": await count(Job, Job.status == "pending"),
         "staff": await count(User, User.staff_status == "pending"),
@@ -696,7 +719,8 @@ async def dashboard(_: AdminActor, session: Session,
             "live_jobs": await count(Job, Job.status == "approved"),
             "queue": (await count(User, User.verification == "pending")) + (await count(Company, Company.status == "pending"))
                      + (await count(Job, Job.status == "pending")) + (await count(User, User.staff_status == "pending"))
-                     + (await count(AdminAccount, AdminAccount.status == "pending")),
+                     + (await count(AdminAccount, AdminAccount.status == "pending"))
+                     + (await count(CompanyTest, CompanyTest.status == "pending")),
         },
         "applications": {s: apps_by_status.get(s, 0) for s in ("new", "viewed", "shortlisted", "hired", "rejected")},
         "submissions_by_status": {s.value: subs_by_status.get(s, 0) for s in Status},

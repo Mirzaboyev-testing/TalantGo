@@ -39,7 +39,7 @@ export default function Users({ ctx, onShowWork }: { ctx: AdminCtx; onShowWork: 
   return (
     <div>
       <form className="row" onSubmit={(e) => { e.preventDefault(); load(); }}>
-        <input className="grow" value={q} placeholder="Ism, @username yoki guruh" onChange={(e) => setQ(e.target.value)} />
+        <input className="grow" value={q} placeholder="Ism, @username, email yoki guruh" onChange={(e) => setQ(e.target.value)} />
         <button className="btn small" type="submit">Qidirish</button>
       </form>
       <div className="chips" style={{ margin: "8px 0" }}>
@@ -102,7 +102,9 @@ function UserCard({ user, ctx, track, onChanged, onShowWork }: {
           {user.verification === "verified" && <span className="badge peer_verified" style={{ marginLeft: 6 }}>talabaligi tasdiqlangan</span>}
           {user.verification === "pending" && <span className="badge pending" style={{ marginLeft: 6 }}>tasdiq kutmoqda</span>}
           <div className="hint">
-            {[user.username && `@${user.username}`, user.group_name, track?.title.split(":")[0]].filter(Boolean).join(" · ")}
+            {[user.account_type === "employer" ? "kompaniya" : user.account_type === "university" ? "universitet" : null,
+              user.username && `@${user.username}`, user.email, !user.has_telegram && "Telegram ulanmagan",
+              user.group_name, track?.title.split(":")[0]].filter(Boolean).join(" · ")}
           </div>
           <div className="hint">{user.points} ball · {user.verified_tasks} tasdiqlangan ish · {ago(user.last_seen_at)}</div>
         </div>
@@ -123,6 +125,16 @@ function UserCard({ user, ctx, track, onChanged, onShowWork }: {
         )}
         <button className="btn small ghost" onClick={onShowWork}>Ishlari</button>
         {user.username && <a className="btn small ghost" href={`https://t.me/${user.username}`} target="_blank" rel="noreferrer">Yozish</a>}
+        {user.email && (
+          <button className="btn small ghost" disabled={busy} onClick={async () => {
+            if (!(await ask(`${user.full_name} uchun vaqtinchalik parol yaratilsinmi? Eski parol ishlamay qoladi.`))) return;
+            setBusy(true); setError("");
+            try {
+              const r = await api.admin.resetUserPassword(user.id);
+              window.prompt(`${r.email} uchun vaqtinchalik parol (nusxa oling va egasiga bering):`, r.temporary_password);
+            } catch (e) { setError(message(e)); } finally { setBusy(false); }
+          }}>Parolni tiklash</button>
+        )}
         {(
           <button className="btn small ghost" disabled={busy}
                   onClick={async () => (user.is_blocked || (await ask(`${user.full_name} bloklansinmi? U ilovaga kira olmaydi.`))) &&

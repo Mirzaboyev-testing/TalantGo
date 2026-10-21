@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, JOB_KIND, salary, type Company, type Job, type PendingStudent, type StaffRequest } from "../../api";
+import { loadCatalog, type Catalog } from "../../api";
 import { openLink } from "../../tg";
 import { ErrorText, message, toast } from "../../ui";
 import type { AdminCtx } from "./AdminSite";
@@ -75,6 +76,8 @@ function Verifications({ onChanged }: { onChanged: () => void }) {
 }
 
 function Companies({ onChanged }: { onChanged: () => void }) {
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
+  useEffect(() => { loadCatalog().then(setCatalog, () => {}); }, []);
   const [status, setStatus] = useState("pending");
   const [rows, setRows] = useState<Company[] | null>(null);
   const load = useCallback(() => api.admin.companies(status).then(setRows, () => setRows([])), [status]);
@@ -91,7 +94,11 @@ function Companies({ onChanged }: { onChanged: () => void }) {
       {rows?.map((c) => (
         <div key={c.id} className="card">
           <b>{c.name}</b>
-          <div className="hint">{[c.industry, c.city, c.stir && `STIR: ${c.stir}`].filter(Boolean).join(" · ")}</div>
+          <div className="hint">{[catalog?.legal_forms[c.legal_form] ?? c.legal_form, catalog?.industries[c.industry] ?? c.industry,
+                                  c.size && `${c.size} xodim`, c.city, c.stir && `STIR: ${c.stir}`].filter(Boolean).join(" · ")}</div>
+          {(c.telegram || c.email || c.website || c.address) && (
+            <div className="hint">{[c.website, c.telegram, c.email, c.address].filter(Boolean).join(" · ")}</div>
+          )}
           {c.description && <p style={{ whiteSpace: "pre-line" }}>{c.description}</p>}
           <div className="row wrap">
             {c.website && <button className="btn small ghost" onClick={() => openLink(c.website)}>Sayt</button>}

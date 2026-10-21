@@ -36,7 +36,7 @@ function TestList({ onStart, onResult }: { onStart: (t: StartedTest) => void; on
       <p className="hint">Kompaniyalarning testlari va so'rovnomalari. Natijangiz shu kompaniyaga ko'rinadi va tanlovda hisobga olinadi.</p>
       <ErrorText error={error} />
       {!tests && !error && <div className="hint">Yuklanmoqda…</div>}
-      {tests?.length === 0 && <div className="center hint">Hozircha siz uchun test yo'q. Yangi test chiqsa, bot xabar beradi.</div>}
+      {tests?.length === 0 && <div className="center hint">Hozircha siz uchun test yo'q. Yangi testlar shu yerda chiqadi.</div>}
       {tests?.map((t) => {
         const a = t.my_attempt;
         const done = a && a.status !== "in_progress";
@@ -58,7 +58,7 @@ function TestList({ onStart, onResult }: { onStart: (t: StartedTest) => void; on
                 <button className="btn small ghost" onClick={() => onResult(t.id)}>
                   Natija{a.status === "graded" && a.max_score ? `: ${a.score} / ${a.max_score}` : ""}
                 </button>
-              ) : t.open && t.status === "approved" ? (
+              ) : a?.status === "in_progress" || (t.open && t.status === "approved") ? (
                 <button className="btn small" onClick={() => start(t)}>{a ? "Davom etish" : "Boshlash"}</button>
               ) : (
                 <span className="hint">Muddat tugagan</span>
@@ -71,8 +71,17 @@ function TestList({ onStart, onResult }: { onStart: (t: StartedTest) => void; on
   );
 }
 
+const draftKey = (attemptId: number) => `tg_test_draft_${attemptId}`;
+function loadDraft(attemptId: number): Record<number, { choice: number[]; text: string }> {
+  try { return JSON.parse(localStorage.getItem(draftKey(attemptId)) ?? "{}"); } catch { return {}; }
+}
+
 function TakeTest({ test, onDone }: { test: StartedTest; onDone: (id: number) => void }) {
-  const [answers, setAnswers] = useState<Record<number, { choice: number[]; text: string }>>({});
+  // answers are kept on this device as they are given: a reload, a tab switch or a closed app loses nothing
+  const [answers, setAnswers] = useState<Record<number, { choice: number[]; text: string }>>(() => loadDraft(test.attempt_id));
+  useEffect(() => {
+    try { localStorage.setItem(draftKey(test.attempt_id), JSON.stringify(answers)); } catch { /* storage blocked */ }
+  }, [answers, test.attempt_id]);
   const [left, setLeft] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -91,6 +100,7 @@ function TakeTest({ test, onDone }: { test: StartedTest; onDone: (id: number) =>
     setBusy(true); setError("");
     try {
       await api.tests.submit(test.id, test.questions.map((q) => ({ question_id: q.id, choice: answers[q.id]?.choice ?? [], text: answers[q.id]?.text ?? "" })));
+      try { localStorage.removeItem(draftKey(test.attempt_id)); } catch { /* storage blocked */ }
       haptic("success");
       toast(auto ? "Vaqt tugadi: javoblaringiz topshirildi" : "Javoblaringiz topshirildi");
       onDone(test.id);
@@ -178,7 +188,7 @@ function Result({ id, onBack }: { id: number; onBack: () => void }) {
             {r.max_score > 0 && (
               <div style={{ fontSize: 22, fontWeight: 700 }}>{r.score} / {r.max_score} ball</div>
             )}
-            {r.status === "submitted" && <div className="hint">Yozma javoblaringizni kompaniya baholaydi. Baholanganda bot xabar beradi.</div>}
+            {r.status === "submitted" && <div className="hint">Yozma javoblaringizni kompaniya baholaydi. Natija shu yerda chiqadi.</div>}
             {r.feedback && <p style={{ whiteSpace: "pre-line", marginBottom: 0 }}>Kompaniya fikri: {r.feedback}</p>}
           </div>
           {r.items.map((item, n) => (

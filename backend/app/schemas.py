@@ -23,7 +23,7 @@ Url = Annotated[str, StringConstraints(strip_whitespace=True, max_length=512), A
 Goal = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=40)]
 Tag = Goal
 # Uzbek mobile number in international form, e.g. +998901234567
-Phone = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^(\+998\d{9})?$")]
+Phone = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^(\+\d{8,15})?$")]
 JobKind = Literal["internship", "part_time", "junior", "project"]
 WorkMode = Literal["office", "remote", "hybrid"]
 
@@ -474,6 +474,8 @@ class AdminUserOut(ORM):
     account_type: str = "student"
     verification: str = "none"
     company_id: int | None = None
+    email: str | None = None
+    has_telegram: bool = True
     verified_tasks: int = 0
     last_seen_at: datetime | None
     created_at: datetime

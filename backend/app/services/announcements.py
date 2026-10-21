@@ -16,7 +16,8 @@ PAUSE = 0.05                             # ~20 messages per second, under Telegr
 
 
 def audience_query(track_id: int | None, group_name: str | None):
-    query = select(User.telegram_id).where(User.is_blocked.is_(False), User.telegram_id.isnot(None))
+    query = select(User.telegram_id).where(User.is_blocked.is_(False), User.telegram_id.isnot(None),
+                                           User.account_type == "student")
     if track_id:
         query = query.where(User.track_id == track_id)
     if group_name:

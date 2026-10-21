@@ -99,10 +99,13 @@ async def _post(key: str, model: str, body: dict, timeout: float) -> str:
             resp = await client.post(API.format(model=model), json=body, headers={"x-goog-api-key": key})
     except httpx.HTTPError as exc:
         raise AiError(f"Gemini bilan aloqa bo'lmadi ({exc.__class__.__name__})", retryable=True) from exc
-    data = resp.json() if "json" in resp.headers.get("content-type", "") else {}
+    try:
+        data = resp.json() if "json" in resp.headers.get("content-type", "") else {}
+    except ValueError:
+        data = {}
     if resp.status_code != 200:
         raise AiError((data.get("error") or {}).get("message") or f"Gemini xatosi: HTTP {resp.status_code}",
-                      retryable=resp.status_code in (429, 500, 503, 504))
+                      retryable=resp.status_code in (404, 429, 500, 502, 503, 504))
     try:
         content = data["candidates"][0]["content"]["parts"]
     except (KeyError, IndexError) as exc:
@@ -197,7 +200,7 @@ async def run_review(submission_id: int, round_: int) -> None:
                 raise
             text = await generate(key, config.model, parts, system=SYSTEM)   # model without link reading
         verdict = parse_verdict(text)
-    except (AiError, OSError) as exc:
+    except Exception as exc:                   # whatever happens, the verdict step below must run
         log.warning("AI review failed for submission %s: %s", submission_id, exc)
 
     async with SessionLocal() as session:

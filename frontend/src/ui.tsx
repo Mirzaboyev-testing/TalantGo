@@ -1,6 +1,6 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import { STATUS_LABEL, absoluteUrl, fileSize, type Review, type Status, type SubmittedFile } from "./api";
-import { openLink } from "./tg";
+import { insideTelegram, openLink } from "./tg";
 
 export function Avatar({ name, url }: { name: string; url?: string | null }) {
   return url ? <img className="avatar" src={url} alt="" /> : <div className="avatar">{name.slice(0, 1).toUpperCase()}</div>;
@@ -100,4 +100,10 @@ export function focusField(id: string): void {
   // an instant jump: smooth scrolling silently does nothing in some Telegram webviews
   el.scrollIntoView({ block: "center" });
   el.focus({ preventScroll: true });
+}
+
+/** A small "Chiqish" button for the website (inside Telegram there is nothing to sign out of). */
+export function LogoutLink({ onLogout }: { onLogout?: () => void }) {
+  if (insideTelegram || !onLogout) return null;
+  return <div style={{ textAlign: "right" }}><button className="btn small ghost" onClick={onLogout}>Chiqish</button></div>;
 }

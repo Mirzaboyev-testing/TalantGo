@@ -80,7 +80,10 @@ export default function AdminSite() {
 
   useEffect(() => {
     if (!me) return;
-    api.admin.inbox().then((c) => { setQueue(c.verifications + c.companies + c.jobs + c.staff); setPendingTests(c.tests ?? 0); }, () => {});
+    const refresh = () => api.admin.inbox().then((c) => { setQueue(c.verifications + c.companies + c.jobs + c.staff); setPendingTests(c.tests ?? 0); }, () => {});
+    void refresh();
+    const timer = window.setInterval(refresh, 60000);      // new requests show up without changing page
+    return () => window.clearInterval(timer);
   }, [me, page]);
 
   const go = (id: string) => { window.location.hash = id; setPage(id); setMenuOpen(false); };

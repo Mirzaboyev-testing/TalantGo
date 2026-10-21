@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Me, type University } from "../api";
-import { ErrorText, message } from "../ui";
+import { ErrorText, LogoutLink, message } from "../ui";
 import { Consent } from "./Consent";
 import { Icon } from "../icons";
 import EmployerSignup from "./employer/EmployerSignup";
@@ -8,16 +8,17 @@ import EmployerSignup from "./employer/EmployerSignup";
 type Choice = "student" | "employer" | "university" | null;
 
 /** First screen for a new account: job seeker or employer. (University staff come with their own link.) */
-export default function Welcome({ me, initial, onStudent, onChanged }: {
-  me: Me; initial: Choice; onStudent: () => void; onChanged: (m: Me) => void;
+export default function Welcome({ me, initial, onStudent, onChanged, onLogout }: {
+  me: Me; initial: Choice; onStudent: () => void; onChanged: (m: Me) => void; onLogout?: () => void;
 }) {
   const [choice, setChoice] = useState<Choice>(initial);
 
-  if (choice === "employer") return <EmployerSignup me={me} onSaved={onChanged} onBack={() => setChoice(null)} />;
+  if (choice === "employer") return <EmployerSignup me={me} onSaved={onChanged} onBack={() => setChoice(null)} onLogout={onLogout} />;
   if (choice === "university") return <StaffForm onBack={() => setChoice(null)} onChanged={onChanged} />;
 
   return (
     <div>
+      <LogoutLink onLogout={onLogout} />
       <h1>Salom, {me.full_name.split(" ")[0]}!</h1>
       <p className="hint">TalantGo: talabalar tasdiqlangan ko'nikmalar bilan amaliyot va birinchi ishni topadigan joy. Kim sifatida ro'yxatdan o'tasiz?</p>
       <div className="choice-grid">
@@ -79,30 +80,40 @@ function StaffForm({ onBack, onChanged }: { onBack: () => void; onChanged: (m: M
 }
 
 /** Shown to employers and staff while an admin checks them. */
-export function PendingScreen({ me, onChanged }: { me: Me; onChanged: (m: Me) => void }) {
+export function PendingScreen({ me, onChanged, onLogout }: { me: Me; onChanged: (m: Me) => void; onLogout?: () => void }) {
   const [editing, setEditing] = useState(false);
   const isEmployer = me.account_type === "employer";
   const rejected = isEmployer ? me.company?.status === "rejected" : me.staff_status === "rejected";
   const note = isEmployer ? me.company?.review_note : "";
+  const told = me.has_telegram ? "Tasdiqlangach botdan xabar keladi." : "Tasdiqlangach shu sahifa o'zi yangilanadi.";
 
-  if (editing && isEmployer) return <EmployerSignup me={me} onSaved={(m) => { onChanged(m); setEditing(false); }} onBack={() => setEditing(false)} />;
+  // the decision is picked up without a reload (accounts without Telegram get no bot message)
+  useEffect(() => {
+    if (rejected || editing) return;
+    const timer = window.setInterval(() => { api.me().then(onChanged, () => {}); }, 30000);
+    return () => window.clearInterval(timer);
+  }, [rejected, editing, onChanged]);
+
+  if (editing && isEmployer) return <EmployerSignup me={me} onSaved={(m) => { onChanged(m); setEditing(false); }} onBack={() => setEditing(false)} onLogout={onLogout} />;
   return (
     <div>
+      <LogoutLink onLogout={onLogout} />
       <h1>{rejected ? "So'rov tasdiqlanmadi" : "Tekshirilmoqda"}</h1>
       <div className="card">
         {isEmployer ? <b>{me.company?.name}</b> : <b>{me.staff_university?.name}</b>}
         <p className="hint">
           {rejected
-            ? `Izoh: ${note || "ko'rsatilmagan"}. Ma'lumotlarni tuzatib qayta yuboring yoki adminga yozing.`
+            ? `Izoh: ${note || "ko'rsatilmagan"}. Ma'lumotlarni tuzatib saqlasangiz, kompaniya qayta tekshiruvga yuboriladi.`
             : isEmployer
-              ? "Admin kompaniyangizni STIR bo'yicha tekshiradi. Odatda 1 ish kuni ichida. Tasdiqlangach botdan xabar keladi."
-              : "Ilova egasi universitet bilan bog'lanib tekshiradi. Tasdiqlangach botdan xabar keladi."}
+              ? `Admin kompaniyangizni STIR bo'yicha tekshiradi. Odatda 1 ish kuni ichida. ${told}`
+              : `Ilova egasi universitet bilan bog'lanib tekshiradi. ${told}`}
         </p>
-        {isEmployer && <button className="btn small ghost" onClick={() => setEditing(true)}>Ma'lumotlarni tahrirlash</button>}
+        {isEmployer && <button className="btn small ghost" onClick={() => setEditing(true)}>{rejected ? "Tuzatib qayta yuborish" : "Ma'lumotlarni tahrirlash"}</button>}
       </div>
       <button className="btn ghost" style={{ marginTop: 10 }} onClick={async () => onChanged(await api.backToStudent())}>
         Ish izlovchi sifatida davom etish
       </button>
+      {isEmployer && <p className="hint">Bu kompaniya so'rovini bekor qiladi. Keyin xohlasangiz, qaytadan ish beruvchi sifatida ro'yxatdan o'tishingiz mumkin.</p>}
     </div>
   );
 }

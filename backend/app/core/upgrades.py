@@ -71,6 +71,10 @@ STATEMENTS = [
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS email varchar(160)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash varchar(255) NOT NULL DEFAULT ''",
     "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email_unique ON users (email)",
+    # website sign-in through the bot needs a PIN typed on the site (2026-10-21)
+    "ALTER TABLE login_requests ADD COLUMN IF NOT EXISTS pin varchar(6) NOT NULL DEFAULT ''",
+    "ALTER TABLE login_requests ADD COLUMN IF NOT EXISTS attempts integer NOT NULL DEFAULT 0",
+    "ALTER TABLE login_requests ADD COLUMN IF NOT EXISTS tg_username varchar(64)",
 ]
 
 

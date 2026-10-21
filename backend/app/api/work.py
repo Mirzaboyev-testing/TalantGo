@@ -21,8 +21,10 @@ MAX_PENDING_UPLOADS = 20
 @router.post("/uploads", status_code=201)
 async def upload(file: UploadFile, user: CurrentUser, session: Session) -> dict:
     """Step one of a file submission: the file is stored, then attached when the work is submitted."""
+    from datetime import UTC, datetime, timedelta
     pending = await session.scalar(select(func.count()).select_from(SubmissionFile).where(
-        SubmissionFile.user_id == user.id, SubmissionFile.submission_id.is_(None)))
+        SubmissionFile.user_id == user.id, SubmissionFile.submission_id.is_(None),
+        SubmissionFile.created_at > datetime.now(UTC) - timedelta(hours=6)))   # older leftovers no longer block
     if pending >= MAX_PENDING_UPLOADS:
         raise HTTPException(429, "Topshirilmagan fayllar juda ko'p: avval ishni yuboring")
     row = await files.save(user.id, file)

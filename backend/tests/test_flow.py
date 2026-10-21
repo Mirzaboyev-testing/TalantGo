@@ -115,6 +115,8 @@ async def test_peers_and_leaderboard(client, make_user):
     sub = (await client.post(f"/api/v1/tasks/{tasks[0]['id']}/submit", json=PROOF, headers=u["Aziza"]["headers"])).json()
     for name in ("Bekzod", "Dilnoza"):
         await client.post(f"/api/v1/submissions/{sub['id']}/reviews", json=GOOD, headers=u[name]["headers"])
+    for name in ("Aziza", "Bekzod", "Dilnoza"):          # only students who agreed are listed
+        await client.patch("/api/v1/me", json={"consent": True}, headers=u[name]["headers"])
 
     peers = (await client.get("/api/v1/peers", headers=u["Bekzod"]["headers"])).json()
     assert [p["full_name"] for p in peers] == ["Aziza", "Dilnoza"]

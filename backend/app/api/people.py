@@ -89,7 +89,7 @@ async def update_me(body: MeUpdate, user: CurrentUser, session: Session) -> MeOu
             k in changes and changes[k] != getattr(user, k) for k in IDENTITY_FIELDS):
         user.verification, user.verified_by, user.verified_at = "none", "", None
     for field, value in changes.items():
-        if value is not None or field == "track_id":     # only the path can be cleared
+        if value is not None or field in ("track_id", "gpa", "graduation_year"):     # these can be cleared
             setattr(user, field, value)
     await session.commit()
     await session.refresh(user)
@@ -146,9 +146,13 @@ def _verified_count():
 async def peers(user: CurrentUser, session: Session,
                 goal: str | None = Query(default=None, max_length=40),
                 track_id: int | None = None) -> list[PeerOut]:
-    """Students on the same path by default; a goal search looks across all paths."""
+    """Students on the same path by default; a goal search looks across all paths. Only for students, and only
+    students who agreed to be shown."""
+    if user.account_type != "student":
+        raise HTTPException(403, "Bu bo'lim talabalar uchun")
     verified = _verified_count().label("verified")
-    query = select(User, verified).where(User.id != user.id, User.is_blocked.is_(False), User.account_type == "student")
+    query = select(User, verified).where(User.id != user.id, User.is_blocked.is_(False), User.account_type == "student",
+                                         User.consent_at.isnot(None))
     if goal:
         query = query.where(User.goals.contains([goal.strip()]) | User.skills.contains([goal.strip()]))
     else:
@@ -257,12 +261,25 @@ async def set_password(body: PasswordIn, user: CurrentUser, session: Session) ->
         email = _email(body.email)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    if user.password_hash and not check_password(body.current_password, user.password_hash):
+    import asyncio
+    if user.password_hash and not await asyncio.to_thread(check_password, body.current_password, user.password_hash):
         raise HTTPException(403, "Joriy parol noto'g'ri")
     if await session.scalar(select(User.id).where(User.email == email, User.id != user.id)):
         raise HTTPException(409, "Bu email boshqa akkauntga bog'langan")
-    user.email, user.password_hash = email, hash_password(body.password)
+    user.email, user.password_hash = email, await asyncio.to_thread(hash_password, body.password)
     await session.commit()
+    await session.refresh(user)
+    return await me_out(session, user)
+
+
+class LinkPinIn(BaseModel):
+    pin: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+@router.post("/me/telegram-link/{code}/verify", response_model=MeOut)
+async def telegram_link_verify(code: str, body: LinkPinIn, user: CurrentUser, session: Session) -> MeOut:
+    from ..services import web_login
+    await web_login.verify_link(session, code[:40], body.pin, user)
     await session.refresh(user)
     return await me_out(session, user)
 
@@ -332,6 +349,13 @@ async def back_to_student(user: CurrentUser, session: Session) -> MeOut:
     user.account_type = "student"
     if user.staff_status != "approved":
         user.staff_university_id, user.staff_status = None, ""
+    company = user.company
+    if company is not None and company.status != "approved":
+        # an unapproved company request is withdrawn, so the person can sign up as an employer again later
+        user.company_id = None
+        await session.flush()
+        if not await session.scalar(select(func.count()).select_from(User).where(User.company_id == company.id)):
+            await session.delete(company)
     await session.commit()
     await session.refresh(user)
     return await me_out(session, user)

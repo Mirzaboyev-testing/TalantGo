@@ -7,6 +7,7 @@ const normalize = (raw: string) => {
   const digits = raw.replace(/\D/g, "");
   if (digits.length === 9) return `+998${digits}`;
   if (digits.length === 12 && digits.startsWith("998")) return `+${digits}`;
+  if (raw.trim().startsWith("+") && digits.length >= 8 && digits.length <= 15) return `+${digits}`;   // other countries
   return null;
 };
 

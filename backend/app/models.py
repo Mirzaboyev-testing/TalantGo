@@ -633,4 +633,7 @@ class LoginRequest(Base):
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))        # the result
     status: Mapped[str] = mapped_column(String(12), default="pending")
     note: Mapped[str] = mapped_column(Text, default="")
+    pin: Mapped[str] = mapped_column(String(6), default="", server_default="")        # shown in the bot, typed on the site
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    tg_username: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

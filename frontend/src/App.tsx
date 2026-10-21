@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, setUserToken, type Me } from "./api";
+import { api, setUserToken, setUserUnauthorizedHandler, type Me } from "./api";
 import { initData, insideTelegram } from "./tg";
 import { message } from "./ui";
 import Onboarding from "./screens/Onboarding";
@@ -68,6 +68,9 @@ export default function App() {
     showLogin();
   }, [showLogin]);
 
+  // an expired website session goes back to the sign-in screen instead of failing on every screen
+  useEffect(() => { if (!insideTelegram) setUserUnauthorizedHandler(logout); }, [logout]);
+
   useEffect(() => {
     if (insideTelegram) {
       void signIn(() => api.telegramLogin(initData));
@@ -109,22 +112,22 @@ export default function App() {
 
   // Employers: the sign-up form until every required field is filled, then the admin check, then their app.
   if (me.account_type === "employer") {
-    if (me.signup_missing.length > 0) return <>{ai}<div className="app"><EmployerSignup me={me} onSaved={setMe} /></div></>;
+    if (me.signup_missing.length > 0) return <>{ai}<div className="app"><EmployerSignup me={me} onSaved={setMe} onLogout={logout} /></div></>;
     return <>{ai}{me.company?.status === "approved"
       ? <EmployerApp me={me} onChanged={setMe} onLogout={logout} />
-      : <div className="app"><PendingScreen me={me} onChanged={setMe} /></div>}</>;
+      : <div className="app"><PendingScreen me={me} onChanged={setMe} onLogout={logout} /></div>}</>;
   }
   if (me.account_type === "university") {
     return <>{ai}{me.staff_status === "approved"
       ? <UniversityApp me={me} onLogout={logout} />
-      : <div className="app"><PendingScreen me={me} onChanged={setMe} /></div>}</>;
+      : <div className="app"><PendingScreen me={me} onChanged={setMe} onLogout={logout} /></div>}</>;
   }
   // a brand-new account first chooses: job seeker or employer
   const isNew = !me.track && !me.has_consent;
   if (isNew && !chosenStudent) {
     const partnerRole = new URLSearchParams(window.location.search).get("role");
     return <>{ai}<div className="app"><Welcome me={me} initial={partnerRole === "employer" || partnerRole === "university" ? partnerRole : null}
-                                         onStudent={() => setChosenStudent(true)} onChanged={setMe} /></div></>;
+                                         onStudent={() => setChosenStudent(true)} onChanged={setMe} onLogout={logout} /></div></>;
   }
 
   // job seekers stay on the sign-up form until every required field is filled
