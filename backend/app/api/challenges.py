@@ -17,6 +17,7 @@ TASHKENT = ZoneInfo("Asia/Tashkent")
 PLACE_BONUS = {1: 30, 2: 20, 3: 10}
 MAX_TASK_POINTS = 50
 MAX_CHALLENGE_POINTS = 100
+COMPANY_POINTS_CAP = 100          # points one company may give one student through its tasks in 30 days
 
 
 async def mentor(user: CurrentUser) -> User:
@@ -147,8 +148,9 @@ def challenge_out(c: Challenge, now: datetime, **extra) -> dict:
             "audience": c.audience, "university_id": c.university_id, "invited": len(c.invited_ids), **extra}
 
 
-def entry_out(e: ChallengeEntry) -> dict:
-    return {"id": e.id, "user_id": e.user_id, "student": e.user.full_name, "username": e.user.username,
+def entry_out(e: ChallengeEntry, with_username: bool = True) -> dict:
+    """`with_username` is off for company tasks: entering a task is not an application or a contact."""
+    return {"id": e.id, "user_id": e.user_id, "student": e.user.full_name, "username": e.user.username if with_username else None,
             "university": e.user.university_ref.short_name if e.user.university_ref else None,
             "proof_url": e.proof_url, "note": e.note, "status": e.status, "score": e.score, "place": e.place,
             "comment": e.comment, "points_awarded": e.points_awarded, "created_at": e.created_at}
@@ -256,7 +258,15 @@ async def apply_review(session: Session, c: Challenge, entry: ChallengeEntry, bo
     entry.status = "accepted" if body.accept else "rejected"
     entry.score, entry.place, entry.comment = body.score, body.place, body.comment.strip()
     entry.reviewed_at = datetime.now(UTC)
-    await _set_award(session, entry, (c.points + PLACE_BONUS.get(body.place or 0, 0)) if body.accept else 0)
+    award = (c.points + PLACE_BONUS.get(body.place or 0, 0)) if body.accept else 0
+    if c.company_id and award:
+        # one company cannot lift one student up the rating: at most COMPANY_POINTS_CAP points in 30 days
+        given = await session.scalar(select(func.coalesce(func.sum(ChallengeEntry.points_awarded), 0))
+                                     .join(Challenge, Challenge.id == ChallengeEntry.challenge_id).where(
+            Challenge.company_id == c.company_id, ChallengeEntry.user_id == entry.user_id, ChallengeEntry.id != entry.id,
+            ChallengeEntry.reviewed_at >= datetime.now(UTC) - timedelta(days=30)))
+        award = max(0, min(award, COMPANY_POINTS_CAP - given))
+    await _set_award(session, entry, award)
     await session.commit()
     place = f" Siz {body.place}-o'rinni egalladingiz!" if body.place else ""
     what = f"«{c.title}» ({c.company.name}) vazifasidagi" if c.company else f"«{c.title}» chellenjidagi"

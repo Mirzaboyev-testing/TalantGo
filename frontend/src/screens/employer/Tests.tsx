@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, ATTEMPT_STATUS, courseLabel, QUESTION_KIND, TEST_STATUS, type AttemptDetail, type CompanyTestFull,
+import { api, QUESTION_KIND, type AttemptDetail, type CompanyTestFull,
          type CompanyTestSummary, type Job, type QuestionInput, type QuestionKind, type TestInput, type TestResultRow,
          type Track } from "../../api";
 import { Field, Req, useRequired, type Check } from "../../form";
+import { formatDateTime, t, useLang } from "../../i18n";
+import { attemptStatusLabel, courseText, questionKindLabel, testStatus } from "../../labels";
 import { Icon } from "../../icons";
 import { ask, haptic } from "../../tg";
 import { ErrorText, message, toast } from "../../ui";
 import { downloadCv, StudentSheet } from "./Students";
 
-const AUDIENCE = { all: "Barcha talabalar", tracks: "Tanlangan yo'nalishlar", applicants: "Vakansiyaga ariza berganlar" };
-const when = (s: string | null) => (s ? new Date(s).toLocaleString("uz", { dateStyle: "short", timeStyle: "short" }) : "—");
+const audience = () => ({ all: t("task.audience.all"), tracks: t("p.tests.audience_tracks"), applicants: t("p.tests.audience_applicants") });
+const when = (s: string | null) => (s ? formatDateTime(s) : "—");
 
 type View = { kind: "list" } | { kind: "edit"; test?: CompanyTestFull } | { kind: "results"; id: number } | { kind: "attempt"; id: number; back: View };
 
@@ -25,6 +27,7 @@ export default function Tests({ openAttempt }: { openAttempt?: number | null }) 
 // --------------------------------------------------------------------------- list
 
 function TestList({ onNew, onEdit, onResults }: { onNew: () => void; onEdit: (t: CompanyTestFull) => void; onResults: (id: number) => void }) {
+  useLang();
   const [tests, setTests] = useState<CompanyTestSummary[] | null>(null);
   const [error, setError] = useState("");
   const load = useCallback(() => api.employer.tests().then(setTests, (e) => setError(message(e))), []);
@@ -36,39 +39,39 @@ function TestList({ onNew, onEdit, onResults }: { onNew: () => void; onEdit: (t:
 
   return (
     <div>
-      <h1>Testlar</h1>
-      <button className="btn" onClick={onNew}><Icon name="plus" size={18} />Test yoki so'rovnoma yaratish</button>
-      <p className="hint">Variantli savollar avtomatik tekshiriladi, yozma javoblarni o'zingiz baholaysiz. Ballsiz savollar oddiy so'rovnoma bo'ladi. Har bir test admin tekshiruvidan keyin talabalarga chiqadi.</p>
+      <h1>{t("nav.company.tests")}</h1>
+      <button className="btn" onClick={onNew}><Icon name="plus" size={18} />{t("p.tests.create")}</button>
+      <p className="hint">{t("p.tests.hint")}</p>
       <ErrorText error={error} />
-      {!tests && !error && <div className="hint">Yuklanmoqda…</div>}
-      {tests?.length === 0 && <div className="center hint">Hali test yo'q</div>}
-      {tests?.map((t) => (
-        <div key={t.id} className="card">
+      {!tests && !error && <div className="hint">{t("common.loading")}</div>}
+      {tests?.length === 0 && <div className="center hint">{t("p.tests.empty")}</div>}
+      {tests?.map((x) => (
+        <div key={x.id} className="card">
           <div className="row between">
-            <span className="hint">{t.is_survey ? "So'rovnoma" : `Test · ${t.max_score} ball`} · {t.questions_count} savol</span>
-            <span className={`badge ${TEST_STATUS[t.status][1]}`}>{TEST_STATUS[t.status][0]}</span>
+            <span className="hint">{x.is_survey ? t("p.tests.survey") : t("p.tests.test_points", { n: x.max_score })} · {t("p.tests.questions_n", { n: x.questions_count })}</span>
+            <span className={`badge ${testStatus(x.status)[1]}`}>{testStatus(x.status)[0]}</span>
           </div>
-          <b>{t.title}</b>
+          <b>{x.title}</b>
           <div className="hint">
-            {AUDIENCE[t.audience]}{t.job_title ? ` · ${t.job_title}` : ""}{t.deadline ? ` · muddat ${t.deadline}` : ""}
-            {t.time_limit_min ? ` · ${t.time_limit_min} daqiqa` : ""}
+            {audience()[x.audience]}{x.job_title ? ` · ${x.job_title}` : ""}{x.deadline ? ` · ${t("p.tests.deadline", { date: x.deadline })}` : ""}
+            {x.time_limit_min ? ` · ${t("p.tests.minutes", { n: x.time_limit_min })}` : ""}
           </div>
-          <div className="hint">{t.attempts} kishi topshirdi{t.to_grade ? ` · ${t.to_grade} ta baholash kutilmoqda` : ""}</div>
-          {t.status === "rejected" && t.review_note && <div className="error">Admin izohi: {t.review_note}</div>}
+          <div className="hint">{t("p.tests.attempts", { n: x.attempts })}{x.to_grade ? ` · ${t("p.tests.to_grade", { n: x.to_grade })}` : ""}</div>
+          {x.status === "rejected" && x.review_note && <div className="error">{t("p.tests.admin_note", { note: x.review_note })}</div>}
           <div className="row wrap" style={{ marginTop: 8 }}>
-            <button className="btn small" onClick={() => onResults(t.id)}>Natijalar ({t.attempts}){t.to_grade ? ` · ${t.to_grade} baholash` : ""}</button>
-            {t.attempts === 0 && t.status !== "closed" && (
-              <button className="btn small ghost" onClick={() => act(async () => onEdit(await api.employer.test(t.id)))}>Tahrirlash</button>
+            <button className="btn small" onClick={() => onResults(x.id)}>{t("p.tests.results_n", { n: x.attempts })}{x.to_grade ? ` · ${t("p.tests.grade_n", { n: x.to_grade })}` : ""}</button>
+            {x.attempts === 0 && x.status !== "closed" && (
+              <button className="btn small ghost" onClick={() => act(async () => onEdit(await api.employer.test(x.id)))}>{t("p.common.edit")}</button>
             )}
-            {t.status !== "closed" && t.status !== "draft" && (
+            {x.status !== "closed" && x.status !== "draft" && (
               <button className="btn small ghost" onClick={async () => {
-                if (await ask("Test yopilsinmi? Talabalar uni boshqa ishlay olmaydi.")) void act(() => api.employer.closeTest(t.id));
-              }}>Yopish</button>
+                if (await ask(t("p.tests.close_confirm"))) void act(() => api.employer.closeTest(x.id));
+              }}>{t("common.close")}</button>
             )}
-            {t.attempts === 0 && (
+            {x.attempts === 0 && (
               <button className="btn small ghost" onClick={async () => {
-                if (await ask("Test o'chirilsinmi?")) void act(() => api.employer.deleteTest(t.id));
-              }}>O'chirish</button>
+                if (await ask(t("p.tests.delete_confirm"))) void act(() => api.employer.deleteTest(x.id));
+              }}>{t("p.tests.delete")}</button>
             )}
           </div>
         </div>
@@ -83,6 +86,8 @@ const blankQuestion = (kind: QuestionKind = "single"): QuestionInput =>
   ({ kind, text: "", options: kind === "text" ? [] : ["", ""], correct: [], points: kind === "text" ? 10 : 5 });
 
 function TestBuilder({ test, onDone }: { test?: CompanyTestFull; onDone: () => void }) {
+  useLang();
+  const aud = audience();
   const [tracks, setTracks] = useState<Track[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [f, setF] = useState({
@@ -111,14 +116,14 @@ function TestBuilder({ test, onDone }: { test?: CompanyTestFull; onDone: () => v
 
   async function save(submit: boolean) {
     const checks: Check[] = [
-      ["t-title", f.title.trim().length >= 3, "test nomi"],
-      ["t-tracks", f.audience !== "tracks" || trackIds.length > 0, "yo'nalishlar"],
-      ["t-job", f.audience !== "applicants" || Boolean(f.job_id), "vakansiya"],
+      ["t-title", f.title.trim().length >= 3, t("p.tests.req.title")],
+      ["t-tracks", f.audience !== "tracks" || trackIds.length > 0, t("p.tests.req.tracks")],
+      ["t-job", f.audience !== "applicants" || Boolean(f.job_id), t("p.tests.req.job")],
     ];
     questions.forEach((q, i) => {
       const filled = q.text.trim().length >= 3 && (q.kind === "text" || q.options.filter((o) => o.trim()).length >= 2);
       const answered = q.kind === "text" || q.points === 0 || q.correct.length > 0;
-      checks.push([`q-${i}`, filled && answered, filled ? `${i + 1}-savolning to'g'ri javobi` : `${i + 1}-savol matni va variantlari`]);
+      checks.push([`q-${i}`, filled && answered, filled ? t("p.tests.req.q_answer", { n: i + 1 }) : t("p.tests.req.q_text", { n: i + 1 })]);
     });
     if (!check(checks)) return;
     const body: TestInput = {
@@ -137,7 +142,7 @@ function TestBuilder({ test, onDone }: { test?: CompanyTestFull; onDone: () => v
       if (test) await api.employer.editTest(test.id, body);
       else await api.employer.createTest(body);
       haptic("success");
-      toast(submit ? "Test admin tekshiruviga yuborildi" : "Qoralama saqlandi");
+      toast(submit ? t("p.tests.submitted") : t("p.tests.draft_saved"));
       onDone();
     } catch (e) {
       setError(message(e));
@@ -147,116 +152,116 @@ function TestBuilder({ test, onDone }: { test?: CompanyTestFull; onDone: () => v
 
   return (
     <div>
-      <button className="btn small ghost" onClick={onDone}><Icon name="back" size={16} />Testlar</button>
-      <h1>{test ? "Testni tahrirlash" : "Yangi test yoki so'rovnoma"}</h1>
-      <p className="form-note"><Req />belgisi bor maydonlar majburiy.</p>
+      <button className="btn small ghost" onClick={onDone}><Icon name="back" size={16} />{t("nav.company.tests")}</button>
+      <h1>{test ? t("p.tests.edit_title") : t("p.tests.new_title")}</h1>
+      <p className="form-note"><Req />{t("p.common.required_note")}</p>
       <div className="card">
-        <Field id="t-title" label="Nomi" required error={errors["t-title"] && "Test nomini yozing"}>
-          <input id="t-title" className={cls("t-title")} value={f.title} maxLength={160} placeholder="Masalan: SQL bo'yicha kirish testi"
+        <Field id="t-title" label={t("p.common.title")} required error={errors["t-title"] && t("p.tests.f.title_err")}>
+          <input id="t-title" className={cls("t-title")} value={f.title} maxLength={160} placeholder={t("p.tests.f.title_ph")}
                  onChange={(e) => { setF({ ...f, title: e.target.value }); clear("t-title"); }} />
         </Field>
-        <Field id="t-desc" label="Talabalar uchun izoh">
-          <textarea id="t-desc" value={f.description} maxLength={3000} placeholder="Test nima haqida, natija nimaga ta'sir qiladi"
+        <Field id="t-desc" label={t("p.tests.f.desc")}>
+          <textarea id="t-desc" value={f.description} maxLength={3000} placeholder={t("p.tests.f.desc_ph")}
                     onChange={(e) => setF({ ...f, description: e.target.value })} />
         </Field>
-        <label>Kimga ko'rinadi<Req /></label>
-        {(Object.keys(AUDIENCE) as (keyof typeof AUDIENCE)[]).map((a) => (
+        <label>{t("p.tests.f.audience")}<Req /></label>
+        {(Object.keys(aud) as (keyof typeof aud)[]).map((a) => (
           <label key={a} className="radio-line">
-            <input type="radio" name="audience" checked={f.audience === a} onChange={() => setF({ ...f, audience: a })} />{AUDIENCE[a]}
+            <input type="radio" name="audience" checked={f.audience === a} onChange={() => setF({ ...f, audience: a })} />{aud[a]}
           </label>
         ))}
         {f.audience === "tracks" && (
           <>
             <div id="t-tracks" tabIndex={-1} className={groupCls("t-tracks", "chips")}>
-              {tracks.map((t) => (
-                <button key={t.id} type="button" className={`chip ${trackIds.includes(t.id) ? "on" : ""}`}
-                        onClick={() => { setTrackIds(trackIds.includes(t.id) ? trackIds.filter((x) => x !== t.id) : [...trackIds, t.id]); clear("t-tracks"); }}>
-                  {t.title.split(":")[0]}
+              {tracks.map((tr) => (
+                <button key={tr.id} type="button" className={`chip ${trackIds.includes(tr.id) ? "on" : ""}`}
+                        onClick={() => { setTrackIds(trackIds.includes(tr.id) ? trackIds.filter((x) => x !== tr.id) : [...trackIds, tr.id]); clear("t-tracks"); }}>
+                  {tr.title.split(":")[0]}
                 </button>
               ))}
             </div>
-            {errors["t-tracks"] && <div className="field-error">Kamida bitta yo'nalishni tanlang</div>}
+            {errors["t-tracks"] && <div className="field-error">{t("p.tests.f.tracks_err")}</div>}
           </>
         )}
-        <Field id="t-job" label={f.audience === "applicants" ? "Vakansiya" : "Vakansiyaga bog'lash (ixtiyoriy)"} required={f.audience === "applicants"}
-               error={errors["t-job"] && "Vakansiyani tanlang"}>
+        <Field id="t-job" label={f.audience === "applicants" ? t("p.tests.f.job") : t("p.tests.f.job_optional")} required={f.audience === "applicants"}
+               error={errors["t-job"] && t("p.tests.f.job_err")}>
           <select id="t-job" className={cls("t-job")} value={f.job_id} onChange={(e) => { setF({ ...f, job_id: e.target.value }); clear("t-job"); }}>
-            <option value="">{f.audience === "applicants" ? "Tanlang…" : "Bog'lanmagan"}</option>
+            <option value="">{f.audience === "applicants" ? t("task.f.choose") : t("p.tests.f.not_linked")}</option>
             {jobs.map((j) => <option key={j.id} value={j.id}>{j.title}</option>)}
           </select>
         </Field>
         <div className="row">
-          <div className="grow"><Field id="t-deadline" label="Muddat (ixtiyoriy)">
+          <div className="grow"><Field id="t-deadline" label={t("p.tests.f.deadline")}>
             <input id="t-deadline" type="date" value={f.deadline} onChange={(e) => setF({ ...f, deadline: e.target.value })} />
           </Field></div>
-          <div className="grow"><Field id="t-time" label="Vaqt, daqiqa (ixtiyoriy)">
+          <div className="grow"><Field id="t-time" label={t("p.tests.f.time")}>
             <input id="t-time" value={f.time_limit} inputMode="numeric" maxLength={3} placeholder="30"
                    onChange={(e) => setF({ ...f, time_limit: e.target.value.replace(/\D/g, "") })} />
           </Field></div>
         </div>
       </div>
 
-      <div className="row between"><h2>Savollar ({questions.length})</h2><span className="hint">Jami: {total} ball</span></div>
+      <div className="row between"><h2>{t("p.tests.questions_title", { n: questions.length })}</h2><span className="hint">{t("p.tests.total", { n: total })}</span></div>
       {questions.map((q, i) => (
         <div key={i} id={`q-${i}`} tabIndex={-1} className={groupCls(`q-${i}`, "q-card")}>
           <div className="row between">
-            <b>{i + 1}-savol<Req /></b>
+            <b>{t("p.tests.q_n", { n: i + 1 })}<Req /></b>
             <div className="row">
               <select value={q.kind} style={{ width: "auto" }} onChange={(e) => {
                 const kind = e.target.value as QuestionKind;
                 setQ(i, kind === "text" ? { kind, options: [], correct: [] }
                   : { kind, options: q.options.length >= 2 ? q.options : ["", ""], correct: kind === "single" ? q.correct.slice(0, 1) : q.correct });
               }}>
-                {(Object.keys(QUESTION_KIND) as QuestionKind[]).map((k) => <option key={k} value={k}>{QUESTION_KIND[k]}</option>)}
+                {(Object.keys(QUESTION_KIND) as QuestionKind[]).map((k) => <option key={k} value={k}>{questionKindLabel(k)}</option>)}
               </select>
               {questions.length > 1 && (
-                <button className="icon-btn" title="Savolni o'chirish" aria-label="Savolni o'chirish"
+                <button className="icon-btn" title={t("p.tests.delete_question")} aria-label={t("p.tests.delete_question")}
                         onClick={() => setQuestions(questions.filter((_, k) => k !== i))}><Icon name="trash" size={18} /></button>
               )}
             </div>
           </div>
-          <textarea value={q.text} maxLength={2000} placeholder="Savol matni" style={{ marginTop: 8 }} onChange={(e) => setQ(i, { text: e.target.value })} />
+          <textarea value={q.text} maxLength={2000} placeholder={t("p.tests.question_text")} style={{ marginTop: 8 }} onChange={(e) => setQ(i, { text: e.target.value })} />
           {q.kind !== "text" && (
             <>
               <div className="hint" style={{ marginTop: 6 }}>
-                {q.kind === "single" ? "To'g'ri javobni doira bilan belgilang" : "Barcha to'g'ri javoblarni belgilang"}. Ball 0 bo'lsa, to'g'ri javob shart emas (so'rovnoma).
+                {q.kind === "single" ? t("p.tests.mark_single") : t("p.tests.mark_multi")}. {t("p.tests.zero_points")}
               </div>
               {q.options.map((o, k) => (
                 <div key={k} className="q-option">
                   <input className="mark" type={q.kind === "single" ? "radio" : "checkbox"} name={`q${i}`} checked={q.correct.includes(k)}
-                         title="To'g'ri javob" onChange={() => setQ(i, {
+                         title={t("p.tests.correct")} onChange={() => setQ(i, {
                            correct: q.kind === "single" ? [k] : q.correct.includes(k) ? q.correct.filter((x) => x !== k) : [...q.correct, k] })} />
-                  <input value={o} maxLength={300} placeholder={`${k + 1}-variant`}
+                  <input value={o} maxLength={300} placeholder={t("p.tests.option_n", { n: k + 1 })}
                          onChange={(e) => setQ(i, { options: q.options.map((x, n) => (n === k ? e.target.value : x)) })} />
                   {q.options.length > 2 && (
-                    <button className="icon-btn" aria-label="Variantni o'chirish" onClick={() => setQ(i, {
+                    <button className="icon-btn" aria-label={t("p.tests.delete_option")} onClick={() => setQ(i, {
                       options: q.options.filter((_, n) => n !== k),
                       correct: q.correct.filter((x) => x !== k).map((x) => (x > k ? x - 1 : x)) })}><Icon name="close" size={16} /></button>
                   )}
                 </div>
               ))}
-              {q.options.length < 12 && <button className="btn small ghost" style={{ marginTop: 8 }} onClick={() => setQ(i, { options: [...q.options, ""] })}>+ Variant</button>}
+              {q.options.length < 12 && <button className="btn small ghost" style={{ marginTop: 8 }} onClick={() => setQ(i, { options: [...q.options, ""] })}>{t("p.tests.add_option")}</button>}
             </>
           )}
-          {q.kind === "text" && <div className="hint" style={{ marginTop: 6 }}>Talaba javobni yozadi, siz ballni o'zingiz qo'yasiz. Ball 0 bo'lsa, oddiy so'rovnoma savoli.</div>}
+          {q.kind === "text" && <div className="hint" style={{ marginTop: 6 }}>{t("p.tests.text_hint")}</div>}
           <div className="row" style={{ marginTop: 8 }}>
-            <label style={{ margin: 0 }}>Ball</label>
+            <label style={{ margin: 0 }}>{t("p.tests.points")}</label>
             <input value={String(q.points)} inputMode="numeric" style={{ width: 80 }}
                    onChange={(e) => setQ(i, { points: Math.min(100, Number(e.target.value.replace(/\D/g, "") || 0)) })} />
           </div>
           {errors[`q-${i}`] && <div className="field-error">{q.text.trim().length < 3 || (q.kind !== "text" && q.options.filter((o) => o.trim()).length < 2)
-            ? "Savol matnini va kamida 2 ta variantni yozing" : "To'g'ri javobni belgilang yoki ballni 0 qiling"}</div>}
+            ? t("p.tests.q_err_text") : t("p.tests.q_err_answer")}</div>}
         </div>
       ))}
       <div className="row wrap">
-        <button className="btn small ghost" onClick={() => setQuestions([...questions, blankQuestion("single")])}>+ Bitta javobli</button>
-        <button className="btn small ghost" onClick={() => setQuestions([...questions, blankQuestion("multi")])}>+ Bir nechta javobli</button>
-        <button className="btn small ghost" onClick={() => setQuestions([...questions, blankQuestion("text")])}>+ Yozma javob</button>
+        <button className="btn small ghost" onClick={() => setQuestions([...questions, blankQuestion("single")])}>{t("p.tests.add_single")}</button>
+        <button className="btn small ghost" onClick={() => setQuestions([...questions, blankQuestion("multi")])}>{t("p.tests.add_multi")}</button>
+        <button className="btn small ghost" onClick={() => setQuestions([...questions, blankQuestion("text")])}>{t("p.tests.add_text")}</button>
       </div>
       <ErrorText error={error} />
       <div className="save-bar stack">
-        <button className="btn" disabled={busy} onClick={() => save(true)}>{busy ? "Saqlanmoqda…" : "Saqlash va tekshiruvga yuborish"}</button>
-        <button className="btn ghost" disabled={busy} onClick={() => save(false)}>Qoralama sifatida saqlash</button>
+        <button className="btn" disabled={busy} onClick={() => save(true)}>{busy ? t("p.common.saving") : t("p.common.save_submit")}</button>
+        <button className="btn ghost" disabled={busy} onClick={() => save(false)}>{t("p.tests.save_draft")}</button>
       </div>
     </div>
   );
@@ -265,6 +270,7 @@ function TestBuilder({ test, onDone }: { test?: CompanyTestFull; onDone: () => v
 // --------------------------------------------------------------------------- results and grading
 
 function Results({ id, onBack, onOpen }: { id: number; onBack: () => void; onOpen: (attemptId: number) => void }) {
+  useLang();
   const [data, setData] = useState<{ test: CompanyTestSummary; rows: TestResultRow[] } | null>(null);
   const [profile, setProfile] = useState<number | null>(null);
   const [error, setError] = useState("");
@@ -272,14 +278,14 @@ function Results({ id, onBack, onOpen }: { id: number; onBack: () => void; onOpe
 
   return (
     <div>
-      <button className="btn small ghost" onClick={onBack}><Icon name="back" size={16} />Testlar</button>
-      <h1>{data?.test.title ?? "Natijalar"}</h1>
+      <button className="btn small ghost" onClick={onBack}><Icon name="back" size={16} />{t("nav.company.tests")}</button>
+      <h1>{data?.test.title ?? t("p.tests.results")}</h1>
       <ErrorText error={error} />
       {data && (
-        <p className="hint">{data.rows.length} kishi topshirdi{data.test.max_score ? ` · eng yuqori ball ${data.test.max_score}` : " · so'rovnoma"}
-          {data.test.to_grade ? ` · ${data.test.to_grade} ta yozma javob baholashni kutmoqda` : ""}</p>
+        <p className="hint">{t("p.tests.attempts", { n: data.rows.length })}{data.test.max_score ? ` · ${t("p.tests.max_score", { n: data.test.max_score })}` : ` · ${t("p.tests.survey_lc")}`}
+          {data.test.to_grade ? ` · ${t("p.tests.written_to_grade", { n: data.test.to_grade })}` : ""}</p>
       )}
-      {data?.rows.length === 0 && <div className="center hint">Hali hech kim topshirmagan</div>}
+      {data?.rows.length === 0 && <div className="center hint">{t("p.tests.no_attempts")}</div>}
       {data?.rows.map((r) => (
         <div key={r.attempt_id} className="card">
           <div className="row" style={{ alignItems: "flex-start" }}>
@@ -287,19 +293,19 @@ function Results({ id, onBack, onOpen }: { id: number; onBack: () => void; onOpe
             <div className="grow">
               <div className="row between">
                 <b>{r.student.full_name}</b>
-                <span className={`badge ${r.status === "graded" ? "peer_verified" : "pending"}`}>{ATTEMPT_STATUS[r.status]}</span>
+                <span className={`badge ${r.status === "graded" ? "peer_verified" : "pending"}`}>{attemptStatusLabel(r.status)}</span>
               </div>
-              <div className="hint">{[r.student.university, r.student.faculty, courseLabel(r.student.course), r.student.group_name].filter(Boolean).join(" · ")}</div>
+              <div className="hint">{[r.student.university, r.student.faculty, courseText(r.student.course), r.student.group_name].filter(Boolean).join(" · ")}</div>
               <div className="hint">
                 {data.test.max_score ? <><b style={{ color: "var(--text)" }}>{r.score} / {r.max_score}</b>{r.percent != null ? ` (${r.percent}%)` : ""} · </> : null}
-                {when(r.submitted_at)}{r.late ? " · vaqtdan kech" : ""}
+                {when(r.submitted_at)}{r.late ? ` · ${t("p.tests.late")}` : ""}
               </div>
             </div>
           </div>
           <div className="row wrap" style={{ marginTop: 8 }}>
-            <button className="btn small" onClick={() => onOpen(r.attempt_id)}>{r.status === "submitted" ? "Baholash" : "Javoblarni ko'rish"}</button>
-            <button className="btn small ghost" onClick={() => setProfile(r.student.id)}>Profil</button>
-            <button className="btn small ghost" onClick={() => downloadCv(r.student.id)}>CV (PDF)</button>
+            <button className="btn small" onClick={() => onOpen(r.attempt_id)}>{r.status === "submitted" ? t("p.tests.grade") : t("p.tests.view_answers")}</button>
+            <button className="btn small ghost" onClick={() => setProfile(r.student.id)}>{t("p.common.profile")}</button>
+            <button className="btn small ghost" onClick={() => downloadCv(r.student.id)}>{t("p.common.cv_pdf")}</button>
           </div>
         </div>
       ))}
@@ -309,6 +315,7 @@ function Results({ id, onBack, onOpen }: { id: number; onBack: () => void; onOpe
 }
 
 function Grading({ id, onBack }: { id: number; onBack: () => void }) {
+  useLang();
   const [a, setA] = useState<AttemptDetail | null>(null);
   const [grades, setGrades] = useState<Record<number, { points: string; comment: string }>>({});
   const [feedback, setFeedback] = useState("");
@@ -333,7 +340,7 @@ function Grading({ id, onBack }: { id: number; onBack: () => void }) {
       const d = await api.employer.grade(a.id, list, feedback.trim());
       setA(d);
       haptic("success");
-      toast(d.status === "graded" ? "Baholandi. Talabaga bot orqali xabar boradi." : "Saqlandi. Hali baholanmagan javoblar bor.");
+      toast(d.status === "graded" ? t("p.tests.graded") : t("p.tests.saved_partial"));
     } catch (e) {
       setError(message(e));
     } finally {
@@ -343,20 +350,20 @@ function Grading({ id, onBack }: { id: number; onBack: () => void }) {
 
   return (
     <div>
-      <button className="btn small ghost" onClick={onBack}><Icon name="back" size={16} />Natijalar</button>
+      <button className="btn small ghost" onClick={onBack}><Icon name="back" size={16} />{t("p.tests.results")}</button>
       <ErrorText error={error} />
-      {!a && !error && <div className="hint">Yuklanmoqda…</div>}
+      {!a && !error && <div className="hint">{t("common.loading")}</div>}
       {a && (
         <>
           <h1>{a.student?.full_name}</h1>
-          <div className="hint">{a.title} · {ATTEMPT_STATUS[a.status]} · {a.score} / {a.max_score} ball{a.late ? " · vaqtdan kech topshirgan" : ""}</div>
+          <div className="hint">{a.title} · {attemptStatusLabel(a.status)} · {t("p.tests.score_of", { score: a.score, max: a.max_score })}{a.late ? ` · ${t("p.tests.late_submitted")}` : ""}</div>
           {a.items.map((item, n) => {
             const q = item.question;
             return (
               <div key={q.id} className="card" style={{ marginTop: 10 }}>
                 <div className="row between">
                   <b>{n + 1}. {q.text}</b>
-                  <span className="hint" style={{ whiteSpace: "nowrap" }}>{item.scored ? `${item.points ?? "?"} / ${q.points}` : "so'rovnoma"}</span>
+                  <span className="hint" style={{ whiteSpace: "nowrap" }}>{item.scored ? `${item.points ?? "?"} / ${q.points}` : t("p.tests.survey_lc")}</span>
                 </div>
                 {q.kind !== "text" && q.options.map((o, k) => {
                   const picked = item.choice.includes(k);
@@ -364,20 +371,20 @@ function Grading({ id, onBack }: { id: number; onBack: () => void }) {
                   return (
                     <div key={k} className={`answer-opt ${picked ? "on" : ""} ${picked && item.scored ? (right ? "right" : "wrong") : ""}`}>
                       <span>{picked ? "●" : "○"}</span><span className="grow">{o}</span>
-                      {right && item.scored && <span className="hint">to'g'ri javob</span>}
+                      {right && item.scored && <span className="hint">{t("p.tests.right_answer")}</span>}
                     </div>
                   );
                 })}
-                {q.kind === "text" && <p style={{ whiteSpace: "pre-line", marginBottom: 0 }}>{item.text || <span className="hint">Javob yozilmagan</span>}</p>}
+                {q.kind === "text" && <p style={{ whiteSpace: "pre-line", marginBottom: 0 }}>{item.text || <span className="hint">{t("p.tests.no_answer")}</span>}</p>}
                 {q.kind === "text" && item.scored && item.text && grades[q.id] && (
                   <div className="row" style={{ marginTop: 8, alignItems: "flex-end" }}>
                     <div style={{ width: 110 }}>
-                      <label>Ball (0–{q.points})</label>
+                      <label>{t("p.tests.points_range", { n: q.points })}</label>
                       <input value={grades[q.id].points} inputMode="decimal"
                              onChange={(e) => setGrades({ ...grades, [q.id]: { ...grades[q.id], points: e.target.value } })} />
                     </div>
                     <div className="grow">
-                      <label>Izoh</label>
+                      <label>{t("p.tests.comment")}</label>
                       <input value={grades[q.id].comment} maxLength={1000}
                              onChange={(e) => setGrades({ ...grades, [q.id]: { ...grades[q.id], comment: e.target.value } })} />
                     </div>
@@ -387,11 +394,11 @@ function Grading({ id, onBack }: { id: number; onBack: () => void }) {
             );
           })}
           <div className="card">
-            <label style={{ marginTop: 0 }}>Talabaga umumiy fikr</label>
-            <textarea value={feedback} maxLength={2000} placeholder="Masalan: suhbatga taklif qilamiz" onChange={(e) => setFeedback(e.target.value)} />
+            <label style={{ marginTop: 0 }}>{t("p.tests.feedback")}</label>
+            <textarea value={feedback} maxLength={2000} placeholder={t("p.tests.feedback_ph")} onChange={(e) => setFeedback(e.target.value)} />
           </div>
           <div className="save-bar">
-            <button className="btn" disabled={busy} onClick={save}>{busy ? "Saqlanmoqda…" : "Bahoni saqlash"}</button>
+            <button className="btn" disabled={busy} onClick={save}>{busy ? t("p.common.saving") : t("p.tests.save_grades")}</button>
           </div>
         </>
       )}

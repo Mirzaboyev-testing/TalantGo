@@ -9,6 +9,7 @@ from sqlalchemy import func, or_, select
 from ..models import (Application, ApplicationEvent, Company, ContactRequest, EmploymentOutcome, Job, JobRecommendation,
                       SavedJob, User)
 from ..schemas import ApplyIn, ContactAnswerIn, JobOut, MyApplicationOut
+from ..core import ratelimit
 from ..services import applications, inbox
 from ..services.applications import company_staff_ids
 from ..services.career import JOB_KIND_LABEL
@@ -135,6 +136,7 @@ async def my_applications_out(session: Session, apps: list[Application]) -> list
 async def apply(job_id: int, body: ApplyIn, user: CurrentUser, session: Session) -> MyApplicationOut:
     if user.account_type != "student":
         raise HTTPException(403, "Ariza faqat talaba akkauntidan topshiriladi")
+    ratelimit.limit(f"apply:{user.id}", 30, 24 * 3600, "Bir kunda 30 tadan ortiq ariza yuborib bo'lmaydi")
     if user.verification not in ("pending", "verified"):
         raise HTTPException(422, "Avval profilda talabalik ma'lumotlaringizni tasdiqlashga yuboring: "
                                  "ish beruvchilar faqat haqiqiy talabalarni ko'radi")
@@ -171,7 +173,8 @@ async def my_applications(user: CurrentUser, session: Session) -> list[MyApplica
 
 @router.post("/me/applications/{application_id}/withdraw", status_code=204)
 async def withdraw(application_id: int, user: CurrentUser, session: Session) -> None:
-    app = await session.get(Application, application_id)
+    app = (await session.execute(select(Application).where(Application.id == application_id)
+                                 .with_for_update(of=Application))).scalar_one_or_none()
     if app is None or app.user_id != user.id:
         raise HTTPException(404, "Ariza topilmadi")
     await applications.withdraw(session, app, user)

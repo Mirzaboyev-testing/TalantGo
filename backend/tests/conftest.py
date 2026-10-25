@@ -45,6 +45,7 @@ async def fresh_db():
     settings_store._cache.clear()
     ratelimit.reset()
     ranking._cache = None
+    ranking.forget_public()
     yield
 
 

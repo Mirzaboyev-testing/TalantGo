@@ -105,8 +105,9 @@ export function Ranking({ canEdit }: { canEdit: boolean }) {
             <tbody>
               {data.rows.map((r) => (
                 <tr key={r.university_id}>
-                  <td>{r.rank ?? "—"}</td><td>{r.short_name} · {r.name}</td><td>{r.students}</td><td>{r.employed}</td><td>{r.interned}</td>
-                  <td>{r.score == null ? <span className="hint">Ma'lumot yetarli emas</span> : r.score}</td>
+                  <td>{r.rank ?? "—"}</td><td>{r.short_name} · {r.name}</td><td>{r.students}</td><td>{r.employed ?? "—"}</td><td>{r.interned ?? "—"}</td>
+                  <td>{r.score == null ? <span className="hint">Ma'lumot yetarli emas</span> : r.score}
+                    {!!r.confirmed_only_by_university && <div className="hint">{r.confirmed_only_by_university} tasi faqat universitet tasdig'ida</div>}</td>
                 </tr>
               ))}
               {data.rows.length === 0 && <tr><td colSpan={6} className="hint">Tasdiqlangan talabasi bor universitet yo'q</td></tr>}

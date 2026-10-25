@@ -1,7 +1,11 @@
 import type { MsgKey } from "./uz";
+import { partner } from "./parts/partner";
+import { student } from "./parts/student";
 
 // English. Machine-assisted: review before a public launch.
 export const en: Record<MsgKey, string> = {
+  ...student.en,
+  ...partner.en,
   "common.loading": "Loading…",
   "common.close": "Close",
   "common.save": "Save",
@@ -451,6 +455,36 @@ export const en: Record<MsgKey, string> = {
   "report.text": "Details (optional)",
   "report.send": "Send",
   "report.sent": "Report sent. An admin will review it.",
+
+  "work.status.todo": "Not done",
+  "work.status.pending": "Under review",
+  "work.status.peer_verified": "Verified by peers",
+  "work.status.mentor_verified": "Verified by a mentor",
+  "work.status.rejected": "Returned",
+  "verification.none": "Not verified",
+  "verification.pending": "Waiting for verification",
+  "verification.verified": "Student status verified",
+  "verification.rejected": "Rejected",
+  "course.n": "Year {n}",
+  "course.master": "Master's",
+  "attempt.in_progress": "In progress",
+  "attempt.submitted": "Being graded",
+  "attempt.graded": "Graded",
+  "test.status.draft": "Draft",
+  "test.status.pending": "Under review",
+  "test.status.approved": "Published",
+  "test.status.rejected": "Returned",
+  "test.status.closed": "Closed",
+  "question.single": "Single answer",
+  "question.multi": "Several answers",
+  "question.text": "Written answer",
+  "jobstatus.pending": "Under review",
+  "jobstatus.approved": "Published",
+  "jobstatus.rejected": "Returned",
+  "jobstatus.closed": "Closed",
+
+  "rank.only_university": "{n} confirmed only by the university",
+  "rank.only_university_note": "Places confirmed only by the university itself are shown apart: no company or platform confirmed them.",
 
   "profile.visible.title": "Visible to companies",
   "profile.visible.hint": "When on, approved companies see you in the student list with your name and CV. When off, only companies you applied to can see you.",

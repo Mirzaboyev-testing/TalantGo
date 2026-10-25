@@ -64,13 +64,20 @@ async def university_stats(session: AsyncSession, university_id: int, cohort: in
     employed = sum(where[k] for k in JOB_KINDS)
     interned = where["internship"]
     placed = employed + interned
+    # placed students whose only confirmation is the university's own (shown next to the ranking score)
+    only_university = sum(1 for r in rows if best(r.id, True) is not None and all(
+        o.confirmed_by == "university" for o in outcomes[r.id] if o.confirmed))
     self_reported = sum(1 for r in rows if best(r.id, True) is None and best(r.id, False) is not None)
 
-    companies: dict[str, int] = {}
+    companies: dict[str, set[int]] = {}           # students per employer, each student once per company
+    platform: dict[str, set[int]] = {}            # the same, only companies registered on the platform
     for items in outcomes.values():
         for o in items:
             if o.confirmed:
-                companies[o.company_name] = companies.get(o.company_name, 0) + 1
+                companies.setdefault(o.company_name, set()).add(o.student_id)
+                if o.company_id:
+                    platform.setdefault(o.company_name, set()).add(o.student_id)
+    top = lambda d: [{"name": n, "count": len(s)} for n, s in sorted(d.items(), key=lambda x: (-len(x[1]), x[0]))[:10]]  # noqa: E731
     hires = sum(1 for items in outcomes.values() for o in items if o.source == "application")
     partners = await session.scalar(select(func.count()).select_from(Partnership).where(
         Partnership.university_id == university_id, Partnership.status == "accepted"))
@@ -88,7 +95,9 @@ async def university_stats(session: AsyncSession, university_id: int, cohort: in
         "where": where,
         "self_reported": self_reported,
         "hires_on_platform": hires,
-        "top_employers": [{"name": n, "count": c} for n, c in sorted(companies.items(), key=lambda x: (-x[1], x[0]))[:10]],
+        "top_employers": top(companies),
+        "top_platform_employers": top(platform),
+        "confirmed_only_by_university": only_university,
         "partners": partners,
         "cohorts": sorted({r.graduation_year for r in all_rows if r.graduation_year}, reverse=True),
     }

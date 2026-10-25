@@ -87,8 +87,13 @@ async def employer_move(session: AsyncSession, app: Application, employer: User,
 
 
 async def mark_viewed(session: AsyncSession, apps: list[Application], employer: User) -> None:
-    """Opening the candidate list counts as reviewing the new applications (no notice to the student)."""
-    changed = [app for app in apps if app.status == "new"]
+    """Opening the candidate list counts as reviewing the new applications (no notice to the student).
+    Re-read under a lock, so a withdrawal that landed meanwhile is not overwritten."""
+    ids = [app.id for app in apps if app.status == "new"]
+    if not ids:
+        return
+    changed = (await session.execute(select(Application).where(Application.id.in_(ids), Application.status == "new")
+                                     .with_for_update(of=Application).execution_options(populate_existing=True))).scalars().all()
     for app in changed:
         app.status = "viewed"
         record(session, app, "new", "viewed", "employer", employer.id)

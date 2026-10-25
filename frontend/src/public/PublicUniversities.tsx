@@ -21,8 +21,8 @@ export function UniversityFacts({ u }: { u: UniversityProfile }) {
       <div className="stats four">
         <div className="stat"><b>{u.students}</b><span>{t("uni.students")}</span></div>
         <div className="stat"><b>{u.placement_rate == null ? "–" : `${u.placement_rate}%`}</b><span>{t("uni.rate")}</span></div>
-        <div className="stat"><b>{u.employed}</b><span>{t("emp.working")}</span></div>
-        <div className="stat"><b>{u.interned}</b><span>{t("emp.interned")}</span></div>
+        <div className="stat"><b>{u.employed ?? "–"}</b><span>{t("emp.working")}</span></div>
+        <div className="stat"><b>{u.interned ?? "–"}</b><span>{t("emp.interned")}</span></div>
       </div>
       {u.placement_rate == null && <p className="hint">{t("uni.no_data")}</p>}
       <div className="grid-2">

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { absoluteUrl, api, type Me } from "../api";
+import { t, useLang } from "../i18n";
 import { haptic, openAfter, openLink } from "../tg";
 import { Avatar, ErrorText, focusField, isFullName, message, toast } from "../ui";
 import CareerProfile from "./CareerProfile";
@@ -8,6 +9,7 @@ import InviteCard from "./InviteCard";
 import LoginMethods from "./LoginMethods";
 
 export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; onSaved: (m: Me) => void; onChangeTrack: () => void }) {
+  useLang();
   const [form, setForm] = useState({
     full_name: me.full_name, group_name: me.group_name, bio: me.bio, headline: me.headline,
     github_url: me.github_url, linkedin_url: me.linkedin_url, goals: me.goals.join(", "),
@@ -32,7 +34,7 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
     const isCvToggle = "cv_public" in extra;
     if (!isCvToggle && (!nameOk || !headlineOk || !groupOk)) {
       setTried(true);
-      toast(!nameOk ? "Ism va familiyani to'liq yozing" : !headlineOk ? "Sohangizni yozing" : "Guruhingizni yozing", "error");
+      toast(!nameOk ? t("s.common.full_name_error") : !headlineOk ? t("s.profile.headline_needed") : t("s.profile.group_needed"), "error");
       focusField(!nameOk ? "pf-name" : !headlineOk ? "pf-headline" : "pf-group");
       return;
     }
@@ -44,7 +46,7 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
       onSaved(await api.updateMe(isCvToggle ? extra : { ...rest, full_name: rest.full_name.trim(), group_name: rest.group_name.trim().toUpperCase(), ...extra }));
       haptic("success");
       setSaved(true);
-      toast("cv_public" in extra ? (extra.cv_public ? "CV ochiq qilindi" : "CV yopildi") : "Ma'lumotlar saqlandi");
+      toast("cv_public" in extra ? (extra.cv_public ? t("s.profile.cv_opened") : t("s.profile.cv_closed")) : t("s.common.saved_ok"));
     } catch (e) {
       setError(message(e));
     } finally {
@@ -59,27 +61,27 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
         <div className="grow">
           <h1 style={{ margin: 0 }}>{me.full_name}</h1>
           {me.headline && <div style={{ fontWeight: 600 }}>{me.headline}</div>}
-          <div className="hint">{me.track?.title}{me.role !== "student" ? " · mentor" : ""}</div>
+          <div className="hint">{me.track?.title}{me.role !== "student" ? t("s.common.mentor_suffix") : ""}</div>
         </div>
       </div>
 
       <div className="card">
         <div className="row between">
-          <b>Mening CV'im</b>
-          <span className={`badge ${me.cv_public ? "peer_verified" : "todo"}`}>{me.cv_public ? "Ochiq" : "Yopiq"}</span>
+          <b>{t("s.profile.my_cv")}</b>
+          <span className={`badge ${me.cv_public ? "peer_verified" : "todo"}`}>{me.cv_public ? t("s.profile.open") : t("s.profile.closed")}</span>
         </div>
-        <p className="hint">CV'ga faqat tasdiqlangan ishlar tushadi. Ochiq qilsangiz, havolani ish beruvchiga yuborishingiz mumkin.</p>
+        <p className="hint">{t("s.profile.cv_hint")}</p>
         <div className="stack">
           <button className="btn" disabled={busy} onClick={() => save({ cv_public: !me.cv_public })}>
-            {me.cv_public ? "CV'ni yopish" : "CV'ni ochiq qilish"}
+            {me.cv_public ? t("s.profile.cv_close") : t("s.profile.cv_open")}
           </button>
           <button className="btn ghost" onClick={async () => {
             try { await openAfter(async () => absoluteUrl((await api.myCvLink()).url)); } catch (e) { toast(message(e), "error"); }
-          }}>CV'ni PDF qilib yuklab olish</button>
+          }}>{t("s.profile.cv_pdf")}</button>
           {me.cv_public && (
             <div className="row">
-              <button className="btn ghost" onClick={() => openLink(cvUrl)}>Ko'rish</button>
-              <button className="btn ghost" onClick={() => openLink(`https://t.me/share/url?url=${encodeURIComponent(cvUrl)}&text=${encodeURIComponent("Mening tasdiqlangan portfoliom")}`)}>Ulashish</button>
+              <button className="btn ghost" onClick={() => openLink(cvUrl)}>{t("s.profile.view")}</button>
+              <button className="btn ghost" onClick={() => openLink(`https://t.me/share/url?url=${encodeURIComponent(cvUrl)}&text=${encodeURIComponent(t("s.profile.share_text"))}`)}>{t("s.common.share")}</button>
             </div>
           )}
         </div>
@@ -88,37 +90,37 @@ export default function ProfileScreen({ me, onSaved, onChangeTrack }: { me: Me; 
       <InviteCard me={me} />
 
       <div className="card">
-        <b>Telefon</b>
+        <b>{t("s.profile.phone")}</b>
         <div style={{ marginTop: 8 }}><PhoneField me={me} onChanged={onSaved} /></div>
       </div>
 
       <CareerProfile me={me} onSaved={onSaved} />
 
       <div className="card">
-        <b>Asosiy ma'lumotlar</b>
-        <p className="hint" style={{ marginTop: 4 }}>* belgili maydonlar majburiy.</p>
-        <label htmlFor="pf-name">Ism va familiya *</label>
+        <b>{t("s.profile.basic")}</b>
+        <p className="hint" style={{ marginTop: 4 }}>{t("s.profile.required_note")}</p>
+        <label htmlFor="pf-name">{t("s.common.full_name")} *</label>
         <input id="pf-name" className={tried && !nameOk ? "invalid" : ""} value={form.full_name} maxLength={128}
-               autoComplete="name" placeholder="Masalan: Nodira Ergasheva" onChange={set("full_name")} />
-        {tried && !nameOk && <div className="field-error">Ism va familiyani to'liq yozing</div>}
-        <label htmlFor="pf-headline">Soha yoki sarlavha</label>
+               autoComplete="name" placeholder={t("s.common.name_ph")} onChange={set("full_name")} />
+        {tried && !nameOk && <div className="field-error">{t("s.common.full_name_error")}</div>}
+        <label htmlFor="pf-headline">{t("s.common.headline")}</label>
         <input id="pf-headline" className={tried && !headlineOk ? "invalid" : ""} value={form.headline} maxLength={120}
-               placeholder="Iqtisodiyot talabasi | Data Analytics" onChange={set("headline")} />
-        {tried && !headlineOk && <div className="field-error">Kamida 5 belgi yozing, masalan: Data analitik</div>}
-        <label htmlFor="pf-group">Guruh *</label>
+               placeholder={t("s.common.headline_ph")} onChange={set("headline")} />
+        {tried && !headlineOk && <div className="field-error">{t("s.profile.headline_error")}</div>}
+        <label htmlFor="pf-group">{t("s.common.group")} *</label>
         <input id="pf-group" className={tried && !groupOk ? "invalid" : ""} value={form.group_name} maxLength={40}
-               placeholder="Masalan: 114-25" onChange={set("group_name")} />
-        {tried && !groupOk && <div className="field-error">Guruhingizni yozing</div>}
-        <label>O'zim haqimda (ixtiyoriy)</label>
-        <textarea value={form.bio} maxLength={600} placeholder="2-3 gap: nimani o'rganyapsiz, qanday ishga qiziqasiz" onChange={set("bio")} />
-        <label>GitHub (ixtiyoriy)</label>
-        <input value={form.github_url} placeholder="github.com/ismingiz" inputMode="url" onChange={set("github_url")} />
-        <label>LinkedIn (ixtiyoriy)</label>
-        <input value={form.linkedin_url} placeholder="linkedin.com/in/ismingiz" inputMode="url" onChange={set("linkedin_url")} />
+               placeholder={t("s.profile.group_ph")} onChange={set("group_name")} />
+        {tried && !groupOk && <div className="field-error">{t("s.profile.group_needed")}</div>}
+        <label>{t("s.profile.bio_label")}</label>
+        <textarea value={form.bio} maxLength={600} placeholder={t("s.profile.bio_ph")} onChange={set("bio")} />
+        <label>{t("s.profile.github")}</label>
+        <input value={form.github_url} placeholder={t("s.common.github_ph")} inputMode="url" onChange={set("github_url")} />
+        <label>{t("s.profile.linkedin")}</label>
+        <input value={form.linkedin_url} placeholder={t("s.common.linkedin_ph")} inputMode="url" onChange={set("linkedin_url")} />
         <ErrorText error={error} />
         <div className="stack" style={{ marginTop: 12 }}>
-          <button className="btn" disabled={busy} onClick={() => save()}>{saved ? "Saqlandi" : "Saqlash"}</button>
-          <button className="btn ghost" onClick={onChangeTrack}>Yo'nalishni o'zgartirish</button>
+          <button className="btn" disabled={busy} onClick={() => save()}>{saved ? t("s.common.saved") : t("common.save")}</button>
+          <button className="btn ghost" onClick={onChangeTrack}>{t("s.profile.change_track")}</button>
         </div>
       </div>
       <LoginMethods me={me} onChanged={onSaved} />

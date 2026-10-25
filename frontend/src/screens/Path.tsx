@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, fileSize, uzDate, type Me, type Task, type TaskQuestion } from "../api";
+import { api, fileSize, type Me, type Task, type TaskQuestion } from "../api";
+import { formatDateTime, t, useLang } from "../i18n";
 import { haptic, openLink } from "../tg";
 import { ErrorText, FileList, ReviewList, Sheet, StatusBadge, message, toast } from "../ui";
 import InviteCard from "./InviteCard";
@@ -11,6 +12,7 @@ const MAX_FILES = 5;
 const MAX_MB = 10;
 
 export default function PathScreen({ me, onChanged, onChangeTrack }: { me: Me; onChanged: () => void; onChangeTrack: () => void }) {
+  useLang();
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [view, setView] = useState<"tasks" | "challenges">("tasks");
   const [openId, setOpenId] = useState<number | null>(null);
@@ -38,33 +40,34 @@ export default function PathScreen({ me, onChanged, onChangeTrack }: { me: Me; o
         <h1 className="row" style={{ gap: 12 }}><TrackMark title={me.track!.title} size={40} />{me.track!.title}</h1>
       </div>
       <div className="stats">
-        <div className="stat"><b>{me.points}</b><span>ball</span></div>
-        <div className="stat"><b>{me.streak > 0 && <Icon name="flame" size={18} />}{me.streak}</b><span>haftalik seriya</span></div>
-        <div className="stat"><b>#{me.rank_overall}</b><span>umumiy o'rin</span></div>
+        <div className="stat"><b>{me.points}</b><span>{t("home.points")}</span></div>
+        <div className="stat"><b>{me.streak > 0 && <Icon name="flame" size={18} />}{me.streak}</b><span>{t("home.streak")}</span></div>
+        <div className="stat"><b>#{me.rank_overall}</b><span>{t("home.rank")}</span></div>
       </div>
       {tasks && (
-        <p className="hint">{done} / {tasks.length} topshiriq tasdiqlangan · <a href="#" onClick={(e) => { e.preventDefault(); onChangeTrack(); }}>yo'lni o'zgartirish</a></p>
+        <p className="hint">{t("s.path.done", { done, total: tasks.length })} · <a href="#" onClick={(e) => { e.preventDefault(); onChangeTrack(); }}>{t("s.path.change_track")}</a></p>
       )}
       {me.invited_count < 3 && <InviteCard me={me} compact />}
       <div className="segmented">
-        <button className={view === "tasks" ? "on" : ""} onClick={() => setView("tasks")}>Topshiriqlar</button>
-        <button className={view === "challenges" ? "on" : ""} onClick={() => setView("challenges")}>Chellenjlar</button>
+        <button className={view === "tasks" ? "on" : ""} onClick={() => setView("tasks")}>{t("s.common.tasks")}</button>
+        <button className={view === "challenges" ? "on" : ""} onClick={() => setView("challenges")}>{t("s.common.challenges")}</button>
       </div>
       {view === "challenges" && <Challenges />}
       <ErrorText error={error} />
-      {view === "tasks" && !tasks && !error && <div className="hint">Yuklanmoqda…</div>}
-      {view === "tasks" && tasks?.map((t) => (
-        <div key={t.id} className="card tap" onClick={() => setOpenId(t.id)}>
+      {view === "tasks" && !tasks && !error && <div className="hint">{t("common.loading")}</div>}
+      {view === "tasks" && tasks?.map((task) => (
+        <div key={task.id} className="card tap" onClick={() => setOpenId(task.id)}>
           <div className="row between">
-            <span className="hint">{t.kind === "profile" ? "Start" : `${t.week}-hafta`} · {t.points} ball</span>
-            {t.kind === "profile" && t.submission ? <span className="badge peer_verified">Bajarildi</span>
-              : t.submission?.ai_state === "checking" ? <span className="badge pending">Tekshirilmoqda</span>
-              : <StatusBadge status={t.submission?.status ?? null} />}
+            <span className="hint">{task.kind === "profile" ? t("s.path.start") : t("s.path.week", { n: task.week })} · {t("s.common.points", { n: task.points })}</span>
+            {task.kind === "profile" && task.submission ? <span className="badge peer_verified">{t("s.path.done_badge")}</span>
+              : task.submission?.ai_state === "checking" ? <span className="badge pending">{t("s.path.checking")}</span>
+              : <StatusBadge status={task.submission?.status ?? null} />}
           </div>
-          <b>{t.title}</b>
-          {(t.mentor || t.questions > 0) && (
+          <b>{task.title}</b>
+          {(task.mentor || task.questions > 0) && (
             <div className="hint" style={{ marginTop: 2 }}>
-              {[t.mentor && `Mentor: ${t.mentor}`, t.questions > 0 && `${t.questions} ta savol`].filter(Boolean).join(" · ")}
+              {[task.mentor && t("s.path.mentor", { name: task.mentor }), task.questions > 0 && t("s.path.questions_n", { n: task.questions })]
+                .filter(Boolean).join(" · ")}
             </div>
           )}
         </div>
@@ -78,6 +81,7 @@ export default function PathScreen({ me, onChanged, onChangeTrack }: { me: Me; o
 }
 
 function TaskSheet({ task, me, onClose, onSubmitted }: { task: Task; me: Me; onClose: () => void; onSubmitted: () => Promise<void> | void }) {
+  useLang();
   const sub = task.submission;
   const isProfile = task.kind === "profile";
   const canSubmit = !isProfile && (!sub || sub.status === "rejected");
@@ -85,17 +89,17 @@ function TaskSheet({ task, me, onClose, onSubmitted }: { task: Task; me: Me; onC
   return (
     <Sheet onClose={onClose}>
       <div className="row between">
-        <span className="hint">{isProfile ? "Start" : `${task.week}-hafta`} · {task.points} ball</span>
-        {isProfile && sub ? <span className="badge peer_verified">Bajarildi</span>
-          : sub?.ai_state === "checking" ? <span className="badge pending">Tekshirilmoqda</span>
+        <span className="hint">{isProfile ? t("s.path.start") : t("s.path.week", { n: task.week })} · {t("s.common.points", { n: task.points })}</span>
+        {isProfile && sub ? <span className="badge peer_verified">{t("s.path.done_badge")}</span>
+          : sub?.ai_state === "checking" ? <span className="badge pending">{t("s.path.checking")}</span>
           : <StatusBadge status={sub?.status ?? null} />}
       </div>
       <h1>{task.title}</h1>
       <div className="card">
         <p style={{ marginTop: 0, whiteSpace: "pre-line" }}>{task.description}</p>
-        {!isProfile && task.proof_hint && <div className="hint"><b>Nima topshiriladi:</b> {task.proof_hint}</div>}
-        {!isProfile && task.criteria && <div className="hint" style={{ marginTop: 6, whiteSpace: "pre-line" }}><b>Qanday baholanadi:</b> {task.criteria}</div>}
-        {task.mentor && <div className="hint" style={{ marginTop: 6 }}>Mentor: {task.mentor}</div>}
+        {!isProfile && task.proof_hint && <div className="hint"><b>{t("s.common.proof")}</b> {task.proof_hint}</div>}
+        {!isProfile && task.criteria && <div className="hint" style={{ marginTop: 6, whiteSpace: "pre-line" }}><b>{t("s.common.criteria")}</b> {task.criteria}</div>}
+        {task.mentor && <div className="hint" style={{ marginTop: 6 }}>{t("s.path.mentor", { name: task.mentor })}</div>}
       </div>
 
       {isProfile && <ProfileTask me={me} task={task} onDone={onSubmitted} />}
@@ -103,25 +107,25 @@ function TaskSheet({ task, me, onClose, onSubmitted }: { task: Task; me: Me; onC
       {sub && !isProfile && (
         <div className="card">
           <div className="row between">
-            <b>Sizning ishingiz{sub.round > 1 ? ` (${sub.round}-urinish)` : ""}</b>
-            {sub.proof_url && <button className="btn small ghost" onClick={() => openLink(sub.proof_url)}>Havolani ochish</button>}
+            <b>{t("s.path.your_work")}{sub.round > 1 ? ` ${t("s.path.attempt", { n: sub.round })}` : ""}</b>
+            {sub.proof_url && <button className="btn small ghost" onClick={() => openLink(sub.proof_url)}>{t("s.common.open_link")}</button>}
           </div>
           {sub.note && <div style={{ marginTop: 6 }}>«{sub.note}»</div>}
           <FileList files={sub.files} />
           {sub.ai_state === "checking" && (
             <div className="notice ai-note" style={{ marginTop: 10 }}>
               <span className="spinner" />
-              <span>AI yordamchi ishingizni tekshirmoqda. Odatda bir daqiqadan kam vaqt oladi, natija shu yerda chiqadi.</span>
+              <span>{t("s.path.ai_checking")}</span>
             </div>
           )}
           {sub.ai_state === "unsure" && (
-            <p className="notice" style={{ marginTop: 10 }}>AI aniq baho bera olmadi: {sub.ai_note} Ishingizni tengdosh yoki mentor tekshiradi.</p>
+            <p className="notice" style={{ marginTop: 10 }}>{t("s.path.ai_unsure", { note: sub.ai_note })}</p>
           )}
           {sub.ai_state === "failed" && sub.status === "pending" && (
-            <p className="hint" style={{ marginTop: 10 }}>Avtomatik tekshiruv hozir ishlamadi. Ishingizni tengdosh yoki mentor tekshiradi.</p>
+            <p className="hint" style={{ marginTop: 10 }}>{t("s.path.ai_failed")}</p>
           )}
           {sub.reviews.length === 0 && sub.ai_state !== "checking" && sub.status === "pending" && (
-            <p className="hint">Hali baholanmagan. Tasdiqlansa ball beriladi.</p>
+            <p className="hint">{t("s.path.not_reviewed")}</p>
           )}
           <ReviewList reviews={sub.reviews} />
         </div>
@@ -129,12 +133,13 @@ function TaskSheet({ task, me, onClose, onSubmitted }: { task: Task; me: Me; onC
 
       {canSubmit && <SubmitForm task={task} resubmit={!!sub} onSubmitted={onSubmitted} />}
       {!isProfile && <Questions task={task} />}
-      <button className="btn ghost" onClick={onClose}>Yopish</button>
+      <button className="btn ghost" onClick={onClose}>{t("common.close")}</button>
     </Sheet>
   );
 }
 
 function SubmitForm({ task, resubmit, onSubmitted }: { task: Task; resubmit: boolean; onSubmitted: () => Promise<void> | void }) {
+  useLang();
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
   const [picked, setPicked] = useState<File[]>([]);
@@ -146,8 +151,8 @@ function SubmitForm({ task, resubmit, onSubmitted }: { task: Task; resubmit: boo
     if (!list) return;
     const chosen = [...picked];
     for (const f of Array.from(list)) {
-      if (f.size > MAX_MB * 1024 * 1024) { setError(`«${f.name}» ${MAX_MB} MB dan katta`); continue; }
-      if (chosen.length >= MAX_FILES) { setError(`Ko'pi bilan ${MAX_FILES} ta fayl`); break; }
+      if (f.size > MAX_MB * 1024 * 1024) { setError(t("s.path.too_big", { name: f.name, mb: MAX_MB })); continue; }
+      if (chosen.length >= MAX_FILES) { setError(t("s.path.max_files", { n: MAX_FILES })); break; }
       chosen.push(f);
     }
     setPicked(chosen);
@@ -161,16 +166,16 @@ function SubmitForm({ task, resubmit, onSubmitted }: { task: Task; resubmit: boo
     try {
       const ids: number[] = [];
       for (const [i, f] of picked.entries()) {
-        setBusy(`Fayl yuklanmoqda ${i + 1}/${picked.length}…`);
+        setBusy(t("s.path.uploading", { i: i + 1, n: picked.length }));
         // a retry after a failed submit reuses what was already uploaded instead of uploading it again
         let id = uploaded.current.get(f);
         if (id === undefined) { id = (await api.upload(f)).id; uploaded.current.set(f, id); }
         ids.push(id);
       }
-      setBusy("Yuborilmoqda…");
+      setBusy(t("s.common.sending"));
       await api.submit(task.id, url.trim(), note.trim(), ids);
       haptic("success");
-      toast("Ish topshirildi");
+      toast(t("s.path.submitted"));
       setPicked([]); setUrl(""); setNote("");
       uploaded.current.clear();
       await onSubmitted();
@@ -185,13 +190,13 @@ function SubmitForm({ task, resubmit, onSubmitted }: { task: Task; resubmit: boo
   const ready = picked.length > 0 || url.trim().length >= 4;
   return (
     <div className="card">
-      <b>{resubmit ? "Qayta topshirish" : "Topshirish"}</b>
-      <label>Fayllar</label>
+      <b>{resubmit ? t("s.path.resubmit") : t("s.common.submit")}</b>
+      <label>{t("s.path.files")}</label>
       <input ref={input} type="file" multiple hidden onChange={(e) => pick(e.target.files)} />
       <div className="dropzone" role="button" onClick={() => input.current?.click()}>
         <Icon name="upload" size={20} />
-        Fayl tanlash
-        <span className="hint">Excel, Word, PDF, PowerPoint, rasm, kod, CSV va boshqalar. {MAX_FILES} tagacha, har biri {MAX_MB} MB gacha</span>
+        {t("s.path.choose_file")}
+        <span className="hint">{t("s.path.file_hint", { n: MAX_FILES, mb: MAX_MB })}</span>
       </div>
       {picked.length > 0 && (
         <div className="files">
@@ -200,25 +205,26 @@ function SubmitForm({ task, resubmit, onSubmitted }: { task: Task; resubmit: boo
               <span className="file-ext">{(f.name.split(".").pop() ?? "").slice(0, 4).toUpperCase()}</span>
               <span className="file-name">{f.name}</span>
               <span className="hint">{fileSize(f.size)}</span>
-              <button className="file-remove" aria-label="Olib tashlash" onClick={() => setPicked(picked.filter((_, j) => j !== i))}>
+              <button className="file-remove" aria-label={t("s.path.remove_file")} onClick={() => setPicked(picked.filter((_, j) => j !== i))}>
                 <Icon name="close" size={16} />
               </button>
             </div>
           ))}
         </div>
       )}
-      <label>Havola (ixtiyoriy): GitHub, Google Drive, Power BI</label>
-      <input value={url} placeholder="github.com/ismingiz/loyiha" inputMode="url" onChange={(e) => setUrl(e.target.value)} />
-      <label>Izoh (ixtiyoriy)</label>
-      <textarea value={note} maxLength={1000} placeholder="Nima qildingiz, nimaga e'tibor berish kerak?" onChange={(e) => setNote(e.target.value)} />
-      <p className="hint">Fayl yoki havoladan kamida bittasi kerak.</p>
+      <label>{t("s.path.link_label")}</label>
+      <input value={url} placeholder={t("s.path.link_ph")} inputMode="url" onChange={(e) => setUrl(e.target.value)} />
+      <label>{t("s.common.note_optional")}</label>
+      <textarea value={note} maxLength={1000} placeholder={t("s.path.note_ph")} onChange={(e) => setNote(e.target.value)} />
+      <p className="hint">{t("s.path.need_one")}</p>
       <ErrorText error={error} />
-      <button className="btn" disabled={!!busy || !ready} onClick={send}>{busy || "Yuborish"}</button>
+      <button className="btn" disabled={!!busy || !ready} onClick={send}>{busy || t("s.common.send")}</button>
     </div>
   );
 }
 
 function Questions({ task }: { task: Task }) {
+  useLang();
   const [items, setItems] = useState<TaskQuestion[] | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -231,7 +237,7 @@ function Questions({ task }: { task: Task }) {
     try {
       await api.ask(task.id, text.trim());
       setText("");
-      toast("Savolingiz mentorga yuborildi");
+      toast(t("s.path.q_sent"));
       await load();
     } catch (e) {
       setError(message(e));
@@ -242,21 +248,21 @@ function Questions({ task }: { task: Task }) {
 
   return (
     <div className="card">
-      <b className="row" style={{ gap: 8 }}><Icon name="help" size={18} />Mentorga savol</b>
-      <p className="hint" style={{ marginTop: 4 }}>Tushunarsiz joy bo'lsa so'rang. Javob shu yerda chiqadi va botga xabar keladi. Savol-javoblarni yo'nalishdagi hamma ko'radi.</p>
+      <b className="row" style={{ gap: 8 }}><Icon name="help" size={18} />{t("s.path.q_title")}</b>
+      <p className="hint" style={{ marginTop: 4 }}>{t("s.path.q_hint")}</p>
       {items?.map((q) => (
         <div key={q.id} className="qa">
-          <div className="hint">{q.is_mine ? "Siz" : q.author} · {uzDate(q.created_at)}</div>
+          <div className="hint">{q.is_mine ? t("s.path.you") : q.author} · {formatDateTime(q.created_at, false)}</div>
           <div>{q.text}</div>
           {q.answer
-            ? <div className="qa-answer"><div className="hint" style={{ color: "inherit" }}>{q.answered_by ?? "Mentor"}</div>{q.answer}</div>
-            : <div className="hint" style={{ marginTop: 4 }}>Javob kutilmoqda</div>}
+            ? <div className="qa-answer"><div className="hint" style={{ color: "inherit" }}>{q.answered_by ?? t("nav.student.mentor")}</div>{q.answer}</div>
+            : <div className="hint" style={{ marginTop: 4 }}>{t("s.path.q_waiting")}</div>}
         </div>
       ))}
-      <textarea value={text} maxLength={1000} placeholder="Savolingiz: masalan, ma'lumotni qayerdan olish kerak?" onChange={(e) => setText(e.target.value)} />
+      <textarea value={text} maxLength={1000} placeholder={t("s.path.q_ph")} onChange={(e) => setText(e.target.value)} />
       <ErrorText error={error} />
       <button className="btn small" style={{ marginTop: 8 }} disabled={busy || text.trim().length < 5} onClick={ask}>
-        {busy ? "Yuborilmoqda…" : "Savol yuborish"}
+        {busy ? t("s.common.sending") : t("s.path.q_send")}
       </button>
     </div>
   );

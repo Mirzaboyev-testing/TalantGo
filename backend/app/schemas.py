@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
 
@@ -409,7 +409,10 @@ class ApplicationPatch(BaseModel):
     @classmethod
     def _aware(cls, v: datetime | None) -> datetime | None:
         # a time typed without a zone is Tashkent time
-        return v.replace(tzinfo=ZoneInfo("Asia/Tashkent")) if v is not None and v.tzinfo is None else v
+        v = v.replace(tzinfo=ZoneInfo("Asia/Tashkent")) if v is not None and v.tzinfo is None else v
+        if v is not None and v < datetime.now(ZoneInfo("Asia/Tashkent")) - timedelta(days=1):
+            raise ValueError("Suhbat vaqti o'tib ketgan")
+        return v
 
 
 class ContactIn(BaseModel):

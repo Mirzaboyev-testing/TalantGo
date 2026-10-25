@@ -90,7 +90,7 @@ async def public_ranking(session: Session) -> dict:
     config = await ranking.get_config(session)
     snap = await ranking.latest(session)
     return {"published": ranking.snapshot_out(snap) if snap else None,
-            "live": {"method": _method(config), "rows": await ranking.compute(session, config),
+            "live": {"method": _method(config), "rows": await ranking.public_rows(session, config),
                      "computed_at": datetime.now(UTC)}}
 
 

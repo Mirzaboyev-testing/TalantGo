@@ -44,16 +44,19 @@ export function RankingPage() {
                   <td data-label={t("rank.col.place")}><b>{r.rank ?? "–"}</b></td>
                   <td data-label={t("rank.col.university")}>{r.short_name} · {r.name}</td>
                   <td data-label={t("rank.col.students")}>{r.students}</td>
-                  <td data-label={t("rank.col.employed")}>{r.employed}</td>
-                  <td data-label={t("rank.col.interned")}>{r.interned}</td>
-                  <td data-label={t("rank.col.score")}>{r.score == null ? <span className="hint">{t("rank.no_score")}</span> : <b className="match">{r.score}</b>}</td>
+                  <td data-label={t("rank.col.employed")}>{r.employed ?? "–"}</td>
+                  <td data-label={t("rank.col.interned")}>{r.interned ?? "–"}</td>
+                  <td data-label={t("rank.col.score")}>
+                    {r.score == null ? <span className="hint">{t("rank.no_score")}</span> : <b className="match">{r.score}</b>}
+                    {!!r.confirmed_only_by_university && <div className="hint" style={{ fontSize: 12 }}>{t("rank.only_university", { n: r.confirmed_only_by_university })}</div>}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-      <p className="hint">{t("rank.method", { w: method.internship_weight, n: method.min_sample })}</p>
+      <p className="hint">{t("rank.method", { w: method.internship_weight, n: method.min_sample })} {t("rank.only_university_note")}</p>
     </div>
   );
 }

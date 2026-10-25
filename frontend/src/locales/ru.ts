@@ -1,7 +1,11 @@
 import type { MsgKey } from "./uz";
+import { partner } from "./parts/partner";
+import { student } from "./parts/student";
 
 // Russian. Machine-assisted: a native speaker should review before a public launch.
 export const ru: Record<MsgKey, string> = {
+  ...student.ru,
+  ...partner.ru,
   "common.loading": "Загрузка…",
   "common.close": "Закрыть",
   "common.save": "Сохранить",
@@ -451,6 +455,36 @@ export const ru: Record<MsgKey, string> = {
   "report.text": "Подробнее (необязательно)",
   "report.send": "Отправить",
   "report.sent": "Жалоба отправлена. Администратор рассмотрит.",
+
+  "work.status.todo": "Не выполнено",
+  "work.status.pending": "На проверке",
+  "work.status.peer_verified": "Подтвердили сокурсники",
+  "work.status.mentor_verified": "Подтвердил ментор",
+  "work.status.rejected": "Возвращено",
+  "verification.none": "Не подтверждено",
+  "verification.pending": "Ожидает подтверждения",
+  "verification.verified": "Статус студента подтверждён",
+  "verification.rejected": "Отклонено",
+  "course.n": "{n} курс",
+  "course.master": "Магистратура",
+  "attempt.in_progress": "В процессе",
+  "attempt.submitted": "Оценивается",
+  "attempt.graded": "Оценено",
+  "test.status.draft": "Черновик",
+  "test.status.pending": "На проверке",
+  "test.status.approved": "Опубликован",
+  "test.status.rejected": "Возвращён",
+  "test.status.closed": "Закрыт",
+  "question.single": "Один ответ",
+  "question.multi": "Несколько ответов",
+  "question.text": "Письменный ответ",
+  "jobstatus.pending": "На проверке",
+  "jobstatus.approved": "Опубликована",
+  "jobstatus.rejected": "Возвращена",
+  "jobstatus.closed": "Закрыта",
+
+  "rank.only_university": "из них {n} подтвердил только университет",
+  "rank.only_university_note": "Места, подтверждённые только самим университетом, показаны отдельно: их не подтвердила компания или платформа.",
 
   "profile.visible.title": "Виден компаниям",
   "profile.visible.hint": "Если включено, подтверждённые компании видят вас в списке студентов с именем и резюме. Если выключить, вас увидят только компании, куда вы подали заявку.",

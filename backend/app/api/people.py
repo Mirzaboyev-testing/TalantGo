@@ -174,6 +174,8 @@ async def peers(user: CurrentUser, session: Session,
 @router.get("/leaderboard", response_model=LeaderboardOut)
 async def leaderboard(user: CurrentUser, session: Session,
                       scope: Literal["all", "track", "group", "university"] = "all") -> LeaderboardOut:
+    if user.account_type != "student":
+        raise HTTPException(403, "Reyting talabalar uchun")
     # only students who agreed to the processing of their data are shown to others
     query = select(User).where(User.is_blocked.is_(False), User.account_type == "student", User.consent_at.isnot(None))
     rank_query = select(func.count()).select_from(User).where(User.points > user.points, User.is_blocked.is_(False),

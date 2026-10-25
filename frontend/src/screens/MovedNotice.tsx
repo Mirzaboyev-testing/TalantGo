@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { t, useLang } from "../i18n";
 import { openLink } from "../tg";
 
 /** Shown when the app was opened from the old bot: the account works as before, but the new bot is
@@ -8,6 +9,7 @@ export function announceMove(username: string): void {
 }
 
 export default function MovedNotice() {
+  useLang();
   const [username, setUsername] = useState<string | null>(null);
   useEffect(() => {
     const onMove = (e: Event) => setUsername((e as CustomEvent<string>).detail);
@@ -15,19 +17,19 @@ export default function MovedNotice() {
     return () => window.removeEventListener("cf-moved", onMove);
   }, []);
   if (!username) return null;
+  const [before, after] = t("s.moved.text").split("{bot}");
 
   return (
     <div className="sheet-back" style={{ zIndex: 40, alignItems: "center", padding: 16 }} onClick={() => setUsername(null)}>
       <div className="card" style={{ maxWidth: 420, width: "100%", margin: 0 }} onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ marginTop: 0 }}>Botimiz yangilandi</h2>
+        <h2 style={{ marginTop: 0 }}>{t("s.moved.title")}</h2>
         <p>
-          TalantGo endi <b>@{username}</b> botida ishlaydi. Akkauntingiz, ballaringiz va CV'ingiz joyida, hech narsa
-          yo'qolmaydi.
+          {before}<b>@{username}</b>{after}
         </p>
-        <p className="hint">Yangi botni ochib «Start» ni bosing: xabarlar va eslatmalar endi o'sha yerdan keladi.</p>
+        <p className="hint">{t("s.moved.hint")}</p>
         <div className="stack" style={{ marginTop: 12 }}>
-          <button className="btn" onClick={() => openLink(`https://t.me/${username}?start=moved`)}>Yangi botni ochish</button>
-          <button className="btn ghost" onClick={() => setUsername(null)}>Keyinroq</button>
+          <button className="btn" onClick={() => openLink(`https://t.me/${username}?start=moved`)}>{t("s.moved.open")}</button>
+          <button className="btn ghost" onClick={() => setUsername(null)}>{t("s.moved.later")}</button>
         </div>
       </div>
     </div>

@@ -1,9 +1,11 @@
 import { useCallback, useState, type ReactNode } from "react";
+import { t, useLang } from "./i18n";
 import { focusField, toast } from "./ui";
 
 /** The red star after the label of a required field. */
 export function Req() {
-  return <span className="req" aria-label="majburiy">*</span>;
+  useLang();
+  return <span className="req" aria-label={t("s.form.required")}>*</span>;
 }
 
 /** A labelled form field: red star when required, red message under it when it was left empty. */
@@ -34,7 +36,7 @@ export function useRequired() {
     setErrors(next);
     const first = checks.find((c) => !c[1]);
     if (!first) return true;
-    toast(`To'ldirilmagan: ${first[2]}`, "error");
+    toast(t("s.form.missing", { field: first[2] }), "error");
     setTimeout(() => focusField(first[0]), 30);        // after the red marks render
     return false;
   }, []);

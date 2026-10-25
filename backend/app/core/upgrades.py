@@ -14,6 +14,14 @@ def _states(values: tuple[str, ...]) -> str:
     return ", ".join(repr(v) for v in values)
 
 
+def _replace_check(table: str, name: str, column: str, values: tuple[str, ...], newest: str) -> str:
+    """Drops and re-adds a CHECK constraint only if its definition does not mention `newest` yet."""
+    return (f"DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = '{name}' "
+            f"AND pg_get_constraintdef(oid) LIKE '%''{newest}''%') THEN "
+            f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {name}; "
+            f"ALTER TABLE {table} ADD CONSTRAINT {name} CHECK ({column} IN ({_states(values)})); END IF; END $$")
+
+
 STATEMENTS = [
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_owner boolean NOT NULL DEFAULT false",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked boolean NOT NULL DEFAULT false",
@@ -87,9 +95,8 @@ STATEMENTS = [
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS visible_to_employers boolean NOT NULL DEFAULT true",
     "ALTER TABLE applications ADD COLUMN IF NOT EXISTS interview_at timestamptz",
     "ALTER TABLE applications ADD COLUMN IF NOT EXISTS interview_place varchar(300) NOT NULL DEFAULT ''",
-    # a CHECK constraint cannot be altered in place: drop and re-create it with the longer state list
-    "ALTER TABLE applications DROP CONSTRAINT IF EXISTS application_status_valid",
-    f"ALTER TABLE applications ADD CONSTRAINT application_status_valid CHECK (status IN ({_states(APPLICATION_STATES)}))",
+    # a CHECK constraint cannot be altered in place: re-create it, but only when it lacks the newest value
+    _replace_check("applications", "application_status_valid", "status", APPLICATION_STATES, "withdrawn"),
     # company tasks reuse challenges (2026-10-26)
     "ALTER TABLE challenges ADD COLUMN IF NOT EXISTS company_id integer REFERENCES companies(id) ON DELETE CASCADE",
     "ALTER TABLE challenges ADD COLUMN IF NOT EXISTS audience varchar(12) NOT NULL DEFAULT 'all'",
@@ -101,8 +108,7 @@ STATEMENTS = [
     "ALTER TABLE universities ADD COLUMN IF NOT EXISTS website varchar(256) NOT NULL DEFAULT ''",
     "ALTER TABLE universities ADD COLUMN IF NOT EXISTS region varchar(60) NOT NULL DEFAULT ''",
     # admin roles: moderator and analyst (2026-10-26)
-    "ALTER TABLE admin_accounts DROP CONSTRAINT IF EXISTS admin_role_valid",
-    f"ALTER TABLE admin_accounts ADD CONSTRAINT admin_role_valid CHECK (role IN ({_states(ADMIN_ROLES)}))",
+    _replace_check("admin_accounts", "admin_role_valid", "role", ADMIN_ROLES, "analyst"),
 ]
 
 

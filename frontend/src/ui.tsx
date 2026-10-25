@@ -1,5 +1,7 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
-import { STATUS_LABEL, absoluteUrl, fileSize, type Review, type Status, type SubmittedFile } from "./api";
+import { absoluteUrl, fileSize, type Review, type Status, type SubmittedFile } from "./api";
+import { t, useLang } from "./i18n";
+import { workStatusLabel } from "./labels";
 import { insideTelegram, openLink } from "./tg";
 
 export function Avatar({ name, url }: { name: string; url?: string | null }) {
@@ -7,7 +9,8 @@ export function Avatar({ name, url }: { name: string; url?: string | null }) {
 }
 
 export function StatusBadge({ status }: { status: Status | null }) {
-  return <span className={`badge ${status ?? "todo"}`}>{status ? STATUS_LABEL[status] : "Bajarilmagan"}</span>;
+  useLang();
+  return <span className={`badge ${status ?? "todo"}`}>{workStatusLabel(status)}</span>;
 }
 
 export function Sheet({ onClose, children }: { onClose: () => void; children: ReactNode }) {
@@ -23,12 +26,13 @@ export function ErrorText({ error }: { error: string }) {
 }
 
 export function FileList({ files }: { files: SubmittedFile[] }) {
+  useLang();
   if (!files.length) return null;
   return (
     <div className="files">
       {files.map((f) => (
         <button key={f.id} type="button" className="file-chip" onClick={() => openLink(absoluteUrl(f.url))}>
-          <span className="file-ext">{(f.name.split(".").pop() ?? "").slice(0, 4).toUpperCase() || "FAYL"}</span>
+          <span className="file-ext">{(f.name.split(".").pop() ?? "").slice(0, 4).toUpperCase() || t("s.ui.file")}</span>
           <span className="file-name">{f.name}</span>
           <span className="hint">{fileSize(f.size)}</span>
         </button>
@@ -37,14 +41,15 @@ export function FileList({ files }: { files: SubmittedFile[] }) {
   );
 }
 
-const REVIEWER_KIND: Record<Review["kind"], string> = { peer: "", mentor: " · mentor", ai: "" };
+const reviewerKind = (kind: Review["kind"]) => (kind === "mentor" ? t("s.common.mentor_suffix") : "");
 
 export function ReviewList({ reviews }: { reviews: Review[] }) {
+  useLang();
   return (
     <>
       {reviews.map((r, i) => (
         <div key={i} className={`review ${r.approved ? "yes" : "no"}`}>
-          <div className="hint">{r.reviewer_name}{REVIEWER_KIND[r.kind]} · {r.approved ? "tasdiqladi" : "qaytardi"}</div>
+          <div className="hint">{r.reviewer_name}{reviewerKind(r.kind)} · {r.approved ? t("s.ui.approved") : t("s.ui.returned")}</div>
           <div>{r.comment}</div>
         </div>
       ))}
@@ -52,7 +57,7 @@ export function ReviewList({ reviews }: { reviews: Review[] }) {
   );
 }
 
-export const message = (e: unknown) => (e instanceof Error ? e.message : "Kutilmagan xato");
+export const message = (e: unknown) => (e instanceof Error ? e.message : t("s.ui.unexpected_error"));
 
 /** A short confirmation at the bottom of the screen ("Ma'lumotlar saqlandi"). Call from anywhere. */
 export function toast(text: string, kind: "ok" | "error" = "ok"): void {
@@ -104,6 +109,7 @@ export function focusField(id: string): void {
 
 /** A small "Chiqish" button for the website (inside Telegram there is nothing to sign out of). */
 export function LogoutLink({ onLogout }: { onLogout?: () => void }) {
+  useLang();
   if (insideTelegram || !onLogout) return null;
-  return <div style={{ textAlign: "right" }}><button className="btn small ghost" onClick={onLogout}>Chiqish</button></div>;
+  return <div style={{ textAlign: "right" }}><button className="btn small ghost" onClick={onLogout}>{t("shell.logout")}</button></div>;
 }

@@ -14,8 +14,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from ..core import ratelimit
-from ..models import (Application, Company, ContactRequest, EmploymentOutcome, Job, JobRecommendation, Partnership,
-                      Status, Submission, University, User)
+from ..models import (Application, AuditLog, Company, ContactRequest, EmploymentOutcome, Job, JobRecommendation,
+                      Partnership, Status, Submission, University, User)
 from ..schemas import ReviewDecisionIn, Url
 from ..services import inbox, outcomes, partnerships
 from ..services.applications import company_staff_ids
@@ -69,12 +69,16 @@ async def dashboard(user: Staff, session: Session) -> dict:
                                        .order_by(base.c.course))).all()
     by_faculty = (await session.execute(select(base.c.faculty, func.count()).group_by(base.c.faculty)
                                         .order_by(func.count().desc()).limit(15))).all()
+    # hires: verified students only, each student once (the employment page has the full picture)
     hires = (await session.execute(
         select(User.full_name, Job.title, Company.name, Application.updated_at).select_from(Application)
         .join(User, User.id == Application.user_id).join(Job, Job.id == Application.job_id)
         .join(Company, Company.id == Job.company_id)
-        .where(User.university_id == uni, Application.status == "hired")
+        .where(User.university_id == uni, User.verification == "verified", Application.status == "hired")
         .order_by(Application.updated_at.desc()).limit(20))).all()
+    hired_students = await session.scalar(
+        select(func.count(func.distinct(Application.user_id))).join(User, User.id == Application.user_id)
+        .where(User.university_id == uni, User.verification == "verified", Application.status == "hired"))
     pct = lambda n: round(100 * n / total) if total else 0  # noqa: E731
     stats = {
         "verified": await count(base.c.verification == "verified"),
@@ -90,7 +94,7 @@ async def dashboard(user: Staff, session: Session) -> dict:
         **stats,
         "percent": {k: pct(v) for k, v in stats.items()},
         "applications": apps_by_status,
-        "hired": apps_by_status.get("hired", 0),
+        "hired": hired_students,
         "companies_by_applications": [{"name": n, "count": c} for n, c in companies],
         "companies_by_contacts": [{"name": n, "count": c} for n, c in contacts],
         "by_course": [{"course": c, "count": n} for c, n in by_course],
@@ -131,6 +135,8 @@ async def verify(student_id: int, body: ReviewDecisionIn, user: Staff, session: 
     if student is None or student.university_id != user.staff_university_id:
         raise HTTPException(404, "Bu talaba sizning universitetingizda emas")
     verifier = f"{user.staff_university.short_name} karyera markazi"
+    session.add(AuditLog(actor=f"{user.full_name} ({user.staff_university.short_name})"[:160],
+                         action="student.verify" if body.approve else "student.reject", target=student.full_name[:200]))
     await decide_verification(session, student, body.approve, verifier, body.note.strip())
     return {"verification": student.verification}
 
@@ -175,6 +181,8 @@ async def profile(user: Staff) -> dict:
 
 @router.patch("/profile")
 async def edit_profile(body: ProfileIn, user: Staff, session: Session) -> dict:
+    if body.website and len(body.website) > 256:
+        raise HTTPException(422, "Veb-sayt manzili juda uzun")
     uni = await session.get(University, user.staff_university_id)
     for field, value in body.model_dump(exclude_unset=True, exclude_none=True).items():
         setattr(uni, field, value.strip())
@@ -201,7 +209,9 @@ def outcome_out(o: EmploymentOutcome) -> dict:
 
 @router.get("/outcomes")
 async def outcomes_list(user: Staff, session: Session, confirmed: bool | None = None) -> list[dict]:
-    query = select(EmploymentOutcome).where(EmploymentOutcome.university_id == user.staff_university_id)
+    query = (select(EmploymentOutcome).join(User, User.id == EmploymentOutcome.student_id)
+             .where(EmploymentOutcome.university_id == user.staff_university_id,
+                    User.university_id == user.staff_university_id))          # not students who moved away
     if confirmed is not None:
         query = query.where(EmploymentOutcome.confirmed.is_(confirmed))
     rows = (await session.execute(query.order_by(EmploymentOutcome.confirmed, EmploymentOutcome.created_at.desc())
@@ -218,11 +228,13 @@ class OutcomeDecisionIn(BaseModel):
 async def decide_outcome(outcome_id: int, body: OutcomeDecisionIn, user: Staff, session: Session) -> dict:
     """The career centre confirms a student's own report (it then counts) or removes a wrong one."""
     o = await session.get(EmploymentOutcome, outcome_id)
-    if o is None or o.university_id != user.staff_university_id:
+    if o is None or o.university_id != user.staff_university_id or o.student.university_id != user.staff_university_id:
         raise HTTPException(404, "Yozuv topilmadi")
     if o.source == "application":
         raise HTTPException(409, "Platformadagi ishga olish allaqachon tasdiqlangan")
     student_id, company = o.student_id, o.company_name
+    session.add(AuditLog(actor=f"{user.full_name} ({user.staff_university.short_name})"[:160], action="outcome.confirm"
+                         if body.confirm else "outcome.remove", target=f"{o.student.full_name}: {company}"[:200]))
     if body.confirm:
         o.confirmed, o.confirmed_by = True, "university"
     else:
@@ -252,6 +264,7 @@ async def request_partner(body: PartnerRequestIn, user: Staff, session: Session)
     company = await session.get(Company, body.company_id)
     if company is None or company.status != "approved":
         raise HTTPException(404, "Kompaniya topilmadi")
+    ratelimit.limit(f"partner-ask:u{user.staff_university_id}", 20, 24 * 3600, "Bir kunda 20 tadan ortiq taklif yuborib bo'lmaydi")
     p = await partnerships.open_request(session, company, user.staff_university, "university", body.message)
     await inbox.push(session, await company_staff_ids(session, company.id), "partnership_request",
                      f"{user.staff_university.name} hamkorlik taklif qildi.", link="/korxona/universitetlar",

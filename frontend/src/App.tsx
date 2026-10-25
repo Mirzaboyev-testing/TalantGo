@@ -110,7 +110,7 @@ export default function App() {
     }
   }, [auth.kind, path]);
 
-  if (auth.kind === "loading") return <div className="center hint">Yuklanmoqda…</div>;
+  if (auth.kind === "loading") return <div className="center hint">{t("common.loading")}</div>;
   const devLogin = (id: number, name: string) => signIn(() => api.devLogin(id, name));
   if (auth.kind === "login") {
     if (insideTelegram) return <WebLogin dev={auth.dev} onSignIn={signIn} onDev={devLogin} />;
@@ -119,9 +119,9 @@ export default function App() {
   if (auth.kind === "error") {
     return (
       <div className="center"><div className="stack" style={{ maxWidth: 360 }}>
-        <h1>Kirib bo'lmadi</h1>
+        <h1>{t("s.app.login_failed")}</h1>
         <p className="error">{auth.text}</p>
-        <button className="btn ghost" onClick={() => (insideTelegram ? window.location.reload() : logout())}>Qayta urinish</button>
+        <button className="btn ghost" onClick={() => (insideTelegram ? window.location.reload() : logout())}>{t("s.app.retry")}</button>
       </div></div>
     );
   }
@@ -165,7 +165,7 @@ export default function App() {
       <>
       {ai}
       <div className="app">
-        {isNew && <button className="btn small ghost" onClick={() => setChosenStudent(false)}>Orqaga</button>}
+        {isNew && <button className="btn small ghost" onClick={() => setChosenStudent(false)}>{t("common.back")}</button>}
         <Onboarding me={me} onMe={setMe} onDone={async () => { await refreshMe(); setChangingTrack(false); navigate(isNew ? "/talaba/profil" : "/talaba"); }}
                     onCancel={changingTrack && me.signup_missing.length === 0 ? () => setChangingTrack(false) : undefined} />
       </div>
@@ -179,6 +179,7 @@ export default function App() {
 function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
   me: Me; refreshMe: () => Promise<void>; setMe: (m: Me) => void; onChangeTrack: () => void; onLogout: () => void;
 }) {
+  useLang();
   const [tab, setTab, segment] = useRouteTab<Tab>("/talaba", STUDENT_TABS, "home", { arizalar: "jobs", saqlangan: "jobs" });
   const [unread, setUnread] = useState(0);
   const [communityView, setCommunityView] = useState<"groups" | "peers" | "top">("groups");
@@ -205,7 +206,7 @@ function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
     { id: "community", icon: "users", label: t("nav.student.community"), badge: unread },
     { id: "profile", icon: "user", label: t("nav.student.profile") },
   ];
-  const subtitle = me.role === "student" ? me.headline || me.track?.title.split(":")[0] : "Mentor";
+  const subtitle = me.role === "student" ? me.headline || me.track?.title.split(":")[0] : t("nav.student.mentor");
 
   return (
     <Shell tabs={tabs} active={tab} onChange={setTab} onLogout={onLogout}
@@ -220,9 +221,9 @@ function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
       {tab === "community" && (
         <>
           <div className="segmented">
-            <button className={communityView === "groups" ? "on" : ""} onClick={() => setCommunityView("groups")}>Guruhlar</button>
-            <button className={communityView === "peers" ? "on" : ""} onClick={() => setCommunityView("peers")}>Tengdoshlar</button>
-            <button className={communityView === "top" ? "on" : ""} onClick={() => setCommunityView("top")}>Reyting</button>
+            <button className={communityView === "groups" ? "on" : ""} onClick={() => setCommunityView("groups")}>{t("s.community.groups")}</button>
+            <button className={communityView === "peers" ? "on" : ""} onClick={() => setCommunityView("peers")}>{t("s.community.peers")}</button>
+            <button className={communityView === "top" ? "on" : ""} onClick={() => setCommunityView("top")}>{t("s.community.top")}</button>
           </div>
           {communityView === "groups" && <Groups joinCode={joinCode} onUnreadChange={refreshUnread} />}
           {communityView === "peers" && <PeersScreen me={me} />}

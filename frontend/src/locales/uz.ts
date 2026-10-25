@@ -1,5 +1,9 @@
+import { partner } from "./parts/partner";
+import { student } from "./parts/student";
 // Uzbek (Latin): the source language. Every key here must exist in ru.ts and en.ts.
 export const uz = {
+  ...student.uz,
+  ...partner.uz,
   "common.loading": "Yuklanmoqda…",
   "common.close": "Yopish",
   "common.save": "Saqlash",
@@ -449,6 +453,36 @@ export const uz = {
   "report.text": "Batafsil (ixtiyoriy)",
   "report.send": "Yuborish",
   "report.sent": "Shikoyat yuborildi. Admin ko'rib chiqadi.",
+
+  "work.status.todo": "Bajarilmagan",
+  "work.status.pending": "Tekshiruvda",
+  "work.status.peer_verified": "Tengdoshlar tasdiqladi",
+  "work.status.mentor_verified": "Mentor tasdiqladi",
+  "work.status.rejected": "Qaytarildi",
+  "verification.none": "Tasdiqlanmagan",
+  "verification.pending": "Tasdiqlash kutilmoqda",
+  "verification.verified": "Talabalik tasdiqlangan",
+  "verification.rejected": "Rad etilgan",
+  "course.n": "{n}-kurs",
+  "course.master": "Magistratura",
+  "attempt.in_progress": "Ishlanmoqda",
+  "attempt.submitted": "Baholanmoqda",
+  "attempt.graded": "Baholangan",
+  "test.status.draft": "Qoralama",
+  "test.status.pending": "Tekshiruvda",
+  "test.status.approved": "E'lon qilingan",
+  "test.status.rejected": "Qaytarilgan",
+  "test.status.closed": "Yopilgan",
+  "question.single": "Bitta javob",
+  "question.multi": "Bir nechta javob",
+  "question.text": "Yozma javob",
+  "jobstatus.pending": "Tekshiruvda",
+  "jobstatus.approved": "E'lon qilingan",
+  "jobstatus.rejected": "Qaytarilgan",
+  "jobstatus.closed": "Yopilgan",
+
+  "rank.only_university": "{n} tasi faqat universitet tasdig'ida",
+  "rank.only_university_note": "Universitet o'zi tasdiqlagan ish joylari alohida ko'rsatiladi: ularni korxona yoki platforma tasdiqlamagan.",
 
   "profile.visible.title": "Korxonalarga ko'rinaman",
   "profile.visible.hint": "Yoqilsa, tasdiqlangan korxonalar sizni talabalar ro'yxatida ismingiz va CV'ingiz bilan ko'radi. O'chirsangiz, faqat siz ariza bergan korxonalar ko'radi.",

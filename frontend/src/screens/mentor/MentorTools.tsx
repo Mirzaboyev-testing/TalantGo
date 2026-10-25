@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, daysLeft, uzDate, type Challenge, type ChallengeEntry, type MentorTask, type TaskQuestion, type Track } from "../../api";
+import { api, daysLeft, type Challenge, type ChallengeEntry, type MentorTask, type TaskQuestion, type Track } from "../../api";
+import { formatDateTime, t, useLang } from "../../i18n";
 import { Icon } from "../../icons";
 import { haptic, openLink } from "../../tg";
 import { ErrorText, message, toast } from "../../ui";
 
-const STATE_LABEL = { upcoming: ["Boshlanmagan", "todo"], active: ["Davom etmoqda", "peer_verified"], finished: ["Tugagan", "todo"] } as const;
+const STATE_BADGE = { upcoming: "todo", active: "peer_verified", finished: "todo" } as const;
+const stateLabel = (s: Challenge["state"]) => t(`p.mentor.state.${s}`);
+const day = (iso: string) => formatDateTime(iso, false);
 const today = () => new Date().toISOString().slice(0, 10);
 const inDays = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 
@@ -17,6 +20,7 @@ function useTracks() {
 // --------------------------------------------------------------------------- tasks
 
 export function MentorTasks() {
+  useLang();
   const tracks = useTracks();
   const [rows, setRows] = useState<MentorTask[] | null>(null);
   const [editing, setEditing] = useState<MentorTask | "new" | null>(null);
@@ -29,22 +33,22 @@ export function MentorTasks() {
   return (
     <div>
       <div className="page-head">
-        <p className="hint" style={{ margin: 0 }}>Siz qo'shgan topshiriq tanlangan yo'nalishdagi talabalarga darhol ko'rinadi va ularga bot orqali xabar boradi.</p>
-        <button className="btn small" onClick={() => setEditing("new")}><Icon name="plus" size={16} />Topshiriq</button>
+        <p className="hint" style={{ margin: 0 }}>{t("p.mentor.tasks_hint")}</p>
+        <button className="btn small" onClick={() => setEditing("new")}><Icon name="plus" size={16} />{t("p.mentor.task")}</button>
       </div>
       <ErrorText error={error} />
-      {rows?.length === 0 && <div className="card hint">Hali topshiriq qo'shmagansiz.</div>}
-      {rows?.map((t) => (
-        <div key={t.id} className="card" style={t.is_active ? undefined : { opacity: 0.55 }}>
+      {rows?.length === 0 && <div className="card hint">{t("p.mentor.tasks_empty")}</div>}
+      {rows?.map((task) => (
+        <div key={task.id} className="card" style={task.is_active ? undefined : { opacity: 0.55 }}>
           <div className="row between">
-            <span className="hint">{t.track.split(":")[0]} · {t.week}-hafta · {t.points} ball</span>
-            {!t.is_active && <span className="badge todo">Yashirilgan</span>}
+            <span className="hint">{task.track.split(":")[0]} · {t("p.mentor.week_n", { n: task.week })} · {t("p.common.points_n", { n: task.points })}</span>
+            {!task.is_active && <span className="badge todo">{t("p.mentor.hidden")}</span>}
           </div>
-          <b>{t.title}</b>
+          <b>{task.title}</b>
           <div className="row wrap" style={{ marginTop: 10 }}>
-            <button className="btn small ghost" onClick={() => setEditing(t)}>Tahrirlash</button>
-            <button className="btn small ghost" onClick={() => api.mentor.editTask(t.id, { is_active: !t.is_active }).then(load, (e) => setError(message(e)))}>
-              {t.is_active ? "Yashirish" : "Qayta ko'rsatish"}
+            <button className="btn small ghost" onClick={() => setEditing(task)}>{t("p.common.edit")}</button>
+            <button className="btn small ghost" onClick={() => api.mentor.editTask(task.id, { is_active: !task.is_active }).then(load, (e) => setError(message(e)))}>
+              {task.is_active ? t("p.mentor.hide") : t("p.mentor.show")}
             </button>
           </div>
         </div>
@@ -54,6 +58,7 @@ export function MentorTasks() {
 }
 
 function TaskForm({ tracks, task, onDone }: { tracks: Track[]; task?: MentorTask; onDone: () => void }) {
+  useLang();
   const [f, setF] = useState({
     track_id: task ? String(task.track_id) : "", week: String(task?.week ?? 1), title: task?.title ?? "",
     description: task?.description ?? "", proof_hint: task?.proof_hint ?? "", criteria: task?.criteria ?? "",
@@ -80,32 +85,32 @@ function TaskForm({ tracks, task, onDone }: { tracks: Track[]; task?: MentorTask
 
   return (
     <div>
-      <button className="btn small ghost" onClick={onDone}><Icon name="back" size={16} />Orqaga</button>
-      <h2>{task ? "Topshiriqni tahrirlash" : "Yangi topshiriq"}</h2>
+      <button className="btn small ghost" onClick={onDone}><Icon name="back" size={16} />{t("common.back")}</button>
+      <h2>{task ? t("p.mentor.task_edit") : t("p.mentor.task_new")}</h2>
       <div className="card">
-        <label>Yo'nalish</label>
+        <label>{t("p.mentor.f.track")}</label>
         <select value={f.track_id} disabled={!!task} onChange={set("track_id")}>
-          <option value="">Tanlang…</option>
-          {tracks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+          <option value="">{t("task.f.choose")}</option>
+          {tracks.map((tr) => <option key={tr.id} value={tr.id}>{tr.title}</option>)}
         </select>
         <div className="row">
-          <div className="grow"><label>Hafta</label><input value={f.week} inputMode="numeric" onChange={set("week")} /></div>
-          <div className="grow"><label>Ball (1–50)</label><input value={f.points} inputMode="numeric" onChange={set("points")} /></div>
+          <div className="grow"><label>{t("p.mentor.f.week")}</label><input value={f.week} inputMode="numeric" onChange={set("week")} /></div>
+          <div className="grow"><label>{t("p.mentor.f.points")}</label><input value={f.points} inputMode="numeric" onChange={set("points")} /></div>
         </div>
-        <label>Nomi</label>
-        <input value={f.title} maxLength={160} placeholder="Masalan: SQL bilan savdo tahlili" onChange={set("title")} />
-        <label>Nima qilish kerak</label>
-        <textarea value={f.description} maxLength={4000} placeholder="Vazifa, ma'lumot manbasi, natija qanday bo'lishi kerak" onChange={set("description")} />
-        <label>Isbot sifatida nima topshiriladi</label>
-        <input value={f.proof_hint} maxLength={500} placeholder="Masalan: Excel fayl (formulalar bilan) yoki GitHub havolasi" onChange={set("proof_hint")} />
-        <div className="hint">Talaba fayl (Excel, Word, PDF, rasm, kod) yuklashi yoki havola berishi mumkin.</div>
-        <label>Qanday baholanadi (ixtiyoriy)</label>
+        <label>{t("p.common.title")}</label>
+        <input value={f.title} maxLength={160} placeholder={t("p.mentor.f.title_ph")} onChange={set("title")} />
+        <label>{t("p.mentor.f.desc")}</label>
+        <textarea value={f.description} maxLength={4000} placeholder={t("p.mentor.f.desc_ph")} onChange={set("description")} />
+        <label>{t("p.mentor.f.proof")}</label>
+        <input value={f.proof_hint} maxLength={500} placeholder={t("p.mentor.f.proof_ph")} onChange={set("proof_hint")} />
+        <div className="hint">{t("p.mentor.f.proof_hint")}</div>
+        <label>{t("p.mentor.f.criteria")}</label>
         <textarea value={f.criteria} maxLength={2000} onChange={set("criteria")}
-                  placeholder={"Masalan:\n- SUMIF va pivot jadval ishlatilgan\n- 3 ta xulosa yozilgan\n- grafik bor"} />
-        <div className="hint">Talabalar, tekshiruvchilar va AI yordamchi shu mezonlarga qarab baholaydi. Aniq yozsangiz, AI aniqroq tekshiradi.</div>
+                  placeholder={t("p.mentor.f.criteria_ph")} />
+        <div className="hint">{t("p.mentor.f.criteria_hint")}</div>
         <ErrorText error={error} />
         <button className="btn" style={{ marginTop: 14 }} disabled={busy || !f.track_id || f.title.trim().length < 3 || f.description.trim().length < 10} onClick={save}>
-          {busy ? "Saqlanmoqda…" : task ? "Saqlash" : "Qo'shish"}
+          {busy ? t("p.common.saving") : task ? t("common.save") : t("p.mentor.add")}
         </button>
       </div>
     </div>
@@ -115,6 +120,7 @@ function TaskForm({ tracks, task, onDone }: { tracks: Track[]; task?: MentorTask
 // --------------------------------------------------------------------------- questions
 
 export function MentorQuestions({ onCount }: { onCount: (n: number) => void }) {
+  useLang();
   const [openOnly, setOpenOnly] = useState(true);
   const [rows, setRows] = useState<TaskQuestion[] | null>(null);
   const [error, setError] = useState("");
@@ -127,20 +133,21 @@ export function MentorQuestions({ onCount }: { onCount: (n: number) => void }) {
   return (
     <div>
       <div className="page-head">
-        <p className="hint" style={{ margin: 0 }}>Talabalarning topshiriqlar bo'yicha savollari. Javobingiz savol bergan talabaga botda keladi va yo'nalishdagi hammaga ko'rinadi.</p>
+        <p className="hint" style={{ margin: 0 }}>{t("p.mentor.questions_hint")}</p>
       </div>
       <div className="segmented">
-        <button className={openOnly ? "on" : ""} onClick={() => setOpenOnly(true)}>Javob kutayotgan</button>
-        <button className={!openOnly ? "on" : ""} onClick={() => setOpenOnly(false)}>Hammasi</button>
+        <button className={openOnly ? "on" : ""} onClick={() => setOpenOnly(true)}>{t("p.mentor.q_open")}</button>
+        <button className={!openOnly ? "on" : ""} onClick={() => setOpenOnly(false)}>{t("p.mentor.q_all")}</button>
       </div>
       <ErrorText error={error} />
-      {rows?.length === 0 && <div className="card hint">{openOnly ? "Javob kutayotgan savol yo'q." : "Hali savol yo'q."}</div>}
+      {rows?.length === 0 && <div className="card hint">{openOnly ? t("p.mentor.q_open_empty") : t("p.mentor.q_empty")}</div>}
       {rows?.map((q) => <QuestionCard key={q.id} q={q} onAnswered={load} />)}
     </div>
   );
 }
 
 function QuestionCard({ q, onAnswered }: { q: TaskQuestion; onAnswered: () => void }) {
+  useLang();
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -150,7 +157,7 @@ function QuestionCard({ q, onAnswered }: { q: TaskQuestion; onAnswered: () => vo
     try {
       await api.mentor.answer(q.id, answer.trim());
       haptic("success");
-      toast("Javob yuborildi");
+      toast(t("p.mentor.answer_sent"));
       onAnswered();
     } catch (e) {
       setError(message(e));
@@ -162,15 +169,15 @@ function QuestionCard({ q, onAnswered }: { q: TaskQuestion; onAnswered: () => vo
     <div className="card">
       <div className="hint">{q.track.split(":")[0]} · {q.task_title}</div>
       <div style={{ marginTop: 4 }}><b>{q.author}:</b> {q.text}</div>
-      <div className="hint">{uzDate(q.created_at)}</div>
+      <div className="hint">{day(q.created_at)}</div>
       {q.answer ? (
-        <div className="qa-answer"><div className="hint" style={{ color: "inherit" }}>{q.answered_by ?? "Mentor"}</div>{q.answer}</div>
+        <div className="qa-answer"><div className="hint" style={{ color: "inherit" }}>{q.answered_by ?? t("p.mentor.mentor")}</div>{q.answer}</div>
       ) : (
         <>
-          <textarea value={answer} maxLength={2000} placeholder="Javobingiz" onChange={(e) => setAnswer(e.target.value)} />
+          <textarea value={answer} maxLength={2000} placeholder={t("p.mentor.answer_ph")} onChange={(e) => setAnswer(e.target.value)} />
           <ErrorText error={error} />
           <button className="btn small" style={{ marginTop: 8 }} disabled={busy || answer.trim().length < 2} onClick={send}>
-            {busy ? "Yuborilmoqda…" : "Javob berish"}
+            {busy ? t("p.common.sending") : t("p.mentor.answer")}
           </button>
         </>
       )}
@@ -181,6 +188,7 @@ function QuestionCard({ q, onAnswered }: { q: TaskQuestion; onAnswered: () => vo
 // --------------------------------------------------------------------------- challenges
 
 export function MentorChallenges() {
+  useLang();
   const tracks = useTracks();
   const [rows, setRows] = useState<Challenge[] | null>(null);
   const [mode, setMode] = useState<"list" | "new" | number>("list");
@@ -197,20 +205,20 @@ export function MentorChallenges() {
   return (
     <div>
       <div className="page-head">
-        <p className="hint" style={{ margin: 0 }}>Muddatli musobaqa: talabalar ish topshiradi, siz baholab g'oliblarni belgilaysiz. 1–3-o'rinlar +30, +20, +10 bonus ball oladi.</p>
-        <button className="btn small" onClick={() => setMode("new")}><Icon name="plus" size={16} />Chellenj</button>
+        <p className="hint" style={{ margin: 0 }}>{t("p.mentor.challenges_hint")}</p>
+        <button className="btn small" onClick={() => setMode("new")}><Icon name="plus" size={16} />{t("p.mentor.challenge")}</button>
       </div>
       <ErrorText error={error} />
-      {rows?.length === 0 && <div className="card hint">Hali chellenj tashkil qilmagansiz.</div>}
+      {rows?.length === 0 && <div className="card hint">{t("p.mentor.challenges_empty")}</div>}
       {rows?.map((c) => (
         <div key={c.id} className="card tap" onClick={() => setMode(c.id)}>
           <div className="row between">
-            <span className="hint">{c.track?.split(":")[0] ?? "Barcha yo'nalishlar"} · {uzDate(c.ends_at)} gacha</span>
-            <span className={`badge ${STATE_LABEL[c.state][1]}`}>{STATE_LABEL[c.state][0]}</span>
+            <span className="hint">{c.track?.split(":")[0] ?? t("p.common.all_tracks")} · {t("task.until", { date: day(c.ends_at) })}</span>
+            <span className={`badge ${STATE_BADGE[c.state]}`}>{stateLabel(c.state)}</span>
           </div>
           <b>{c.title}</b>
           <div className="hint" style={{ marginTop: 4 }}>
-            {c.entries} ishtirokchi{c.to_review ? ` · ${c.to_review} ta baholanmagan` : ""}{c.prize ? ` · sovrin: ${c.prize}` : ""}
+            {t("p.mentor.entries_n", { n: c.entries })}{c.to_review ? ` · ${t("task.to_review", { n: c.to_review })}` : ""}{c.prize ? ` · ${t("p.mentor.prize", { prize: c.prize })}` : ""}
           </div>
         </div>
       ))}
@@ -219,6 +227,7 @@ export function MentorChallenges() {
 }
 
 function ChallengeForm({ tracks, onDone }: { tracks: Track[]; onDone: () => void }) {
+  useLang();
   const [f, setF] = useState({ title: "", description: "", track_id: "", prize: "", points: "20", starts_on: today(), ends_on: inDays(7) });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -241,32 +250,32 @@ function ChallengeForm({ tracks, onDone }: { tracks: Track[]; onDone: () => void
 
   return (
     <div>
-      <button className="btn small ghost" onClick={onDone}><Icon name="back" size={16} />Orqaga</button>
-      <h2>Yangi chellenj</h2>
+      <button className="btn small ghost" onClick={onDone}><Icon name="back" size={16} />{t("common.back")}</button>
+      <h2>{t("p.mentor.challenge_new")}</h2>
       <div className="card">
-        <label>Nomi</label>
-        <input value={f.title} maxLength={160} placeholder="Masalan: Power BI haftaligi" onChange={set("title")} />
-        <label>Vazifa va baholash mezoni</label>
+        <label>{t("p.common.title")}</label>
+        <input value={f.title} maxLength={160} placeholder={t("p.mentor.c.title_ph")} onChange={set("title")} />
+        <label>{t("p.mentor.c.desc")}</label>
         <textarea value={f.description} maxLength={5000} rows={5}
-                  placeholder="Nima qilish kerak, qanday ma'lumot bilan, nimaga qarab baholanadi" onChange={set("description")} />
-        <label>Kimlar uchun</label>
+                  placeholder={t("p.mentor.c.desc_ph")} onChange={set("description")} />
+        <label>{t("p.mentor.c.for")}</label>
         <select value={f.track_id} onChange={set("track_id")}>
-          <option value="">Barcha yo'nalishlar</option>
-          {tracks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+          <option value="">{t("p.common.all_tracks")}</option>
+          {tracks.map((tr) => <option key={tr.id} value={tr.id}>{tr.title}</option>)}
         </select>
         <div className="row">
-          <div className="grow"><label>Boshlanishi</label><input type="date" value={f.starts_on} min={today()} onChange={set("starts_on")} /></div>
-          <div className="grow"><label>Tugashi</label><input type="date" value={f.ends_on} min={f.starts_on} onChange={set("ends_on")} /></div>
+          <div className="grow"><label>{t("p.mentor.c.starts")}</label><input type="date" value={f.starts_on} min={today()} onChange={set("starts_on")} /></div>
+          <div className="grow"><label>{t("p.mentor.c.ends")}</label><input type="date" value={f.ends_on} min={f.starts_on} onChange={set("ends_on")} /></div>
         </div>
         <div className="row">
-          <div className="grow"><label>Qatnashib qabul qilingan ish uchun ball</label><input value={f.points} inputMode="numeric" onChange={set("points")} /></div>
+          <div className="grow"><label>{t("p.mentor.c.points")}</label><input value={f.points} inputMode="numeric" onChange={set("points")} /></div>
         </div>
-        <label>Sovrin (ixtiyoriy)</label>
-        <input value={f.prize} maxLength={300} placeholder="Masalan: hamkor kompaniyada amaliyot suhbati" onChange={set("prize")} />
-        <p className="hint">E'lon qilinishi bilan tanlangan talabalarga bot orqali xabar boradi.</p>
+        <label>{t("p.mentor.c.prize")}</label>
+        <input value={f.prize} maxLength={300} placeholder={t("p.mentor.c.prize_ph")} onChange={set("prize")} />
+        <p className="hint">{t("p.mentor.c.notify")}</p>
         <ErrorText error={error} />
         <button className="btn" style={{ marginTop: 10 }} disabled={busy || f.title.trim().length < 3 || f.description.trim().length < 20} onClick={save}>
-          {busy ? "E'lon qilinmoqda…" : "E'lon qilish"}
+          {busy ? t("p.mentor.c.publishing") : t("p.mentor.c.publish")}
         </button>
       </div>
     </div>
@@ -274,6 +283,7 @@ function ChallengeForm({ tracks, onDone }: { tracks: Track[]; onDone: () => void
 }
 
 function Entries({ challenge, onBack }: { challenge: Challenge; onBack: () => void }) {
+  useLang();
   const [rows, setRows] = useState<ChallengeEntry[] | null>(null);
   const [error, setError] = useState("");
   const load = useCallback(() => api.mentor.entries(challenge.id).then(setRows, (e) => setError(message(e))), [challenge.id]);
@@ -281,20 +291,21 @@ function Entries({ challenge, onBack }: { challenge: Challenge; onBack: () => vo
 
   return (
     <div>
-      <button className="btn small ghost" onClick={onBack}><Icon name="back" size={16} />Chellenjlar</button>
+      <button className="btn small ghost" onClick={onBack}><Icon name="back" size={16} />{t("p.mentor.challenges")}</button>
       <h2>{challenge.title}</h2>
       <p className="hint">
-        {STATE_LABEL[challenge.state][0]} · {uzDate(challenge.ends_at)} gacha
-        {challenge.state === "active" ? ` (${daysLeft(challenge.ends_at)} kun qoldi)` : ""} · har bir qabul qilingan ish {challenge.points} ball
+        {stateLabel(challenge.state)} · {t("task.until", { date: day(challenge.ends_at) })}
+        {challenge.state === "active" ? ` (${t("p.mentor.days_left", { n: daysLeft(challenge.ends_at) })})` : ""} · {t("task.e.points_each", { n: challenge.points })}
       </p>
       <ErrorText error={error} />
-      {rows?.length === 0 && <div className="card hint">Hali hech kim ish topshirmagan.</div>}
+      {rows?.length === 0 && <div className="card hint">{t("task.e.empty")}</div>}
       {rows?.map((e) => <EntryCard key={e.id} challengeId={challenge.id} entry={e} onDone={load} />)}
     </div>
   );
 }
 
 function EntryCard({ challengeId, entry, onDone }: { challengeId: number; entry: ChallengeEntry; onDone: () => void }) {
+  useLang();
   const [score, setScore] = useState(entry.score != null ? String(entry.score) : "");
   const [place, setPlace] = useState<string>(entry.place ? String(entry.place) : "");
   const [comment, setComment] = useState(entry.comment);
@@ -317,30 +328,32 @@ function EntryCard({ challengeId, entry, onDone }: { challengeId: number; entry:
     }
   }
 
-  const badge = entry.status === "accepted" ? ["Qabul qilingan", "peer_verified"] : entry.status === "rejected" ? ["Rad etilgan", "rejected"] : ["Baholanmagan", "pending"];
+  const badge = entry.status === "accepted" ? [t("task.e.accepted"), "peer_verified"] : entry.status === "rejected" ? [t("task.e.rejected"), "rejected"]
+    : [t("task.e.pending"), "pending"];
   return (
     <div className="card">
       <div className="row between">
         <b>{entry.student}</b>
-        <span className={`badge ${badge[1]}`}>{entry.place ? `${entry.place}-o'rin` : badge[0]}</span>
+        <span className={`badge ${badge[1]}`}>{entry.place ? t("p.mentor.place_n", { n: entry.place }) : badge[0]}</span>
       </div>
       <div className="hint">{[entry.university, entry.username && `@${entry.username}`].filter(Boolean).join(" · ")}</div>
       {entry.note && <p style={{ margin: "8px 0 0", whiteSpace: "pre-line" }}>{entry.note}</p>}
-      <button className="btn small ghost" style={{ marginTop: 10 }} onClick={() => openLink(entry.proof_url)}>Ishni ochish</button>
+      <button className="btn small ghost" style={{ marginTop: 10 }} onClick={() => openLink(entry.proof_url)}>{t("task.e.open")}</button>
       <div className="row" style={{ marginTop: 10 }}>
-        <div className="grow"><label>Baho (0–100)</label><input value={score} inputMode="numeric" onChange={(e) => setScore(e.target.value.replace(/\D/g, "").slice(0, 3))} /></div>
-        <div className="grow"><label>O'rin</label>
+        <div className="grow"><label>{t("task.e.score")}</label><input value={score} inputMode="numeric" onChange={(e) => setScore(e.target.value.replace(/\D/g, "").slice(0, 3))} /></div>
+        <div className="grow"><label>{t("task.e.place")}</label>
           <select value={place} onChange={(e) => setPlace(e.target.value)}>
-            <option value="">—</option><option value="1">1-o'rin (+30)</option><option value="2">2-o'rin (+20)</option><option value="3">3-o'rin (+10)</option>
+            <option value="">—</option><option value="1">{t("task.e.place_n", { n: 1, bonus: 30 })}</option>
+            <option value="2">{t("task.e.place_n", { n: 2, bonus: 20 })}</option><option value="3">{t("task.e.place_n", { n: 3, bonus: 10 })}</option>
           </select>
         </div>
       </div>
-      <label>Izoh talabaga</label>
-      <input value={comment} maxLength={1000} placeholder="Nima yaxshi, nimani yaxshilash mumkin" onChange={(e) => setComment(e.target.value)} />
+      <label>{t("p.mentor.e.comment")}</label>
+      <input value={comment} maxLength={1000} placeholder={t("p.mentor.e.comment_ph")} onChange={(e) => setComment(e.target.value)} />
       <ErrorText error={error} />
       <div className="row" style={{ marginTop: 10 }}>
-        <button className="btn bad" disabled={busy} onClick={() => decide(false)}>Rad etish</button>
-        <button className="btn ok" disabled={busy} onClick={() => decide(true)}>Qabul qilish</button>
+        <button className="btn bad" disabled={busy} onClick={() => decide(false)}>{t("task.e.reject")}</button>
+        <button className="btn ok" disabled={busy} onClick={() => decide(true)}>{t("task.e.accept")}</button>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, type Applicant, type TalentCard } from "../../api";
 import { formatDateTime, t, useLang } from "../../i18n";
+import { courseText } from "../../labels";
 import { actionLabel, EMPLOYER_MOVES, statusBadge, statusLabel } from "../../pipeline";
 import { ask, haptic, openLink } from "../../tg";
 import { ErrorText, Sheet, message } from "../../ui";
@@ -8,14 +9,15 @@ import { downloadCv } from "./Students";
 
 /** Study details and verified results of a student, as companies see them on cards. */
 export function CardBody({ card }: { card: TalentCard }) {
+  useLang();
   return (
     <>
       {card.headline && <div style={{ fontWeight: 600 }}>{card.headline}</div>}
       <div className="hint">
-        {[card.university, card.faculty, card.course && (card.course === 7 ? "magistratura" : `${card.course}-kurs`), card.city].filter(Boolean).join(" · ")}
+        {[card.university, card.faculty, courseText(card.course), card.city].filter(Boolean).join(" · ")}
       </div>
       <div className="hint">
-        {card.track ?? "yo'nalish yo'q"} · {card.points} ball · {card.verified_tasks} tasdiqlangan ish
+        {card.track ?? t("p.common.no_track")} · {t("p.common.points_n", { n: card.points })} · {t("p.common.verified_works", { n: card.verified_tasks })}
         {card.gpa != null ? ` · GPA ${card.gpa}/${card.gpa_scale}` : ""}
       </div>
       {(card.skills.length > 0 || card.languages.length > 0) && (
@@ -71,10 +73,10 @@ export function ApplicantCard({ applicant: a, onUpdated, onProfile, jobTitle }: 
         </div>
       )}
       <div className="row wrap" style={{ marginTop: 8 }}>
-        {a.identity.username && <button className="btn small" onClick={() => openLink(`https://t.me/${a.identity.username}`)}>Telegram'da yozish</button>}
-        {a.identity.phone && <span className="hint">Tel: {a.identity.phone}</span>}
-        <button className="btn small ghost" onClick={() => onProfile(a.card.id)}>Profil</button>
-        <button className="btn small ghost" onClick={() => downloadCv(a.card.id)}>CV (PDF)</button>
+        {a.identity.username && <button className="btn small" onClick={() => openLink(`https://t.me/${a.identity.username}`)}>{t("p.common.write_telegram")}</button>}
+        {a.identity.phone && <span className="hint">{t("p.common.phone_short", { phone: a.identity.phone })}</span>}
+        <button className="btn small ghost" onClick={() => onProfile(a.card.id)}>{t("p.common.profile")}</button>
+        <button className="btn small ghost" onClick={() => downloadCv(a.card.id)}>{t("p.common.cv_pdf")}</button>
       </div>
       {moves.length > 0 && (
         <div className="row wrap" style={{ marginTop: 8 }}>

@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { api, JOB_KIND, salary, WORK_MODE, type Job, type JobKind, type Me, type MyApplication,
+import { api, type Job, type JobKind, type Me, type MyApplication,
          type StudentContact } from "../api";
-import { formatDateTime, t } from "../i18n";
+import { kindLabel, modeLabel, salaryText } from "../format";
+import { formatDateTime, t, useLang } from "../i18n";
 import { ACTIVE_STATES, statusBadge, statusLabel } from "../pipeline";
 import { ask, haptic } from "../tg";
 import { ErrorText, Sheet, message } from "../ui";
 import StudentTests from "./StudentTests";
 
-const KINDS: [JobKind | "", string][] = [["", "Hammasi"], ["internship", "Amaliyot"], ["part_time", "Yarim stavka"],
-                                        ["junior", "Junior"], ["project", "Loyiha"]];
+const KINDS: (JobKind | "")[] = ["", "internship", "part_time", "junior", "project"];
 
 export default function JobsScreen({ me, onOpenProfile, initialView = "jobs" }: {
   me: Me; onOpenProfile: () => void; initialView?: "jobs" | "mine" | "saved";
 }) {
+  useLang();
   const [view, setView] = useState<"jobs" | "mine" | "saved" | "tests">(initialView);
   const [saved, setSaved] = useState<Job[] | null>(null);
   const [kind, setKind] = useState<JobKind | "">("");
@@ -58,25 +59,27 @@ export default function JobsScreen({ me, onOpenProfile, initialView = "jobs" }: 
 
       {notReady && (
         <div className="notice" style={{ marginBottom: 10 }}>
-          Ariza topshirish uchun talabaligingizni tasdiqlashga yuboring. Ish beruvchilar faqat haqiqiy talabalarni ko'radi.{" "}
-          <a href="#" onClick={(e) => { e.preventDefault(); onOpenProfile(); }}>Profilni to'ldirish</a>
+          {t("s.jobs.not_ready")}{" "}
+          <a href="#" onClick={(e) => { e.preventDefault(); onOpenProfile(); }}>{t("s.jobs.fill_profile")}</a>
         </div>
       )}
 
       {view === "jobs" && (
         <>
           <form className="row" onSubmit={(e) => { e.preventDefault(); loadJobs(); }}>
-            <input className="grow" value={q} placeholder="Lavozim yoki kompaniya" onChange={(e) => setQ(e.target.value)} />
-            <button className="btn small" type="submit">Qidirish</button>
+            <input className="grow" value={q} placeholder={t("pub.hero.search")} onChange={(e) => setQ(e.target.value)} />
+            <button className="btn small" type="submit">{t("pub.hero.search_btn")}</button>
           </form>
           <div className="scroll-tabs" style={{ marginTop: 8 }}>
-            {KINDS.map(([id, label]) => <button key={id} className={`chip ${kind === id ? "on" : ""}`} onClick={() => setKind(id)}>{label}</button>)}
-            <button className={`chip ${paidOnly ? "on" : ""}`} onClick={() => setPaidOnly(!paidOnly)}>To'lanadigan</button>
-            <button className={`chip ${practiceOnly ? "on" : ""}`} onClick={() => setPracticeOnly(!practiceOnly)}>Malakaviy amaliyot</button>
+            {KINDS.map((id) => (
+              <button key={id} className={`chip ${kind === id ? "on" : ""}`} onClick={() => setKind(id)}>{id ? kindLabel(id) : t("pub.filter.all")}</button>
+            ))}
+            <button className={`chip ${paidOnly ? "on" : ""}`} onClick={() => setPaidOnly(!paidOnly)}>{t("pub.filter.paid")}</button>
+            <button className={`chip ${practiceOnly ? "on" : ""}`} onClick={() => setPracticeOnly(!practiceOnly)}>{t("pub.filter.practice")}</button>
           </div>
           <ErrorText error={error} />
-          {!jobs && !error && <div className="hint">Yuklanmoqda…</div>}
-          {jobs?.length === 0 && <div className="center hint">Hozircha mos vakansiya yo'q. Profilingizni to'ldiring, kompaniyalar o'zlari topadi.</div>}
+          {!jobs && !error && <div className="hint">{t("common.loading")}</div>}
+          {jobs?.length === 0 && <div className="center hint">{t("s.jobs.empty")}</div>}
           {jobs?.map((j) => <JobCard key={j.id} job={j} onOpen={() => setOpen(j)} />)}
         </>
       )}
@@ -125,6 +128,7 @@ export default function JobsScreen({ me, onOpenProfile, initialView = "jobs" }: 
 function ApplicationCard({ app, onOpen, onWithdrawn, onError }: {
   app: MyApplication; onOpen: () => void; onWithdrawn: (a: MyApplication) => void; onError: (e: string) => void;
 }) {
+  useLang();
   async function withdraw(e: ReactMouseEvent) {
     e.stopPropagation();
     if (!(await ask(t("app.mine.withdraw_confirm")))) return;
@@ -166,18 +170,19 @@ function ApplicationCard({ app, onOpen, onWithdrawn, onError }: {
 }
 
 function JobCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
+  useLang();
   return (
     <div className="card tap" onClick={onOpen}>
       <div className="row between">
         <span className="hint">{job.company_name}{job.company_industry ? ` · ${job.company_industry}` : ""}</span>
-        {job.match >= 60 && <span className="badge peer_verified">{job.match}% mos</span>}
+        {job.match >= 60 && <span className="badge peer_verified">{t("home.match", { n: job.match })}</span>}
       </div>
       <b>{job.title}</b>
       <div className="chips" style={{ marginTop: 6 }}>
-        <span className="chip">{JOB_KIND[job.kind]}</span>
-        <span className="chip">{WORK_MODE[job.work_mode]}{job.city ? ` · ${job.city}` : ""}</span>
-        <span className="chip">{salary(job)}</span>
-        {job.counts_as_practice && <span className="chip">Amaliyotga o'tadi</span>}
+        <span className="chip">{kindLabel(job.kind)}</span>
+        <span className="chip">{modeLabel(job.work_mode)}{job.city ? ` · ${job.city}` : ""}</span>
+        <span className="chip">{salaryText(job)}</span>
+        {job.counts_as_practice && <span className="chip">{t("job.practice")}</span>}
       </div>
       {job.applied && <div className="hint" style={{ marginTop: 6 }}>{t("app.mine.applied", { status: statusLabel(job.application_status ?? "new") })}</div>}
     </div>
@@ -185,6 +190,7 @@ function JobCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
 }
 
 function JobSheet({ job, canApply, onClose, onApplied }: { job: Job; canApply: boolean; onClose: () => void; onApplied: () => void }) {
+  useLang();
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -207,21 +213,21 @@ function JobSheet({ job, canApply, onClose, onApplied }: { job: Job; canApply: b
       <span className="hint">{job.company_name}</span>
       <h1>{job.title}</h1>
       <div className="chips">
-        <span className="chip">{JOB_KIND[job.kind]}</span>
-        <span className="chip">{WORK_MODE[job.work_mode]}{job.city ? ` · ${job.city}` : ""}</span>
-        <span className="chip">{salary(job)}</span>
-        {job.hours_per_week && <span className="chip">haftasiga {job.hours_per_week} soat</span>}
-        {job.deadline && <span className="chip">muddat: {job.deadline}</span>}
+        <span className="chip">{kindLabel(job.kind)}</span>
+        <span className="chip">{modeLabel(job.work_mode)}{job.city ? ` · ${job.city}` : ""}</span>
+        <span className="chip">{salaryText(job)}</span>
+        {job.hours_per_week && <span className="chip">{t("job.hours", { n: job.hours_per_week })}</span>}
+        {job.deadline && <span className="chip">{t("s.jobs.deadline", { date: job.deadline })}</span>}
       </div>
-      {job.counts_as_practice && <p className="notice">Kompaniya bu o'rinni universitetdagi malakaviy amaliyot sifatida rasmiylashtirishga tayyor.</p>}
-      {!job.is_paid && <p className="hint">Bu amaliyot to'lanmaydi. Mehnat kodeksiga ko'ra, bo'sh lavozimga muddatli shartnoma bilan qabul qilingan stajyorga haq to'lanadi.</p>}
+      {job.counts_as_practice && <p className="notice">{t("s.jobs.practice_notice")}</p>}
+      {!job.is_paid && <p className="hint">{t("s.jobs.unpaid_hint")}</p>}
       <div className="card">
-        <b>Vazifalar</b>
+        <b>{t("job.description")}</b>
         <p style={{ whiteSpace: "pre-line", marginBottom: 0 }}>{job.description}</p>
       </div>
       {job.requirements && (
         <div className="card">
-          <b>Talablar</b>
+          <b>{t("job.requirements")}</b>
           <p style={{ whiteSpace: "pre-line", marginBottom: 0 }}>{job.requirements}</p>
         </div>
       )}
@@ -232,21 +238,22 @@ function JobSheet({ job, canApply, onClose, onApplied }: { job: Job; canApply: b
         <p className="notice">{t("app.mine.applied", { status: statusLabel(job.application_status ?? "new") })}</p>
       ) : (
         <div className="card">
-          <b>Ariza topshirish</b>
-          <p className="hint">Kompaniya ismingizni, tasdiqlangan ishlaringizni va CV'ingizni ko'radi.</p>
-          <textarea value={note} maxLength={1500} placeholder="Qisqacha: nega aynan siz? (ixtiyoriy)" onChange={(e) => setNote(e.target.value)} />
+          <b>{t("job.apply")}</b>
+          <p className="hint">{t("s.jobs.apply_hint")}</p>
+          <textarea value={note} maxLength={1500} placeholder={t("job.apply_note")} onChange={(e) => setNote(e.target.value)} />
           <ErrorText error={error} />
           <button className="btn" style={{ marginTop: 8 }} disabled={busy || !canApply} onClick={apply}>
-            {canApply ? (busy ? "Yuborilmoqda…" : "Ariza topshirish") : "Avval talabalikni tasdiqlang"}
+            {canApply ? (busy ? t("s.common.sending") : t("job.apply")) : t("s.jobs.verify_first")}
           </button>
         </div>
       )}
-      <button className="btn ghost" onClick={onClose}>Yopish</button>
+      <button className="btn ghost" onClick={onClose}>{t("common.close")}</button>
     </Sheet>
   );
 }
 
 function ContactCard({ contact, onAnswered }: { contact: StudentContact; onAnswered: () => void }) {
+  useLang();
   const [error, setError] = useState("");
   async function answer(accept: boolean) {
     try {
@@ -259,14 +266,14 @@ function ContactCard({ contact, onAnswered }: { contact: StudentContact; onAnswe
   }
   return (
     <div className="card" style={{ border: "2px solid var(--btn)" }}>
-      <b>{contact.company} siz bilan bog'lanmoqchi</b>
+      <b>{t("s.jobs.contact", { company: contact.company })}</b>
       <div className="hint">{contact.industry}{contact.job_title ? ` · ${contact.job_title}` : ""}</div>
       <p style={{ whiteSpace: "pre-line" }}>{contact.message}</p>
-      <p className="hint">Rozilik bersangiz, ismingiz, Telegram'ingiz va CV'ingiz shu kompaniyaga ochiladi.</p>
+      <p className="hint">{t("s.jobs.contact_hint")}</p>
       <ErrorText error={error} />
       <div className="row">
-        <button className="btn ghost" onClick={() => answer(false)}>Rad etish</button>
-        <button className="btn ok" onClick={() => answer(true)}>Roziman</button>
+        <button className="btn ghost" onClick={() => answer(false)}>{t("s.jobs.decline")}</button>
+        <button className="btn ok" onClick={() => answer(true)}>{t("s.jobs.accept")}</button>
       </div>
     </div>
   );

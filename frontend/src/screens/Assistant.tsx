@@ -1,25 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type AiMessage } from "../api";
+import { t, useLang, type MsgKey } from "../i18n";
 import { Icon } from "../icons";
 import { autoGrow, message, sendsOnEnter } from "../ui";
 
 export type AiAudience = "student" | "employer" | "signup";
 
-const STARTERS: Record<AiAudience, string[]> = {
-  student: ["Bu ilova qanday ishlaydi?", "Keyingi qadamim nima?", "Topshiriqni qanday topshiraman?", "Kompaniya testini qanday ishlayman?"],
-  employer: ["Kompaniyani qanday ro'yxatdan o'tkazaman?", "Vakansiyani qanday qo'shaman?", "Test yoki so'rovnoma qanday tuziladi?",
-             "Talabaning CV'sini qanday yuklab olaman?", "Yaxshi stajyorni qanday tanlayman?"],
-  signup: ["Qanday ro'yxatdan o'taman?", "Ish izlovchi yoki ish beruvchi: qaysini tanlay?", "Qaysi maydonlar majburiy?",
-           "TalantGo menga nima beradi?"],
+const STARTERS: Record<AiAudience, MsgKey[]> = {
+  student: ["s.ai.student1", "s.ai.student2", "s.ai.student3", "s.ai.student4"],
+  employer: ["s.ai.employer1", "s.ai.employer2", "s.ai.employer3", "s.ai.employer4", "s.ai.employer5"],
+  signup: ["s.ai.signup1", "s.ai.signup2", "s.ai.signup3", "s.ai.signup4"],
 };
-const INTRO: Record<AiAudience, string> = {
-  student: "Salom! Men TalantGo AI. Ilovadan qanday foydalanish, keyingi qadamingiz, topshiriqlar, Excel, SQL, Power BI va CV haqida so'rashingiz mumkin.",
-  employer: "Salom! Men TalantGo AI. Kompaniyani ro'yxatdan o'tkazish, vakansiya va test tuzish, talabalarni reyting bo'yicha tanlash va CV yuklab olish haqida so'rang.",
-  signup: "Salom! Men TalantGo AI. Qanday ro'yxatdan o'tish, qaysi yo'lni tanlash va formani qanday to'ldirishni tushuntirib beraman.",
+const INTRO: Record<AiAudience, MsgKey> = {
+  student: "s.ai.intro.student",
+  employer: "s.ai.intro.employer",
+  signup: "s.ai.intro.signup",
 };
 
 /** A small "TalantGo AI" button in the corner; the chat opens over the app and keeps its history until reload. */
 export default function Assistant({ audience = "student" }: { audience?: AiAudience }) {
+  useLang();
   const [available, setAvailable] = useState(false);
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<AiMessage[]>([]);
@@ -74,7 +74,7 @@ export default function Assistant({ audience = "student" }: { audience?: AiAudie
   if (!open) {
     if (typing) return null;
     return (
-      <button className="ai-fab" onClick={() => setOpen(true)} aria-label="TalantGo AI yordamchisini ochish">
+      <button className="ai-fab" onClick={() => setOpen(true)} aria-label={t("s.ai.open")}>
         <Icon name="spark" size={18} />TalantGo AI
       </button>
     );
@@ -86,16 +86,16 @@ export default function Assistant({ audience = "student" }: { audience?: AiAudie
         <span className="ai-mark"><Icon name="spark" size={18} /></span>
         <div className="grow">
           <b>TalantGo AI</b>
-          <div className="hint">Suhbatingizni faqat siz va platforma admini ko'radi</div>
+          <div className="hint">{t("s.ai.privacy")}</div>
         </div>
-        <button className="icon-btn" aria-label="Yopish" onClick={() => setOpen(false)}><Icon name="close" size={20} /></button>
+        <button className="icon-btn" aria-label={t("common.close")} onClick={() => setOpen(false)}><Icon name="close" size={20} /></button>
       </div>
       <div className="ai-body">
         {loaded && messages.length === 0 && (
           <div className="ai-intro">
-            <p>{INTRO[audience]}</p>
+            <p>{t(INTRO[audience])}</p>
             <div className="ai-starters">
-              {STARTERS[audience].map((s) => <button key={s} className="chip" onClick={() => send(s)}>{s}</button>)}
+              {STARTERS[audience].map((k) => <button key={k} className="chip" onClick={() => send(t(k))}>{t(k)}</button>)}
             </div>
           </div>
         )}
@@ -105,10 +105,10 @@ export default function Assistant({ audience = "student" }: { audience?: AiAudie
         <div ref={end} />
       </div>
       <form className="ai-input" onSubmit={(e) => { e.preventDefault(); void send(text); }}>
-        <textarea ref={box} value={text} rows={1} maxLength={2000} placeholder="Savolingizni yozing…" enterKeyHint="enter"
+        <textarea ref={box} value={text} rows={1} maxLength={2000} placeholder={t("s.ai.ph")} enterKeyHint="enter"
                   onChange={(e) => { setText(e.target.value); autoGrow(e.target); }}
                   onKeyDown={(e) => { if (sendsOnEnter(e)) { e.preventDefault(); void send(text); } }} />
-        <button className="icon-btn send" type="submit" disabled={busy || !text.trim()} aria-label="Yuborish"><Icon name="send" size={20} /></button>
+        <button className="icon-btn send" type="submit" disabled={busy || !text.trim()} aria-label={t("s.common.send")}><Icon name="send" size={20} /></button>
       </form>
     </div>
   );

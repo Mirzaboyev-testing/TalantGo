@@ -68,7 +68,11 @@ async def admin_actor(request: Request, session: Session, authorization: Annotat
     account = await session.get(AdminAccount, int(parts[1]))
     if account is None or account.status != "active" or parts[2] != fingerprint(account):
         raise HTTPException(401, "Sessiya tugagan. Qayta kiring.")
-    check_role(account, request.method, request.url.path.removeprefix("/api/v1"))
+    # the matched route template (e.g. /api/v1/admin/companies/{company_id}/review): independent of any
+    # proxy prefix or root path, so a deployment change cannot silently widen a limited role
+    route = request.scope.get("route")
+    path = getattr(route, "path", request.url.path)
+    check_role(account, request.method, path[path.index("/admin"):] if "/admin" in path else path)
     return Actor(account=account)
 
 

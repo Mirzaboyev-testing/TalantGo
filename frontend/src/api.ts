@@ -168,7 +168,7 @@ export interface PartnershipRow {
 }
 export interface UniversityProfile {
   id: number; name: string; short_name: string; city: string; region: string; description: string; website: string;
-  students: number; placed: number; employed: number; interned: number; placement_rate: number | null; min_sample: number;
+  students: number; placed: number | null; employed: number | null; interned: number | null; placement_rate: number | null; min_sample: number;
   top_employers: { name: string; count: number }[]; hires_on_platform: number;
   partners: { id: number; name: string }[]; tracks: { title: string; count: number }[];
 }
@@ -177,8 +177,8 @@ export interface MyOutcome { id: number; company: string; position: string; kind
 export interface Opportunity extends Job { partner: boolean; recommended: boolean; our_applicants: number }
 export type AdminRole = "owner" | "admin" | "moderator" | "analyst";
 export interface RankingRow {
-  university_id: number; name: string; short_name: string; city: string; students: number; employed: number; interned: number;
-  score: number | null; rank: number | null;
+  university_id: number; name: string; short_name: string; city: string; students: number; employed: number | null;
+  interned: number | null; score: number | null; rank: number | null; confirmed_only_by_university?: number | null;
 }
 export interface RankingMethod { internship_weight: number; min_sample: number; formula: string }
 export interface RankingSnapshot { id: number; period: string; config: { internship_weight: number; min_sample: number }; published_by: string; published_at: string; rows?: RankingRow[] }

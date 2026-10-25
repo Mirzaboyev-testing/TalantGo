@@ -37,6 +37,8 @@ class TaskIn(BaseModel):
     @model_validator(mode="after")
     def _check(self):
         today = datetime.now(TASHKENT).date()
+        if self.starts_on and self.starts_on < today:
+            raise ValueError("Boshlanish sanasi o'tib ketgan")
         if self.ends_on < (self.starts_on or today):
             raise ValueError("Tugash sanasi boshlanishidan oldin bo'lmasin")
         if self.ends_on > today + timedelta(days=120):
@@ -56,6 +58,12 @@ class TaskPatch(BaseModel):
     prize: str | None = Field(default=None, max_length=300)
     ends_on: date | None = None
     is_archived: bool | None = None
+
+    @model_validator(mode="after")
+    def _check(self):
+        if self.ends_on and self.ends_on > datetime.now(TASHKENT).date() + timedelta(days=120):
+            raise ValueError("Vazifa ko'pi bilan 4 oy davom etadi")
+        return self
 
 
 async def _own_task(session: Session, user: User, task_id: int) -> Challenge:
@@ -87,6 +95,9 @@ async def list_tasks(user: ApprovedEmployer, session: Session) -> list[dict]:
 @router.post("", status_code=201)
 async def create_task(body: TaskIn, user: ApprovedEmployer, session: Session) -> dict:
     ratelimit.limit(f"company-task:{user.company_id}", 10, 24 * 3600, "Bir kunda 10 tadan ortiq vazifa berib bo'lmaydi")
+    if body.audience != "selected":           # these reach many students at once
+        ratelimit.limit(f"company-task-broad:{user.company_id}", 2, 24 * 3600,
+                        "Bir kunda 2 tadan ortiq ommaviy vazifa berib bo'lmaydi")
     if body.audience == "track" and not await session.get(Track, body.track_id):
         raise HTTPException(404, "Yo'nalish topilmadi")
     if body.audience == "university" and not await session.get(University, body.university_id):
@@ -136,7 +147,7 @@ async def task_entries(task_id: int, user: ApprovedEmployer, session: Session) -
     rows = (await session.execute(select(ChallengeEntry).where(ChallengeEntry.challenge_id == task_id)
                                   .order_by((ChallengeEntry.status == "submitted").desc(), ChallengeEntry.place.nulls_last(),
                                             ChallengeEntry.score.desc().nulls_last(), ChallengeEntry.created_at))).scalars()
-    return [entry_out(e) for e in rows]
+    return [entry_out(e, with_username=False) for e in rows]
 
 
 @router.post("/{task_id}/entries/{entry_id}/review")
@@ -146,4 +157,4 @@ async def review_task_entry(task_id: int, entry_id: int, body: ReviewEntryIn, us
     if entry is None or entry.challenge_id != c.id:
         raise HTTPException(404, "Ish topilmadi")
     await apply_review(session, c, entry, body)
-    return entry_out(entry)
+    return entry_out(entry, with_username=False)

@@ -140,6 +140,7 @@ def _verified_students(university_id):
 async def university_profile(session, uni: University) -> dict:
     """Aggregates only: no student is named. Shares follow the minimum-sample rule of university_stats."""
     data = await university_stats(session, uni.id)
+    enough = data["students"] >= data["min_sample"]       # below it, counts would reveal individual students
     partners = (await session.execute(select(Company.id, Company.name).join(Partnership, Partnership.company_id == Company.id)
                                       .where(Partnership.university_id == uni.id, Partnership.status == "accepted",
                                              Company.status == "approved").order_by(Company.name))).all()
@@ -148,8 +149,10 @@ async def university_profile(session, uni: University) -> dict:
         .group_by(Track.title).order_by(func.count().desc()).limit(5))).all()
     return {"id": uni.id, "name": uni.name, "short_name": uni.short_name, "city": uni.city, "region": uni.region,
             "description": uni.description, "website": uni.website,
-            "students": data["students"], "placed": data["placed"], "employed": data["employed"], "interned": data["interned"],
-            "placement_rate": data["placement_rate"], "min_sample": data["min_sample"], "top_employers": data["top_employers"][:5],
+            "students": data["students"], "placed": data["placed"] if enough else None,
+            "employed": data["employed"] if enough else None, "interned": data["interned"] if enough else None,
+            "placement_rate": data["placement_rate"], "min_sample": data["min_sample"],
+            "top_employers": data["top_platform_employers"][:5] if enough else [],
             "hires_on_platform": data["hires_on_platform"],
             "partners": [{"id": i, "name": n} for i, n in partners], "tracks": [{"title": t, "count": c} for t, c in tracks]}
 

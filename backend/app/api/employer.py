@@ -133,10 +133,14 @@ async def close_job(job_id: int, user: Employer, session: Session) -> JobOut:
 
 
 def applicant_out(app: Application, verified_tasks: int) -> ApplicantOut:
+    # the student chose to apply: identity is shared; withdrawing takes the contact details back
+    who = identity(app.user)
+    if app.status == "withdrawn":
+        who = {**who, "username": None, "phone": None, "cv_url": None, "github_url": "", "linkedin_url": ""}
     return ApplicantOut(id=app.id, status=app.status, note=app.note, employer_note=app.employer_note,
                         created_at=app.created_at, updated_at=app.updated_at, interview_at=app.interview_at,
                         interview_place=app.interview_place, card=anonymous_card(app.user, verified_tasks),
-                        identity=identity(app.user))      # the student chose to apply: identity is shared
+                        identity=who)
 
 
 @router.get("/jobs/{job_id}/applicants", response_model=list[ApplicantOut])
@@ -152,7 +156,9 @@ async def applicants(job_id: int, user: ApprovedEmployer, session: Session) -> l
 
 @router.patch("/applications/{application_id}", response_model=ApplicantOut)
 async def update_application(application_id: int, body: ApplicationPatch, user: ApprovedEmployer, session: Session) -> ApplicantOut:
-    app = await session.get(Application, application_id)
+    # locked: two HR users (or a student withdrawing) cannot both move it from the same old state
+    app = (await session.execute(select(Application).where(Application.id == application_id)
+                                 .with_for_update(of=Application))).scalar_one_or_none()
     if app is None or app.job.company_id != user.company_id:
         raise HTTPException(404, "Ariza topilmadi")
     if body.employer_note is not None:
@@ -319,7 +325,8 @@ async def _visible_student(session: Session, student_id: int, company_id: int | 
     visible = await session.scalar(select(User.id).where(User.id == student_id, *_visible_students()))
     if not visible and company_id:
         visible = (await session.scalar(select(Application.id).join(Job).where(
-            Application.user_id == student_id, Job.company_id == company_id).limit(1))) or \
+            Application.user_id == student_id, Job.company_id == company_id,
+            Application.status != "withdrawn").limit(1))) or \
             (await session.scalar(select(TestAttempt.id).join(CompanyTest, CompanyTest.id == TestAttempt.test_id).where(
                 TestAttempt.user_id == student_id, CompanyTest.company_id == company_id).limit(1)))
     if not visible:
@@ -335,7 +342,7 @@ async def student_detail(student_id: int, user: ApprovedEmployer, session: Sessi
     n = await session.scalar(select(func.count()).where(Submission.user_id == student.id,
                                                         Submission.status.in_([Status.peer_verified, Status.mentor_verified])))
     applied = await session.scalar(select(func.count()).select_from(Application).join(Job).where(
-        Application.user_id == student.id, Job.company_id == user.company_id))
+        Application.user_id == student.id, Job.company_id == user.company_id, Application.status != "withdrawn"))
     contact = await session.scalar(select(ContactRequest.status).where(
         ContactRequest.company_id == user.company_id, ContactRequest.student_id == student.id))
     attempts = (await session.execute(select(TestAttempt).join(CompanyTest, CompanyTest.id == TestAttempt.test_id).where(
@@ -479,6 +486,7 @@ async def ask_partnership(university_id: int, body: PartnershipIn, user: Approve
     uni = await session.get(University, university_id)
     if uni is None or not uni.is_active:
         raise HTTPException(404, "Universitet topilmadi")
+    ratelimit.limit(f"partner-ask:c{user.company_id}", 20, 24 * 3600, "Bir kunda 20 tadan ortiq taklif yuborib bo'lmaydi")
     p = await partnerships.open_request(session, user.company, uni, "company", body.message)
     staff = (await session.execute(select(User.id).where(User.staff_university_id == uni.id,
                                                          User.staff_status == "approved"))).scalars().all()

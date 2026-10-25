@@ -18,6 +18,8 @@ from .outcomes import university_stats
 KEY = "ranking"
 _TTL = 30.0
 _cache: tuple[float, "RankingConfig"] | None = None
+PUBLIC_TTL = 300.0
+_public_rows: tuple[float, list[dict]] | None = None       # the public page is unauthenticated: computed at most every 5 min
 
 
 class RankingConfig(BaseModel):
@@ -44,6 +46,7 @@ async def save_config(session: AsyncSession, config: RankingConfig) -> RankingCo
         session.add(AppConfig(key=KEY, value=config.model_dump()))
     await session.commit()
     _cache = None
+    forget_public()
     return config
 
 
@@ -60,7 +63,9 @@ async def compute(session: AsyncSession, config: RankingConfig | None = None) ->
         enough = s["students"] >= config.min_sample
         score = round(100 * (s["employed"] + config.internship_weight * s["interned"]) / s["students"], 1) if enough else None
         rows.append({"university_id": uni.id, "name": uni.name, "short_name": uni.short_name, "city": uni.city,
-                     "students": s["students"], "employed": s["employed"], "interned": s["interned"], "score": score})
+                     "students": s["students"], "employed": s["employed"] if enough else None,
+                     "interned": s["interned"] if enough else None, "score": score,
+                     "confirmed_only_by_university": s["confirmed_only_by_university"] if enough else None})
     rows.sort(key=lambda r: (r["score"] is None, -(r["score"] or 0), -r["students"], r["name"]))
     rank, previous = 0, None
     for position, r in enumerate(rows, start=1):
@@ -71,6 +76,20 @@ async def compute(session: AsyncSession, config: RankingConfig | None = None) ->
             rank, previous = position, r["score"]
         r["rank"] = rank
     return rows
+
+
+async def public_rows(session: AsyncSession, config: RankingConfig) -> list[dict]:
+    global _public_rows
+    if _public_rows and _public_rows[0] > time.monotonic():
+        return _public_rows[1]
+    rows = await compute(session, config)
+    _public_rows = (time.monotonic() + PUBLIC_TTL, rows)
+    return rows
+
+
+def forget_public() -> None:
+    global _public_rows
+    _public_rows = None
 
 
 async def publish(session: AsyncSession, period: str, published_by: str) -> RankingSnapshot:

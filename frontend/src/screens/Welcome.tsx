@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Me, type University } from "../api";
+import { t, useLang } from "../i18n";
 import { ErrorText, LogoutLink, message } from "../ui";
 import { Consent } from "./Consent";
 import { Icon } from "../icons";
@@ -11,6 +12,7 @@ type Choice = "student" | "employer" | "university" | null;
 export default function Welcome({ me, initial, onStudent, onChanged, onLogout }: {
   me: Me; initial: Choice; onStudent: () => void; onChanged: (m: Me) => void; onLogout?: () => void;
 }) {
+  useLang();
   const [choice, setChoice] = useState<Choice>(initial);
 
   if (choice === "employer") return <EmployerSignup me={me} onSaved={onChanged} onBack={() => setChoice(null)} onLogout={onLogout} />;
@@ -19,23 +21,23 @@ export default function Welcome({ me, initial, onStudent, onChanged, onLogout }:
   return (
     <div>
       <LogoutLink onLogout={onLogout} />
-      <h1>Salom, {me.full_name.split(" ")[0]}!</h1>
-      <p className="hint">TalantGo: talabalar tasdiqlangan ko'nikmalar bilan amaliyot va birinchi ishni topadigan joy. Kim sifatida ro'yxatdan o'tasiz?</p>
+      <h1>{t("s.welcome.hello", { name: me.full_name.split(" ")[0] })}</h1>
+      <p className="hint">{t("s.welcome.intro")}</p>
       <div className="choice-grid">
         <button className="choice-card" onClick={onStudent}>
           <span className="avatar"><Icon name="school" /></span>
-          <b>Ish izlovchi</b>
-          <span className="hint">Talabaman: yo'nalish tanlayman, portfolio yig'aman, amaliyot va ish topaman</span>
+          <b>{t("s.welcome.seeker")}</b>
+          <span className="hint">{t("s.welcome.seeker_hint")}</span>
         </button>
         <button className="choice-card" onClick={() => setChoice("employer")}>
           <span className="avatar"><Icon name="briefcase" /></span>
-          <b>Ish beruvchi</b>
-          <span className="hint">Kompaniyaman: talabalarni reyting bo'yicha ko'raman, vakansiya va test joylayman</span>
+          <b>{t("s.welcome.employer")}</b>
+          <span className="hint">{t("s.welcome.employer_hint")}</span>
         </button>
       </div>
       {initial === "university" && (
         <div className="card tap" style={{ marginTop: 10 }} onClick={() => setChoice("university")}>
-          <div className="row"><span className="avatar"><Icon name="building" /></span><div><b>Universitet xodimiman</b><div className="hint">Karyera markazi: talabalarni tasdiqlash va hisobotlar</div></div></div>
+          <div className="row"><span className="avatar"><Icon name="building" /></span><div><b>{t("s.welcome.staff")}</b><div className="hint">{t("s.welcome.staff_hint")}</div></div></div>
         </div>
       )}
     </div>
@@ -43,6 +45,7 @@ export default function Welcome({ me, initial, onStudent, onChanged, onLogout }:
 }
 
 function StaffForm({ onBack, onChanged }: { onBack: () => void; onChanged: (m: Me) => void }) {
+  useLang();
   const [unis, setUnis] = useState<University[]>([]);
   const [uniId, setUniId] = useState("");
   const [position, setPosition] = useState("");
@@ -60,20 +63,20 @@ function StaffForm({ onBack, onChanged }: { onBack: () => void; onChanged: (m: M
 
   return (
     <div>
-      <button className="btn small ghost" onClick={onBack}>Orqaga</button>
-      <h1>Universitet xodimi</h1>
-      <p className="hint">Karyera markazi xodimlari o'z talabalarining talabaligini tasdiqlaydi va bandlik hisobotlarini ko'radi. So'rovingizni ilova egasi universitet bilan bog'lanib tekshiradi.</p>
+      <button className="btn small ghost" onClick={onBack}>{t("common.back")}</button>
+      <h1>{t("s.staff.title")}</h1>
+      <p className="hint">{t("s.staff.hint")}</p>
       <div className="card">
-        <label>Universitet</label>
+        <label>{t("s.common.university")}</label>
         <select value={uniId} onChange={(e) => setUniId(e.target.value)}>
-          <option value="">Tanlang…</option>
+          <option value="">{t("task.f.choose")}</option>
           {unis.map((u) => <option key={u.id} value={u.id}>{u.short_name} · {u.name}</option>)}
         </select>
-        <label>Lavozim</label>
-        <input value={position} maxLength={120} placeholder="Masalan: Karyera markazi rahbari" onChange={(e) => setPosition(e.target.value)} />
+        <label>{t("s.staff.position")}</label>
+        <input value={position} maxLength={120} placeholder={t("s.staff.position_ph")} onChange={(e) => setPosition(e.target.value)} />
         <Consent value={consent} onChange={setConsent} />
         <ErrorText error={error} />
-        <button className="btn" style={{ marginTop: 12 }} disabled={!uniId || position.trim().length < 3 || !consent} onClick={send}>So'rov yuborish</button>
+        <button className="btn" style={{ marginTop: 12 }} disabled={!uniId || position.trim().length < 3 || !consent} onClick={send}>{t("s.staff.send")}</button>
       </div>
     </div>
   );
@@ -81,11 +84,12 @@ function StaffForm({ onBack, onChanged }: { onBack: () => void; onChanged: (m: M
 
 /** Shown to employers and staff while an admin checks them. */
 export function PendingScreen({ me, onChanged, onLogout }: { me: Me; onChanged: (m: Me) => void; onLogout?: () => void }) {
+  useLang();
   const [editing, setEditing] = useState(false);
   const isEmployer = me.account_type === "employer";
   const rejected = isEmployer ? me.company?.status === "rejected" : me.staff_status === "rejected";
   const note = isEmployer ? me.company?.review_note : "";
-  const told = me.has_telegram ? "Tasdiqlangach botdan xabar keladi." : "Tasdiqlangach shu sahifa o'zi yangilanadi.";
+  const told = me.has_telegram ? t("s.pending.told_bot") : t("s.pending.told_page");
 
   // the decision is picked up without a reload (accounts without Telegram get no bot message)
   useEffect(() => {
@@ -98,22 +102,22 @@ export function PendingScreen({ me, onChanged, onLogout }: { me: Me; onChanged: 
   return (
     <div>
       <LogoutLink onLogout={onLogout} />
-      <h1>{rejected ? "So'rov tasdiqlanmadi" : "Tekshirilmoqda"}</h1>
+      <h1>{rejected ? t("s.pending.rejected_title") : t("s.pending.checking")}</h1>
       <div className="card">
         {isEmployer ? <b>{me.company?.name}</b> : <b>{me.staff_university?.name}</b>}
         <p className="hint">
           {rejected
-            ? `Izoh: ${note || "ko'rsatilmagan"}. Ma'lumotlarni tuzatib saqlasangiz, kompaniya qayta tekshiruvga yuboriladi.`
+            ? t("s.pending.rejected", { note: note || t("s.pending.no_note") })
             : isEmployer
-              ? `Admin kompaniyangizni STIR bo'yicha tekshiradi. Odatda 1 ish kuni ichida. ${told}`
-              : `Ilova egasi universitet bilan bog'lanib tekshiradi. ${told}`}
+              ? t("s.pending.employer", { told })
+              : t("s.pending.staff", { told })}
         </p>
-        {isEmployer && <button className="btn small ghost" onClick={() => setEditing(true)}>{rejected ? "Tuzatib qayta yuborish" : "Ma'lumotlarni tahrirlash"}</button>}
+        {isEmployer && <button className="btn small ghost" onClick={() => setEditing(true)}>{rejected ? t("s.pending.fix") : t("s.pending.edit")}</button>}
       </div>
       <button className="btn ghost" style={{ marginTop: 10 }} onClick={async () => onChanged(await api.backToStudent())}>
-        Ish izlovchi sifatida davom etish
+        {t("s.pending.as_seeker")}
       </button>
-      {isEmployer && <p className="hint">Bu kompaniya so'rovini bekor qiladi. Keyin xohlasangiz, qaytadan ish beruvchi sifatida ro'yxatdan o'tishingiz mumkin.</p>}
+      {isEmployer && <p className="hint">{t("s.pending.cancel_hint")}</p>}
     </div>
   );
 }

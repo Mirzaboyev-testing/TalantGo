@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type BotLink, type BotLoginStatus } from "../api";
+import { t, useLang } from "../i18n";
 import { openLink } from "../tg";
 import { message } from "../ui";
 
@@ -22,9 +23,9 @@ export function useBotLink<R>(start: () => Promise<BotLink>, verify: (code: stri
 
   const finish = (s: BotLoginStatus) => {
     clear(); setState("idle"); setLink(null);
-    if (s.status === "expired") setError("Vaqt tugadi. Tugmani qaytadan bosing.");
-    else if (s.status === "rejected") setError("Bekor qilindi. Kerak bo'lsa, qaytadan bosing.");
-    else if (s.status === "conflict") setError(s.note || "Ulab bo'lmadi.");
+    if (s.status === "expired") setError(t("s.bot.expired"));
+    else if (s.status === "rejected") setError(t("s.bot.rejected"));
+    else if (s.status === "conflict") setError(s.note || t("s.bot.conflict"));
   };
 
   const begin = useCallback(async () => {
@@ -73,30 +74,31 @@ export function useBotLink<R>(start: () => Promise<BotLink>, verify: (code: stri
 export function BotWaiting({ link, state, onCancel, onPin }: {
   link: BotLink; state: string; onCancel: () => void; onPin: (pin: string) => void;
 }) {
+  useLang();
   const [pin, setPin] = useState("");
   if (state === "pin") {
     return (
       <form className="notice" style={{ textAlign: "left", marginTop: 12 }} onSubmit={(e) => { e.preventDefault(); if (pin.length === 6) onPin(pin); }}>
-        <b>Botdagi 6 xonali kodni kiriting</b>
+        <b>{t("s.bot.enter_code")}</b>
         <input value={pin} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="123456" autoFocus
                style={{ marginTop: 8, letterSpacing: 4, fontSize: 18, textAlign: "center" }}
                onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
         <div className="row wrap" style={{ marginTop: 8, gap: 12 }}>
-          <button className="btn small" type="submit" disabled={pin.length !== 6}>Tasdiqlash</button>
-          <a href="#" onClick={(e) => { e.preventDefault(); onCancel(); }}>Bekor qilish</a>
+          <button className="btn small" type="submit" disabled={pin.length !== 6}>{t("s.bot.confirm")}</button>
+          <a href="#" onClick={(e) => { e.preventDefault(); onCancel(); }}>{t("common.cancel")}</a>
         </div>
       </form>
     );
   }
   return (
     <div className="notice" style={{ textAlign: "left", marginTop: 12 }}>
-      <b>{state === "claimed" ? "Telegram'da tasdiqlang" : "Telegram ochildi"}</b>
+      <b>{state === "claimed" ? t("s.bot.confirm_in_tg") : t("s.bot.opened")}</b>
       <div style={{ marginTop: 4 }}>
-        Botda «✅ Ha, tasdiqlayman» tugmasini bosing. Bot 6 xonali kod beradi, uni shu yerga kiritasiz.
+        {t("s.bot.instruction")}
       </div>
       <div className="row wrap" style={{ marginTop: 8, gap: 12 }}>
-        <a href={link.url} target="_blank" rel="noreferrer">Telegram ochilmadimi? Shu yerni bosing</a>
-        <a href="#" onClick={(e) => { e.preventDefault(); onCancel(); }}>Bekor qilish</a>
+        <a href={link.url} target="_blank" rel="noreferrer">{t("s.bot.not_opened")}</a>
+        <a href="#" onClick={(e) => { e.preventDefault(); onCancel(); }}>{t("common.cancel")}</a>
       </div>
     </div>
   );
