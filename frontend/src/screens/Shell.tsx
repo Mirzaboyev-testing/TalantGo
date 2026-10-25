@@ -1,9 +1,9 @@
-import { useSyncExternalStore, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { api } from "../api";
 import { t, useLang } from "../i18n";
 import { Icon, type IconName } from "../icons";
 import { insideTelegram } from "../tg";
-import { Avatar } from "../ui";
+import { Avatar, Sheet } from "../ui";
 import LangSwitch from "./LangSwitch";
 import NotificationBell from "./Notifications";
 
@@ -23,6 +23,12 @@ export default function Shell<T extends string>({ tabs, active, onChange, user, 
 }) {
   useLang();
   const isWide = useWide();
+  const [moreOpen, setMoreOpen] = useState(false);
+  // a phone's bottom bar fits five buttons: with more sections the last one opens the rest
+  const bar = tabs.length > 5 ? tabs.slice(0, 4) : tabs;
+  const rest = tabs.length > 5 ? tabs.slice(4) : [];
+  const restActive = rest.some((tab) => tab.id === active);
+  const restBadge = rest.reduce((n, tab) => n + (tab.badge ?? 0), 0);
   return (
     <div className="shell">
       <aside className="side-nav">
@@ -55,13 +61,28 @@ export default function Shell<T extends string>({ tabs, active, onChange, user, 
       <main className="app">{children}</main>
       <nav className="tabbar">
         <div className="tabbar-inner">
-          {tabs.map((tab) => (
+          {bar.map((tab) => (
             <button key={tab.id} className={active === tab.id ? "on" : ""} onClick={() => onChange(tab.id)}>
               <Icon name={tab.icon} size={22} />{tab.label}{tab.badge ? <span className="dot">{tab.badge}</span> : null}
             </button>
           ))}
+          {rest.length > 0 && (
+            <button className={restActive ? "on" : ""} onClick={() => setMoreOpen(true)}>
+              <Icon name="menu" size={22} />{t("nav.more")}{restBadge ? <span className="dot">{restBadge}</span> : null}
+            </button>
+          )}
         </div>
       </nav>
+      {moreOpen && (
+        <Sheet onClose={() => setMoreOpen(false)}>
+          {rest.map((tab) => (
+            <button key={tab.id} className={`side-link ${active === tab.id ? "on" : ""}`}
+                    onClick={() => { setMoreOpen(false); onChange(tab.id); }}>
+              <Icon name={tab.icon} />{tab.label}{tab.badge ? <span className="dot">{tab.badge}</span> : null}
+            </button>
+          ))}
+        </Sheet>
+      )}
     </div>
   );
 }

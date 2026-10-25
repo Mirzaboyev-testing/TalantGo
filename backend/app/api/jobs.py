@@ -2,9 +2,9 @@
 from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 
-from ..models import Application, ApplicationEvent, Company, ContactRequest, Job, User
+from ..models import Application, ApplicationEvent, Company, ContactRequest, Job, SavedJob, User
 from ..schemas import ApplyIn, ContactAnswerIn, JobOut, MyApplicationOut
 from ..services import applications, inbox
 from ..services.applications import company_staff_ids
@@ -58,7 +58,9 @@ async def list_jobs(user: CurrentUser, session: Session,
     jobs = (await session.execute(query.order_by(Job.created_at.desc()).limit(200))).scalars().all()
     mine = dict((await session.execute(select(Application.job_id, Application.status)
                                        .where(Application.user_id == user.id))).all())
-    out = [job_out(j, applied=j.id in mine, application_status=mine.get(j.id), match=match_score(j, user)) for j in jobs]
+    saved = set((await session.execute(select(SavedJob.job_id).where(SavedJob.user_id == user.id))).scalars())
+    out = [job_out(j, applied=j.id in mine, application_status=mine.get(j.id), match=match_score(j, user),
+                   saved=j.id in saved) for j in jobs]
     return sorted(out, key=lambda j: (-j.match, -j.created_at.timestamp()))
 
 
@@ -71,8 +73,45 @@ async def job_detail(job_id: int, user: CurrentUser, session: Session) -> JobOut
     await session.commit()
     app = (await session.execute(select(Application).where(Application.job_id == job_id,
                                                            Application.user_id == user.id))).scalar_one_or_none()
+    saved = await session.scalar(select(SavedJob.id).where(SavedJob.user_id == user.id, SavedJob.job_id == job_id))
     return job_out(job, applied=app is not None, application_status=app.status if app else None,
-                   match=match_score(job, user))
+                   match=match_score(job, user), saved=saved is not None)
+
+
+SAVED_LIMIT = 200
+
+
+@router.post("/jobs/{job_id}/save", status_code=204)
+async def save_job(job_id: int, user: CurrentUser, session: Session) -> None:
+    if user.account_type != "student":
+        raise HTTPException(403, "Vakansiyalarni faqat talabalar saqlaydi")
+    if (await session.execute(visible_jobs().where(Job.id == job_id))).scalar_one_or_none() is None:
+        raise HTTPException(404, "Vakansiya topilmadi yoki yopilgan")
+    if await session.scalar(select(SavedJob.id).where(SavedJob.user_id == user.id, SavedJob.job_id == job_id)):
+        return
+    if await session.scalar(select(func.count()).select_from(SavedJob).where(SavedJob.user_id == user.id)) >= SAVED_LIMIT:
+        raise HTTPException(409, f"{SAVED_LIMIT} tadan ortiq vakansiya saqlab bo'lmaydi")
+    session.add(SavedJob(user_id=user.id, job_id=job_id))
+    await session.commit()
+
+
+@router.delete("/jobs/{job_id}/save", status_code=204)
+async def unsave_job(job_id: int, user: CurrentUser, session: Session) -> None:
+    row = (await session.execute(select(SavedJob).where(SavedJob.user_id == user.id, SavedJob.job_id == job_id))).scalar_one_or_none()
+    if row is not None:
+        await session.delete(row)
+        await session.commit()
+
+
+@router.get("/me/saved-jobs", response_model=list[JobOut])
+async def saved_jobs(user: CurrentUser, session: Session) -> list[JobOut]:
+    """Bookmarked vacancies that are still open, newest bookmark first."""
+    rows = (await session.execute(visible_jobs().join(SavedJob, SavedJob.job_id == Job.id)
+                                  .where(SavedJob.user_id == user.id).order_by(SavedJob.created_at.desc()))).scalars().all()
+    mine = dict((await session.execute(select(Application.job_id, Application.status)
+                                       .where(Application.user_id == user.id))).all())
+    return [job_out(j, applied=j.id in mine, application_status=mine.get(j.id), match=match_score(j, user), saved=True)
+            for j in rows]
 
 
 async def my_applications_out(session: Session, apps: list[Application]) -> list[MyApplicationOut]:
@@ -159,3 +198,32 @@ async def answer_contact(contact_id: int, body: ContactAnswerIn, user: CurrentUs
                          f"Talaba {user.full_name} bog'lanishga rozi bo'ldi: ma'lumotlari ochildi.",
                          link="/korxona/talabalar", params={"student": user.full_name})
     return {"status": contact.status}
+
+
+@router.get("/me/dashboard")
+async def student_dashboard(user: CurrentUser, session: Session) -> dict:
+    """The student's home: where the applications stand, the next interview, jobs worth a look."""
+    apps = (await session.execute(select(Application).where(Application.user_id == user.id)
+                                  .order_by(Application.updated_at.desc()).limit(200))).scalars().all()
+    by_status: dict[str, int] = {}
+    for a in apps:
+        by_status[a.status] = by_status.get(a.status, 0) + 1
+    now = datetime.now(UTC)
+    interviews = sorted((a for a in apps if a.status == "interview" and (a.interview_at is None or a.interview_at >= now)),
+                        key=lambda a: a.interview_at or now)
+    applied = {a.job_id for a in apps if a.status != "withdrawn"}
+    open_jobs = (await session.execute(visible_jobs().order_by(Job.created_at.desc()).limit(200))).scalars().all()
+    recommended = sorted((j for j in open_jobs if j.id not in applied), key=lambda j: -match_score(j, user))[:3]
+    saved = await session.scalar(select(func.count()).select_from(SavedJob).join(Job, Job.id == SavedJob.job_id)
+                                 .where(SavedJob.user_id == user.id, Job.status == "approved"))
+    return {
+        "applications": by_status,
+        "active_applications": sum(n for s, n in by_status.items() if s in ("new", "viewed", "shortlisted", "interview", "offer")),
+        "interviews": [{"application_id": a.id, "job": a.job.title, "company": a.job.company.name,
+                        "at": a.interview_at, "place": a.interview_place} for a in interviews[:3]],
+        "recent": [{"id": a.id, "job": a.job.title, "company": a.job.company.name, "status": a.status,
+                    "updated_at": a.updated_at} for a in apps[:3]],
+        "recommended": [job_out(j, match=match_score(j, user)) for j in recommended],
+        "saved": saved,
+        "open_jobs": len(open_jobs),
+    }

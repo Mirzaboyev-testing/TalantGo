@@ -37,7 +37,8 @@ async def build_cv(session: AsyncSession, user: User) -> dict:
         ChallengeEntry.user_id == user.id, ChallengeEntry.status == "accepted")
         .order_by(ChallengeEntry.place.nulls_last(), ChallengeEntry.reviewed_at.desc()))).scalars().all()
     challenges = [{"title": e.challenge.title, "place": e.place, "score": e.score, "points": e.points_awarded,
-                   "mentor": e.challenge.created_by.full_name if e.challenge.created_by else None,
+                   "mentor": e.challenge.created_by.full_name if e.challenge.created_by and not e.challenge.company_id else None,
+                   "company": e.challenge.company.name if e.challenge.company else None,
                    "proof_url": e.proof_url, "date": e.reviewed_at.isoformat() if e.reviewed_at else None}
                   for e in wins]
 

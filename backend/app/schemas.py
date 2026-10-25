@@ -367,6 +367,7 @@ class JobOut(ORM):
     application_status: str | None = None
     match: int = 0
     applications: int = 0
+    saved: bool = False
 
 
 class ApplyIn(BaseModel):

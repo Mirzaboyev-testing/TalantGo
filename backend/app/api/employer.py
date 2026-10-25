@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 
-from ..models import Application, Company, ContactRequest, Job, Role, Status, Submission, User
+from ..models import Application, ApplicationEvent, Company, ContactRequest, Job, Role, Status, Submission, User
 from ..schemas import (ApplicantOut, ApplicationPatch, CompanyIn, CompanyOut, ContactIn, JobIn, JobOut)
 from ..core import ratelimit
 from ..services import applications, inbox, notify
@@ -18,7 +18,7 @@ from ..services.career import JOB_KIND_LABEL, anonymous_card, identity, student_
 from ..services.catalog import CONSENT_VERSION
 from ..services.cv import build_cv
 from .deps import CurrentUser, Session
-from .jobs import job_out
+from .jobs import job_out, match_score
 
 router = APIRouter(prefix="/employer", tags=["employer"])
 CONTACTS_PER_DAY = 20          # per company: keeps students from being spammed
@@ -365,3 +365,70 @@ def cv_pdf_link(student_id: int) -> str:
 async def student_cv_link(student_id: int, user: ApprovedEmployer, session: Session) -> dict:
     await _visible_student(session, student_id, user.company_id)
     return {"url": cv_pdf_link(student_id)}
+
+
+# --------------------------------------------------------------------------- dashboard and candidates
+
+@router.get("/dashboard")
+async def dashboard(user: ApprovedEmployer, session: Session, days: int = Query(default=30, ge=1, le=365)) -> dict:
+    """Pipeline numbers for the company. `pipeline` counts applications by their current stage;
+    `received` and `hired` count what happened inside the chosen period."""
+    since = datetime.now(UTC) - timedelta(days=days)
+    company_apps = select(Application.id).join(Job).where(Job.company_id == user.company_id)
+    jobs_by_status = dict((await session.execute(select(Job.status, func.count()).where(Job.company_id == user.company_id)
+                                                 .group_by(Job.status))).all())
+    pipeline = dict((await session.execute(select(Application.status, func.count()).join(Job)
+                                           .where(Job.company_id == user.company_id).group_by(Application.status))).all())
+    received = await session.scalar(select(func.count()).select_from(Application).join(Job).where(
+        Job.company_id == user.company_id, Application.created_at >= since))
+    hired = await session.scalar(select(func.count(func.distinct(ApplicationEvent.application_id))).where(
+        ApplicationEvent.application_id.in_(company_apps), ApplicationEvent.to_status == "hired",
+        ApplicationEvent.created_at >= since))
+    now = datetime.now(UTC)
+    upcoming = (await session.execute(select(Application).join(Job).where(
+        Job.company_id == user.company_id, Application.status == "interview",
+        Application.interview_at >= now).order_by(Application.interview_at).limit(5))).scalars().all()
+    recent = (await session.execute(select(Application).join(Job).where(Job.company_id == user.company_id)
+                                    .order_by(Application.created_at.desc()).limit(5))).scalars().all()
+    return {
+        "days": days,
+        "jobs": {s: jobs_by_status.get(s, 0) for s in ("approved", "pending", "rejected", "closed")},
+        "pipeline": {s: pipeline.get(s, 0) for s in ("new", "viewed", "shortlisted", "interview", "offer", "hired",
+                                                     "rejected", "withdrawn")},
+        "applications_total": sum(pipeline.values()),
+        "received": received,
+        "hired": hired,
+        "interviews": [{"application_id": a.id, "student": a.user.full_name, "job": a.job.title,
+                        "at": a.interview_at, "place": a.interview_place} for a in upcoming],
+        "recent": [{"application_id": a.id, "student": a.user.full_name, "job": a.job.title, "status": a.status,
+                    "created_at": a.created_at} for a in recent],
+    }
+
+
+@router.get("/applications")
+async def all_applications(user: ApprovedEmployer, session: Session, job_id: int | None = None,
+                           status: str | None = Query(default=None, max_length=16),
+                           q: str | None = Query(default=None, max_length=80),
+                           limit: int = Query(default=25, ge=1, le=100), offset: int = Query(default=0, ge=0)) -> dict:
+    """Every application to the company's jobs in one table (the "Nomzodlar" page), newest first."""
+    verified = _verified_count().label("verified")
+    query = (select(Application, verified).join(Job, Job.id == Application.job_id)
+             .join(User, User.id == Application.user_id).where(Job.company_id == user.company_id))
+    if job_id:
+        query = query.where(Application.job_id == job_id)
+    if status:
+        query = query.where(Application.status == status)
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        query = query.where(User.full_name.ilike(like) | Job.title.ilike(like))
+    total = await session.scalar(select(func.count()).select_from(query.with_only_columns(Application.id).subquery()))
+    rows = (await session.execute(query.order_by(Application.created_at.desc(), Application.id.desc())
+                                  .offset(offset).limit(limit))).all()
+    jobs = (await session.execute(select(Job.id, Job.title).where(Job.company_id == user.company_id)
+                                  .order_by(Job.created_at.desc()))).all()
+    return {
+        "items": [{**applicant_out(a, n).model_dump(), "job_id": a.job_id, "job_title": a.job.title,
+                   "match": match_score(a.job, a.user)} for a, n in rows],
+        "total": total,
+        "jobs": [{"id": i, "title": t} for i, t in jobs],
+    }

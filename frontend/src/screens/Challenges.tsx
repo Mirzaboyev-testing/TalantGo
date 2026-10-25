@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, daysLeft, uzDate, type Challenge } from "../api";
+import { t } from "../i18n";
 import { haptic, openLink } from "../tg";
 import { ErrorText, Sheet, message } from "../ui";
 
@@ -33,7 +34,8 @@ export default function Challenges() {
             {c.my_entry ? <span className={`badge ${ENTRY_LABEL[c.my_entry.status][1]}`}>{c.my_entry.place ? `${c.my_entry.place}-o'rin` : ENTRY_LABEL[c.my_entry.status][0]}</span>
               : c.state === "active" ? <span className="badge peer_verified">Ochiq</span> : null}
           </div>
-          <b>{c.title}</b>
+          {c.company && <span className="badge company-badge">{t("task.badge")} · {c.company}</span>}
+          <b style={{ display: "block" }}>{c.title}</b>
           <div className="hint" style={{ marginTop: 4 }}>
             {c.points} ball{c.prize ? ` · sovrin: ${c.prize}` : ""}{c.mentor ? ` · mentor: ${c.mentor}` : ""}
           </div>
@@ -76,7 +78,8 @@ function ChallengeSheet({ id, onClose, onChanged }: { id: number; onClose: () =>
 
   return (
     <Sheet onClose={onClose}>
-      <span className="hint">{c.track?.split(":")[0] ?? "Barcha yo'nalishlar"}{c.mentor ? ` · mentor: ${c.mentor}` : ""}</span>
+      {c.company ? <span className="badge company-badge">{t("task.badge")} · {c.company}</span>
+        : <span className="hint">{c.track?.split(":")[0] ?? "Barcha yo'nalishlar"}{c.mentor ? ` · mentor: ${c.mentor}` : ""}</span>}
       <h1>{c.title}</h1>
       <div className="stats" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
         <div className="stat"><b>{c.state === "active" ? daysLeft(c.ends_at) : 0}</b><span>kun qoldi</span></div>

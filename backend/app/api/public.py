@@ -1,0 +1,112 @@
+"""The public website (no sign-in): live vacancies, approved companies and the headline numbers.
+
+Only what a company publishes about itself is shown: no HR names, phone, email, Telegram or STIR,
+and nothing about individual students.
+"""
+from datetime import date
+
+from fastapi import APIRouter, HTTPException, Query
+from sqlalchemy import func, or_, select
+
+from ..models import Company, Job, University, User
+from .deps import Session
+from .jobs import visible_jobs
+
+router = APIRouter(prefix="/public", tags=["public"])
+
+
+def public_job(job: Job) -> dict:
+    return {"id": job.id, "title": job.title, "kind": job.kind, "work_mode": job.work_mode, "city": job.city,
+            "is_paid": job.is_paid, "salary_from": job.salary_from, "salary_to": job.salary_to,
+            "hours_per_week": job.hours_per_week, "description": job.description, "requirements": job.requirements,
+            "skills": job.skills, "counts_as_practice": job.counts_as_practice, "deadline": job.deadline,
+            "created_at": job.created_at, "company_id": job.company_id, "company_name": job.company.name,
+            "company_industry": job.company.industry, "company_city": job.company.city}
+
+
+def public_company(c: Company, open_jobs: int) -> dict:
+    return {"id": c.id, "name": c.name, "industry": c.industry, "city": c.city, "size": c.size,
+            "website": c.website, "description": c.description, "open_jobs": open_jobs, "verified": True}
+
+
+def _open_jobs_count():
+    """Live jobs of the company in the outer query (the same rule as visible_jobs; the company is approved there)."""
+    return (select(func.count()).select_from(Job).where(
+        Job.company_id == Company.id, Job.status == "approved",
+        or_(Job.deadline.is_(None), Job.deadline >= date.today())).correlate(Company).scalar_subquery())
+
+
+@router.get("/stats")
+async def stats(session: Session) -> dict:
+    jobs = await session.scalar(select(func.count()).select_from(visible_jobs().subquery()))
+    return {
+        "jobs": jobs,
+        "companies": await session.scalar(select(func.count()).select_from(Company).where(Company.status == "approved")),
+        "students": await session.scalar(select(func.count()).select_from(User).where(
+            User.account_type == "student", User.is_blocked.is_(False), User.consent_at.isnot(None))),
+        "universities": await session.scalar(select(func.count()).select_from(University).where(University.is_active.is_(True))),
+    }
+
+
+@router.get("/jobs")
+async def jobs(session: Session, q: str | None = Query(default=None, max_length=80),
+               kind: str | None = Query(default=None, max_length=16),
+               work_mode: str | None = Query(default=None, max_length=16),
+               city: str | None = Query(default=None, max_length=60),
+               industry: str | None = Query(default=None, max_length=24),
+               company_id: int | None = None, paid_only: bool = False, practice_only: bool = False,
+               limit: int = Query(default=20, ge=1, le=50), offset: int = Query(default=0, ge=0, le=5000)) -> dict:
+    query = visible_jobs()
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        query = query.where(Job.title.ilike(like) | Company.name.ilike(like) | Job.description.ilike(like))
+    if kind:
+        query = query.where(Job.kind == kind)
+    if work_mode:
+        query = query.where(Job.work_mode == work_mode)
+    if city and city.strip():
+        query = query.where(Job.city.ilike(f"%{city.strip()}%"))
+    if industry:
+        query = query.where(Company.industry == industry)
+    if company_id:
+        query = query.where(Job.company_id == company_id)
+    if paid_only:
+        query = query.where(Job.is_paid.is_(True))
+    if practice_only:
+        query = query.where(Job.counts_as_practice.is_(True))
+    total = await session.scalar(select(func.count()).select_from(query.subquery()))
+    rows = (await session.execute(query.order_by(Job.created_at.desc(), Job.id.desc()).offset(offset).limit(limit))).scalars()
+    return {"items": [public_job(j) for j in rows], "total": total}
+
+
+@router.get("/jobs/{job_id}")
+async def job(job_id: int, session: Session) -> dict:
+    found = (await session.execute(visible_jobs().where(Job.id == job_id))).scalar_one_or_none()
+    if found is None:
+        raise HTTPException(404, "Vakansiya topilmadi yoki yopilgan")
+    return public_job(found)
+
+
+@router.get("/companies")
+async def companies(session: Session, q: str | None = Query(default=None, max_length=80),
+                    industry: str | None = Query(default=None, max_length=24),
+                    limit: int = Query(default=24, ge=1, le=60), offset: int = Query(default=0, ge=0, le=5000)) -> dict:
+    open_jobs = _open_jobs_count().label("open_jobs")
+    query = select(Company, open_jobs).where(Company.status == "approved")
+    if q and q.strip():
+        query = query.where(Company.name.ilike(f"%{q.strip()}%"))
+    if industry:
+        query = query.where(Company.industry == industry)
+    total = await session.scalar(select(func.count()).select_from(query.subquery()))
+    rows = (await session.execute(query.order_by(open_jobs.desc(), Company.name).offset(offset).limit(limit))).all()
+    return {"items": [public_company(c, n) for c, n in rows], "total": total}
+
+
+@router.get("/companies/{company_id}")
+async def company(company_id: int, session: Session) -> dict:
+    found = await session.get(Company, company_id)
+    if found is None or found.status != "approved":
+        raise HTTPException(404, "Kompaniya topilmadi")
+    rows = (await session.execute(visible_jobs().where(Job.company_id == company_id)
+                                  .order_by(Job.created_at.desc()).limit(50))).scalars().all()
+    return {**public_company(found, len(rows)), "jobs": [public_job(j) for j in rows]}

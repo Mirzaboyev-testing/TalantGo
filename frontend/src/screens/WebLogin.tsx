@@ -1,5 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
+import { t } from "../i18n";
+import { PANELS, rememberPanel, type Panel } from "../public/panels";
+import { navigate } from "../router";
 import { Field, useRequired } from "../form";
 import { BOT_URL } from "../tg";
 import { ErrorText, isFullName, message } from "../ui";
@@ -12,9 +15,15 @@ type GetToken = () => Promise<{ token: string; moved_to?: string | null }>;
  * through the bot (the same account as in Telegram), or with email and password (no Telegram needed;
  * Telegram can be tied to that account later in the profile).
  */
-export default function WebLogin({ dev, onSignIn, onDev }: {
-  dev: boolean; onSignIn: (getToken: GetToken) => void; onDev: (id: number, name: string) => void;
+const PANEL_HINT: Record<Panel, "login.student_hint" | "login.company_hint" | "login.university_hint"> = {
+  talaba: "login.student_hint", korxona: "login.company_hint", universitet: "login.university_hint",
+};
+
+export default function WebLogin({ dev, panel, onSignIn, onDev }: {
+  dev: boolean; panel?: Panel; onSignIn: (getToken: GetToken) => void; onDev: (id: number, name: string) => void;
 }) {
+  useEffect(() => { if (panel) rememberPanel(panel); }, [panel]);
+  const panelInfo = PANELS.find((p) => p.id === panel);
   const [mode, setMode] = useState<"login" | "register">("login");
   const [f, setF] = useState({ name: "", email: "", password: "", password2: "" });
   const [busy, setBusy] = useState(false);
@@ -54,8 +63,18 @@ export default function WebLogin({ dev, onSignIn, onDev }: {
     <div className="login">
       <div className="login-card">
         <span className="brand-mark" style={{ display: "grid" }}>T</span>
-        <h1 style={{ marginBottom: 6 }}>TalantGo</h1>
-        <p className="hint" style={{ marginTop: 0 }}>O'qish davomida haqiqiy tajriba, tasdiqlangan portfolio va birinchi ish.</p>
+        {panelInfo && panel ? (
+          <>
+            <h1 style={{ marginBottom: 6 }}>{t(panelInfo.title)}</h1>
+            <p className="hint" style={{ marginTop: 0 }}>{t(PANEL_HINT[panel])}</p>
+            <a href="/kirish" onClick={(e) => { e.preventDefault(); navigate("/kirish"); }}>{t("login.other_panel")}</a>
+          </>
+        ) : (
+          <>
+            <h1 style={{ marginBottom: 6 }}>TalantGo</h1>
+            <p className="hint" style={{ marginTop: 0 }}>O'qish davomida haqiqiy tajriba, tasdiqlangan portfolio va birinchi ish.</p>
+          </>
+        )}
 
         <div className="card" style={{ marginTop: 18 }}>
           <button className="btn" disabled={bot.state !== "idle"} onClick={bot.begin}>Telegram orqali davom etish</button>

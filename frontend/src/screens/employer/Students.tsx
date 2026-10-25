@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { t } from "../../i18n";
+import { navigate } from "../../router";
 import { absoluteUrl, api, ATTEMPT_STATUS, courseLabel, formatPhone, JOB_KIND, loadCatalog, VERIFICATION_LABEL,
          type Catalog, type JobKind, type StudentDetail, type StudentRow, type Track, type University } from "../../api";
 import { haptic, openAfter, openLink } from "../../tg";
@@ -121,6 +123,7 @@ export default function Students({ onTest }: { onTest?: (attemptId: number) => v
           <div className="row wrap" style={{ marginTop: 10 }}>
             <button className="btn small" onClick={() => setOpen(r.id)}>Profil</button>
             <button className="btn small ghost" onClick={() => downloadCv(r.id)}>CV yuklab olish (PDF)</button>
+            <button className="btn small ghost" onClick={() => navigate(`/korxona/vazifalar?talaba=${r.id}`)}>{t("stud.give_task")}</button>
             {r.username && <button className="btn small ghost" onClick={() => openLink(`https://t.me/${r.username}`)}>Telegram</button>}
           </div>
         </div>

@@ -23,6 +23,12 @@ export function usePath(): string {
   return useSyncExternalStore(subscribe, () => window.location.pathname);
 }
 
+/** The query string as an object, re-read on every navigation. */
+export function useSearch(): Record<string, string> {
+  const search = useSyncExternalStore(subscribe, () => window.location.search);
+  return Object.fromEntries(new URLSearchParams(search));
+}
+
 /**
  * Ties a panel's tabs to URLs: `/talaba/vakansiyalar` selects the "jobs" tab of the base `/talaba`.
  * A path outside the base (or `/`) is replaced with the base so the address always shows where you are.
@@ -33,7 +39,9 @@ export function useRouteTab<T extends string>(base: string, segments: Record<T, 
   const path = usePath();
   const inside = path === base || path.startsWith(`${base}/`);
   useEffect(() => {
-    if (!inside) navigate(base + window.location.search, { replace: true });
+    // read the live address: another effect in the same commit may already have moved it
+    const live = window.location.pathname;
+    if (live !== base && !live.startsWith(`${base}/`)) navigate(base + window.location.search, { replace: true });
   }, [inside, base]);
   const segment = inside ? path.slice(base.length).replace(/^\//, "").split("/")[0] : "";
   const tab = (Object.keys(segments) as T[]).find((k) => segments[k] === segment) ?? aliases[segment] ?? fallback;

@@ -117,7 +117,7 @@ export interface Job {
   work_mode: WorkMode; city: string; is_paid: boolean; salary_from: number | null; salary_to: number | null;
   hours_per_week: number | null; description: string; requirements: string; skills: string[]; track_ids: number[];
   counts_as_practice: boolean; deadline: string | null; status: string; review_note: string; views: number;
-  created_at: string; applied: boolean; application_status: string | null; match: number; applications: number;
+  created_at: string; applied: boolean; application_status: string | null; match: number; applications: number; saved?: boolean;
 }
 export type JobInput = Pick<Job, "title" | "kind" | "work_mode" | "city" | "is_paid" | "salary_from" | "salary_to" |
   "hours_per_week" | "description" | "requirements" | "skills" | "track_ids" | "counts_as_practice" | "deadline"> & { rules_accepted: boolean };
@@ -125,6 +125,30 @@ export interface MyApplication {
   id: number; status: string; note: string; created_at: string; updated_at: string; job: Job;
   interview_at: string | null; interview_place: string; history: { status: string; at: string }[];
 }
+export interface PublicJob {
+  id: number; title: string; kind: JobKind; work_mode: WorkMode; city: string; is_paid: boolean;
+  salary_from: number | null; salary_to: number | null; hours_per_week: number | null; description: string;
+  requirements: string; skills: string[]; counts_as_practice: boolean; deadline: string | null; created_at: string;
+  company_id: number; company_name: string; company_industry: string; company_city: string;
+}
+export interface PublicCompany {
+  id: number; name: string; industry: string; city: string; size: string; website: string; description: string;
+  open_jobs: number; verified: boolean;
+}
+export interface PublicStats { jobs: number; companies: number; students: number; universities: number }
+export interface StudentDashboard {
+  applications: Record<string, number>; active_applications: number;
+  interviews: { application_id: number; job: string; company: string; at: string | null; place: string }[];
+  recent: { id: number; job: string; company: string; status: string; updated_at: string }[];
+  recommended: Job[]; saved: number; open_jobs: number;
+}
+export interface EmployerDashboard {
+  days: number; jobs: Record<"approved" | "pending" | "rejected" | "closed", number>;
+  pipeline: Record<string, number>; applications_total: number; received: number; hired: number;
+  interviews: { application_id: number; student: string; job: string; at: string | null; place: string }[];
+  recent: { application_id: number; student: string; job: string; status: string; created_at: string }[];
+}
+export interface CandidateRow extends Applicant { job_id: number; job_title: string; match: number }
 export interface AppNotification {
   id: number; kind: string; text: string; link: string; params: Record<string, string | number | boolean | null>;
   created_at: string; read: boolean;
@@ -241,7 +265,9 @@ async function request<T>(method: string, path: string, body?: unknown, admin = 
   } catch {
     throw new ApiError(0, "Internet aloqasi yo'q");
   }
-  const data = resp.headers.get("content-type")?.includes("json") ? await resp.json() : null;
+  // 204 answers (save, withdraw...) can carry a JSON content type with an empty body
+  const text = resp.status === 204 ? "" : await resp.text();
+  const data = text && resp.headers.get("content-type")?.includes("json") ? JSON.parse(text) : null;
   if (resp.status === 401 && admin) onAdminUnauthorized();
   if (resp.status === 401 && !admin && token && !path.startsWith("/auth/")) onUserUnauthorized();
   if (!resp.ok) throw new ApiError(resp.status, describe(data?.detail));
@@ -317,6 +343,17 @@ export const api = {
   backToStudent: () => request<Me>("POST", "/me/account-type/student"),
   jobs: (params: Record<string, string>) => request<Job[]>("GET", `/jobs?${new URLSearchParams(params)}`),
   job: (id: number) => request<Job>("GET", `/jobs/${id}`),
+  saveJob: (id: number) => request<null>("POST", `/jobs/${id}/save`),
+  unsaveJob: (id: number) => request<null>("DELETE", `/jobs/${id}/save`),
+  savedJobs: () => request<Job[]>("GET", "/me/saved-jobs"),
+  studentDashboard: () => request<StudentDashboard>("GET", "/me/dashboard"),
+  public: {
+    stats: () => request<PublicStats>("GET", "/public/stats"),
+    jobs: (params: Record<string, string>) => request<{ items: PublicJob[]; total: number }>("GET", `/public/jobs?${new URLSearchParams(params)}`),
+    job: (id: number) => request<PublicJob>("GET", `/public/jobs/${id}`),
+    companies: (params: Record<string, string>) => request<{ items: PublicCompany[]; total: number }>("GET", `/public/companies?${new URLSearchParams(params)}`),
+    company: (id: number) => request<PublicCompany & { jobs: PublicJob[] }>("GET", `/public/companies/${id}`),
+  },
   apply: (id: number, note: string) => request<MyApplication>("POST", `/jobs/${id}/apply`, { note }),
   myApplications: () => request<MyApplication[]>("GET", "/me/applications"),
   withdraw: (id: number) => request<null>("POST", `/me/applications/${id}/withdraw`),
@@ -398,6 +435,16 @@ export const api = {
     editJob: (id: number, j: JobInput) => request<Job>("PUT", `/employer/jobs/${id}`, j),
     closeJob: (id: number) => request<Job>("POST", `/employer/jobs/${id}/close`),
     applicants: (jobId: number) => request<Applicant[]>("GET", `/employer/jobs/${jobId}/applicants`),
+    dashboard: (days = 30) => request<EmployerDashboard>("GET", `/employer/dashboard?days=${days}`),
+    tasks: () => request<Challenge[]>("GET", "/employer/tasks"),
+    createTask: (task: CompanyTaskInput) => request<Challenge>("POST", "/employer/tasks", task),
+    editTask: (id: number, changes: { title?: string; description?: string; prize?: string; ends_on?: string; is_archived?: boolean }) =>
+      request<Challenge>("PATCH", `/employer/tasks/${id}`, changes),
+    taskEntries: (id: number) => request<ChallengeEntry[]>("GET", `/employer/tasks/${id}/entries`),
+    reviewTaskEntry: (id: number, entryId: number, r: { accept: boolean; score: number | null; place: 1 | 2 | 3 | null; comment: string }) =>
+      request<ChallengeEntry>("POST", `/employer/tasks/${id}/entries/${entryId}/review`, r),
+    candidates: (params: Record<string, string>) =>
+      request<{ items: CandidateRow[]; total: number; jobs: { id: number; title: string }[] }>("GET", `/employer/applications?${new URLSearchParams(params)}`),
     updateApplication: (id: number, changes: { status?: string; employer_note?: string; interview_at?: string; interview_place?: string }) =>
       request<Applicant>("PATCH", `/employer/applications/${id}`, changes),
     talent: (params: Record<string, string>) => request<TalentCard[]>("GET", `/employer/talent?${new URLSearchParams(params)}`),
@@ -591,10 +638,16 @@ export interface Challenge {
   id: number; title: string; description: string; track_id: number | null; track: string | null; prize: string;
   points: number; starts_at: string; ends_at: string; state: "upcoming" | "active" | "finished"; is_archived: boolean;
   mentor: string | null; entries: number; to_review?: number; my_entry?: ChallengeEntry | null;
+  company_id?: number | null; company?: string | null; audience?: "all" | "track" | "university" | "selected";
+  university_id?: number | null; invited?: number;
   results?: { student: string; place: number | null; score: number | null }[];
 }
 export interface ChallengeInput {
   title: string; description: string; track_id: number | null; prize: string; points: number; starts_on?: string | null; ends_on: string;
+}
+export interface CompanyTaskInput {
+  title: string; description: string; prize: string; points: number; starts_on?: string | null; ends_on: string;
+  audience: "all" | "track" | "university" | "selected"; track_id?: number | null; university_id?: number | null; student_ids?: number[];
 }
 export interface AdminChallenge {
   id: number; title: string; track: string; prize: string; points: number; mentor: string | null; entries: number;

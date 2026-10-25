@@ -90,6 +90,12 @@ STATEMENTS = [
     # a CHECK constraint cannot be altered in place: drop and re-create it with the longer state list
     "ALTER TABLE applications DROP CONSTRAINT IF EXISTS application_status_valid",
     f"ALTER TABLE applications ADD CONSTRAINT application_status_valid CHECK (status IN ({_states(APPLICATION_STATES)}))",
+    # company tasks reuse challenges (2026-10-26)
+    "ALTER TABLE challenges ADD COLUMN IF NOT EXISTS company_id integer REFERENCES companies(id) ON DELETE CASCADE",
+    "ALTER TABLE challenges ADD COLUMN IF NOT EXISTS audience varchar(12) NOT NULL DEFAULT 'all'",
+    "ALTER TABLE challenges ADD COLUMN IF NOT EXISTS university_id integer REFERENCES universities(id) ON DELETE SET NULL",
+    "ALTER TABLE challenges ADD COLUMN IF NOT EXISTS invited_ids integer[] NOT NULL DEFAULT '{}'",
+    "CREATE INDEX IF NOT EXISTS ix_challenges_company_id ON challenges (company_id)",
 ]
 
 

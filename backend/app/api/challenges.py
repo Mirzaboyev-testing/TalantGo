@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import func, select, update
+from sqlalchemy import and_, func, or_, select, update
 
 from ..models import Challenge, ChallengeEntry, Role, Task, Track, User
 from ..schemas import Url
@@ -142,7 +142,9 @@ def challenge_out(c: Challenge, now: datetime, **extra) -> dict:
     return {"id": c.id, "title": c.title, "description": c.description, "track_id": c.track_id,
             "track": c.track.title if c.track else None, "prize": c.prize, "points": c.points,
             "starts_at": c.starts_at, "ends_at": c.ends_at, "state": state, "is_archived": c.is_archived,
-            "mentor": c.created_by.full_name if c.created_by else None, **extra}
+            "mentor": c.created_by.full_name if c.created_by and not c.company_id else None,
+            "company_id": c.company_id, "company": c.company.name if c.company else None,
+            "audience": c.audience, "university_id": c.university_id, "invited": len(c.invited_ids), **extra}
 
 
 def entry_out(e: ChallengeEntry) -> dict:
@@ -235,6 +237,12 @@ async def review_entry(challenge_id: int, entry_id: int, body: ReviewEntryIn, us
         raise HTTPException(404, "Ish topilmadi")
     if entry.user_id == user.id:
         raise HTTPException(403, "O'z ishingizni baholay olmaysiz")
+    await apply_review(session, c, entry, body)
+    return entry_out(entry)
+
+
+async def apply_review(session: Session, c: Challenge, entry: ChallengeEntry, body: ReviewEntryIn) -> None:
+    """Accepts or rejects an entry, moves the place and its bonus, commits and tells the student."""
     if body.place and not body.accept:
         raise HTTPException(422, "Rad etilgan ishga o'rin berilmaydi")
     if body.place:
@@ -251,20 +259,28 @@ async def review_entry(challenge_id: int, entry_id: int, body: ReviewEntryIn, us
     await _set_award(session, entry, (c.points + PLACE_BONUS.get(body.place or 0, 0)) if body.accept else 0)
     await session.commit()
     place = f" Siz {body.place}-o'rinni egalladingiz!" if body.place else ""
+    what = f"«{c.title}» ({c.company.name}) vazifasidagi" if c.company else f"«{c.title}» chellenjidagi"
     await inbox.push(session, [entry.user_id], "challenge_result",
-                     f"«{c.title}» chellenjidagi ishingiz qabul qilindi: +{entry.points_awarded} ball.{place}"
-                     if body.accept else f"«{c.title}» chellenjidagi ishingiz qabul qilinmadi. Izoh: {entry.comment or '-'}",
+                     f"{what} ishingiz qabul qilindi: +{entry.points_awarded} ball.{place}"
+                     if body.accept else f"{what} ishingiz qabul qilinmadi. Izoh: {entry.comment or '-'}",
                      link="/talaba/yol", params={"challenge": c.title, "accepted": body.accept})
-    return entry_out(entry)
 
 
 # --------------------------------------------------------------------------- students
 
 def _for_user(user: User):
-    """Challenges a student sees: everyone's and their own track's; finished ones for 30 days."""
+    """What a student sees, finished items for 30 days: mentor challenges for everyone or their track,
+    and company tasks meant for everyone, their track, their university or them by name."""
     recent = datetime.now(UTC) - timedelta(days=30)
+    mentor_items = and_(Challenge.company_id.is_(None),
+                        Challenge.track_id.is_(None) | (Challenge.track_id == user.track_id))
+    company_items = and_(Challenge.company_id.isnot(None), or_(
+        Challenge.audience == "all",
+        and_(Challenge.audience == "track", Challenge.track_id == user.track_id),
+        and_(Challenge.audience == "university", Challenge.university_id == user.university_id),
+        and_(Challenge.audience == "selected", Challenge.invited_ids.contains([user.id]))))
     return select(Challenge).where(Challenge.is_archived.is_(False), Challenge.ends_at >= recent,
-                                   Challenge.track_id.is_(None) | (Challenge.track_id == user.track_id))
+                                   or_(mentor_items, company_items))
 
 
 @router.get("/challenges")

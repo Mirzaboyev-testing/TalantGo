@@ -23,6 +23,7 @@ const PATHS: Record<string, string> = {
   copy: "M9 9h11v11H9z M5 15H4V4h11v1",
   trash: "M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13",
   close: "M6 6l12 12 M18 6L6 18",
+  home: "M4 11l8-7 8 7 M6 9.5V20h12V9.5 M10 20v-6h4v6",
   bell: "M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16Z M10 20.5a2 2 0 0 0 4 0",
   menu: "M4 6h16 M4 12h16 M4 18h16",
   flag: "M5 21V4 M5 4h12l-2.5 4 2.5 4H5",

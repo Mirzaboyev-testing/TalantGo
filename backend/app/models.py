@@ -416,6 +416,17 @@ class Application(Base):
     user: Mapped[User] = relationship(lazy="selectin")
 
 
+class SavedJob(Base):
+    """A vacancy a student bookmarked (the heart on the job card)."""
+    __tablename__ = "saved_jobs"
+    __table_args__ = (UniqueConstraint("user_id", "job_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class ApplicationEvent(Base):
     """Every status change of an application, so the history (and the hiring statistics) can be trusted."""
     __tablename__ = "application_events"
@@ -532,8 +543,12 @@ class GroupMessage(Base):
     user: Mapped[User | None] = relationship(lazy="selectin")
 
 
+TASK_AUDIENCES = ("all", "track", "university", "selected")
+
+
 class Challenge(Base):
-    """A time-boxed contest a mentor runs: students submit work, the mentor scores it and names winners."""
+    """A time-boxed contest a mentor runs, or a task a company gives students (company_id set):
+    students submit work, the author scores it and names winners."""
     __tablename__ = "challenges"
     __table_args__ = (CheckConstraint("points >= 0", name="challenge_points_nonnegative"),
                       CheckConstraint("ends_at > starts_at", name="challenge_dates_order"))
@@ -548,10 +563,16 @@ class Challenge(Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    # company tasks: who may see and enter it (mentor challenges use track_id only)
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    audience: Mapped[str] = mapped_column(String(12), default="all", server_default="all")      # TASK_AUDIENCES
+    university_id: Mapped[int | None] = mapped_column(ForeignKey("universities.id", ondelete="SET NULL"))
+    invited_ids: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     track: Mapped[Track | None] = relationship(lazy="selectin")
     created_by: Mapped[User | None] = relationship(lazy="selectin")
+    company: Mapped[Company | None] = relationship(lazy="selectin")
 
 
 class ChallengeEntry(Base):

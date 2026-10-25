@@ -11,9 +11,10 @@ const KINDS: [JobKind | "", string][] = [["", "Hammasi"], ["internship", "Amaliy
                                         ["junior", "Junior"], ["project", "Loyiha"]];
 
 export default function JobsScreen({ me, onOpenProfile, initialView = "jobs" }: {
-  me: Me; onOpenProfile: () => void; initialView?: "jobs" | "mine";
+  me: Me; onOpenProfile: () => void; initialView?: "jobs" | "mine" | "saved";
 }) {
-  const [view, setView] = useState<"jobs" | "mine" | "tests">(initialView);
+  const [view, setView] = useState<"jobs" | "mine" | "saved" | "tests">(initialView);
+  const [saved, setSaved] = useState<Job[] | null>(null);
   const [kind, setKind] = useState<JobKind | "">("");
   const [paidOnly, setPaidOnly] = useState(false);
   const [practiceOnly, setPracticeOnly] = useState(false);
@@ -36,6 +37,7 @@ export default function JobsScreen({ me, onOpenProfile, initialView = "jobs" }: 
 
   useEffect(() => { if (view === "jobs") loadJobs(); }, [view, kind, paidOnly, practiceOnly]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (view === "mine") api.myApplications().then(setMine, (e) => setError(message(e))); }, [view]);
+  useEffect(() => { if (view === "saved") api.savedJobs().then(setSaved, (e) => setError(message(e))); }, [view]);
   const loadContacts = useCallback(() => api.myContacts().then(setContacts, () => {}), []);
   useEffect(() => { void loadContacts(); }, [loadContacts]);
 
@@ -48,6 +50,7 @@ export default function JobsScreen({ me, onOpenProfile, initialView = "jobs" }: 
       <div className="segmented">
         <button className={view === "jobs" ? "on" : ""} onClick={() => setView("jobs")}>{t("jobs.tab.jobs")}</button>
         <button className={view === "mine" ? "on" : ""} onClick={() => setView("mine")}>{t("jobs.tab.mine")}</button>
+        <button className={view === "saved" ? "on" : ""} onClick={() => setView("saved")}>{t("jobs.tab.saved")}</button>
         <button className={view === "tests" ? "on" : ""} onClick={() => setView("tests")}>{t("jobs.tab.tests")}</button>
       </div>
 
@@ -79,6 +82,25 @@ export default function JobsScreen({ me, onOpenProfile, initialView = "jobs" }: 
       )}
 
       {view === "tests" && <StudentTests />}
+      {view === "saved" && (
+        <>
+          {!saved && !error && <div className="hint">{t("common.loading")}</div>}
+          {saved?.length === 0 && <div className="center hint">{t("jobs.saved_empty")}</div>}
+          {saved?.map((j) => (
+            <div key={j.id} style={{ position: "relative" }}>
+              <JobCard job={j} onOpen={() => setOpen(j)} />
+              <button className="icon-btn heart on saved-remove" title={t("job.saved")} aria-label={t("job.saved")}
+                      onClick={async () => {
+                        try { await api.unsaveJob(j.id); setSaved((cur) => cur?.filter((x) => x.id !== j.id) ?? null); }
+                        catch (e) { setError(message(e)); }
+                      }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"
+                     aria-hidden="true"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10Z" /></svg>
+              </button>
+            </div>
+          ))}
+        </>
+      )}
       {view === "mine" && (
         <>
           {!mine && !error && <div className="hint">{t("common.loading")}</div>}
