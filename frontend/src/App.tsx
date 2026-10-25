@@ -127,7 +127,8 @@ export default function App() {
   }
   if (!me) return null;
   // signed-in people can still browse the public jobs and companies; "/" and /kirish lead to their panel
-  if (!insideTelegram && isPublicPath(path) && path !== "/" && !path.startsWith("/kirish")) {
+  // (inside the Telegram Mini App too: recommended jobs and notices open /vakansiyalar/:id)
+  if (isPublicPath(path) && path !== "/" && !path.startsWith("/kirish")) {
     return <PublicSite me={me} dev={false} onSignIn={signIn} onDev={devLogin} />;
   }
 

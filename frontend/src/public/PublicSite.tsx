@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import type { Me } from "../api";
 import { t, useLang } from "../i18n";
 import { navigate, usePath } from "../router";
 import LangSwitch from "../screens/LangSwitch";
+import { backButton, insideTelegram } from "../tg";
 import WebLogin from "../screens/WebLogin";
 import Home from "./Home";
 import { CompaniesPage, CompanyPage } from "./PublicCompanies";
@@ -22,6 +23,10 @@ export default function PublicSite({ me, dev, onSignIn, onDev }: {
   useLang();
   const path = usePath();
   const [, section, id] = path.split("/");
+  // the Mini App has no browser Back button: Telegram's own one goes back (or to the panel)
+  useEffect(() => backButton(insideTelegram && me
+    ? () => (window.history.length > 1 ? window.history.back() : navigate(panelBase(me)))
+    : null), [me]);
   let page: ReactNode;
   if (section === "vakansiyalar") page = id ? <JobPage id={Number(id)} me={me} /> : <JobsPage me={me} />;
   else if (section === "korxonalar") page = id ? <CompanyPage id={Number(id)} me={me} /> : <CompaniesPage />;
