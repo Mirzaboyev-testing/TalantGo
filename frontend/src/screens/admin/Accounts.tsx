@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type AdminAccount } from "../../api";
+import { api, type AdminAccount, type AdminRole } from "../../api";
 import { saveToken } from "./session";
 import { ErrorText, message } from "../../ui";
 
@@ -41,8 +41,9 @@ export function Accounts({ meId }: { meId: number }) {
               <td><b>{a.name}</b>{a.id === meId && <span className="hint"> (siz)</span>}</td>
               <td>{a.email}</td>
               <td>
-                <select value={a.role} disabled={a.status !== "active"} onChange={(e) => run(() => api.admin.updateAccount(a.id, { role: e.target.value as "owner" | "admin" }))}>
-                  <option value="admin">Admin</option><option value="owner">Ega</option>
+                <select value={a.role} disabled={a.status !== "active"} onChange={(e) => run(() => api.admin.updateAccount(a.id, { role: e.target.value as AdminRole }))}>
+                  <option value="admin">Admin</option><option value="moderator">Moderator</option>
+                  <option value="analyst">Tahlilchi (faqat ko'radi)</option><option value="owner">Ega</option>
                 </select>
               </td>
               <td><span className={`badge ${STATUS[a.status][1]}`}>{STATUS[a.status][0]}</span></td>
@@ -88,7 +89,7 @@ export function MyAccount({ me }: { me: { name: string; email: string; role: str
     <div className="narrow">
       <div className="panel">
         <h3 style={{ marginTop: 0 }}>{me.name}</h3>
-        <div className="hint">{me.email} · {me.role === "owner" ? "Ega" : "Admin"}</div>
+        <div className="hint">{me.email} · {({ owner: "Ega", admin: "Admin", moderator: "Moderator", analyst: "Tahlilchi" } as Record<string, string>)[me.role] ?? me.role}</div>
       </div>
       <div className="panel">
         <h3 style={{ marginTop: 0 }}>Parolni o'zgartirish</h3>

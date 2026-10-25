@@ -8,7 +8,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, or_, select
 
-from ..models import Company, EmploymentOutcome, Job, Partnership, Track, University, User
+from ..models import Application, Challenge, Company, EmploymentOutcome, Job, Partnership, Track, University, User
 from ..services.outcomes import university_stats
 from .deps import Session
 from .jobs import visible_jobs
@@ -103,6 +103,23 @@ async def companies(session: Session, q: str | None = Query(default=None, max_le
     return {"items": [public_company(c, n) for c, n in rows], "total": total}
 
 
+MIN_APPLICATIONS = 5
+
+
+async def company_activity(session, company_id: int) -> dict:
+    """How the company works with students: answered applications, hires, tasks. Facts, not stars.
+    The answer share needs at least MIN_APPLICATIONS applications behind it."""
+    statuses = dict((await session.execute(select(Application.status, func.count()).join(Job, Job.id == Application.job_id)
+                                           .where(Job.company_id == company_id).group_by(Application.status))).all())
+    total = sum(n for s, n in statuses.items() if s != "withdrawn")
+    answered = sum(n for s, n in statuses.items() if s in ("shortlisted", "interview", "offer", "hired", "rejected"))
+    tasks = await session.scalar(select(func.count()).select_from(Challenge).where(Challenge.company_id == company_id))
+    hires = await session.scalar(select(func.count()).select_from(EmploymentOutcome).where(
+        EmploymentOutcome.company_id == company_id, EmploymentOutcome.source == "application"))
+    return {"applications": total, "answer_rate": round(100 * answered / total) if total >= MIN_APPLICATIONS else None,
+            "hires": hires, "tasks": tasks, "min_applications": MIN_APPLICATIONS}
+
+
 @router.get("/companies/{company_id}")
 async def company(company_id: int, session: Session) -> dict:
     found = await session.get(Company, company_id)
@@ -110,7 +127,8 @@ async def company(company_id: int, session: Session) -> dict:
         raise HTTPException(404, "Kompaniya topilmadi")
     rows = (await session.execute(visible_jobs().where(Job.company_id == company_id)
                                   .order_by(Job.created_at.desc()).limit(50))).scalars().all()
-    return {**public_company(found, len(rows)), "jobs": [public_job(j) for j in rows]}
+    return {**public_company(found, len(rows)), "jobs": [public_job(j) for j in rows],
+            "activity": await company_activity(session, company_id)}
 
 
 def _verified_students(university_id):

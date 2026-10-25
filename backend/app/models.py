@@ -548,10 +548,49 @@ class ContactRequest(Base):
     job: Mapped[Job | None] = relationship(lazy="selectin")
 
 
+# owner: everything; admin: everything but owner-only settings; moderator: checks and moderation;
+# analyst: reads the numbers (api/deps.py enforces it)
+ADMIN_ROLES = ("owner", "admin", "moderator", "analyst")
+COMPLAINT_TARGETS = ("job", "company", "task", "user")
+
+
+class Complaint(Base):
+    """Someone reports a vacancy, company, task or person; an admin resolves or dismisses it."""
+    __tablename__ = "complaints"
+    __table_args__ = (_in("target_kind", COMPLAINT_TARGETS, "complaint_target_valid"),
+                      _in("status", ("open", "resolved", "dismissed"), "complaint_status_valid"),
+                      Index("ix_complaints_status_created", "status", "created_at"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    reporter_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    target_kind: Mapped[str] = mapped_column(String(10))
+    target_id: Mapped[int] = mapped_column(Integer)
+    reason: Mapped[str] = mapped_column(String(40))
+    text: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(10), default="open")
+    admin_note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    reporter: Mapped[User | None] = relationship(lazy="selectin")
+
+
+class RankingSnapshot(Base):
+    """A published university ranking: the period, the method settings and the rows as they were."""
+    __tablename__ = "ranking_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    period: Mapped[str] = mapped_column(String(60))
+    config: Mapped[dict] = mapped_column(JSONB, default=dict)
+    rows: Mapped[list] = mapped_column(JSONB, default=list)
+    published_by: Mapped[str] = mapped_column(String(160), default="")
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class AdminAccount(Base):
     """A person who manages CareerFlow on the admin website. Not a Telegram user."""
     __tablename__ = "admin_accounts"
-    __table_args__ = (_in("role", ("owner", "admin"), "admin_role_valid"),
+    __table_args__ = (_in("role", ADMIN_ROLES, "admin_role_valid"),
                       _in("status", ("pending", "active", "disabled"), "admin_status_valid"))
 
     id: Mapped[int] = mapped_column(primary_key=True)

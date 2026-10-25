@@ -6,6 +6,7 @@ import { Icon } from "../icons";
 import { navigate, useSearch } from "../router";
 import { statusLabel } from "../pipeline";
 import { ErrorText, message, toast } from "../ui";
+import { ReportButton } from "./PublicRanking";
 
 const KINDS: JobKind[] = ["internship", "part_time", "junior", "project"];
 const PAGE = 20;
@@ -231,6 +232,7 @@ export function JobPage({ id, me }: { id: number; me: Me | null }) {
           </>
         )}
       </div>
+      <ReportButton me={me} kind="job" id={id} />
     </div>
   );
 }

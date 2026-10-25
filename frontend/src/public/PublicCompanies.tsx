@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, loadCatalog, type Catalog, type Me, type PublicCompany, type PublicJob } from "../api";
+import { api, loadCatalog, type Catalog, type CompanyActivity, type Me, type PublicCompany, type PublicJob } from "../api";
 import { industryLabel } from "../format";
 import { t } from "../i18n";
 import { Icon } from "../icons";
@@ -7,6 +7,7 @@ import { navigate } from "../router";
 import { openLink } from "../tg";
 import { ErrorText, message } from "../ui";
 import { PublicJobCard } from "./PublicJobs";
+import { ReportButton } from "./PublicRanking";
 
 export function CompanyTile({ company }: { company: PublicCompany }) {
   return (
@@ -60,8 +61,8 @@ export function CompaniesPage() {
   );
 }
 
-export function CompanyPage({ id }: { id: number; me: Me | null }) {
-  const [company, setCompany] = useState<(PublicCompany & { jobs: PublicJob[] }) | null>(null);
+export function CompanyPage({ id, me }: { id: number; me: Me | null }) {
+  const [company, setCompany] = useState<(PublicCompany & { jobs: PublicJob[]; activity: CompanyActivity }) | null>(null);
   const [error, setError] = useState("");
   useEffect(() => { api.public.company(id).then(setCompany, (e) => setError(message(e))); }, [id]);
 
@@ -86,9 +87,21 @@ export function CompanyPage({ id }: { id: number; me: Me | null }) {
           </button>
         )}
       </div>
+      <div className="card">
+        <b>{t("activity.title")}</b>
+        <div className="stats" style={{ marginTop: 10, marginBottom: 0 }}>
+          <div className="stat">
+            <b>{company.activity.answer_rate == null ? "–" : `${company.activity.answer_rate}%`}</b>
+            <span>{company.activity.answer_rate == null ? t("activity.not_enough", { n: company.activity.min_applications }) : t("activity.answer_rate")}</span>
+          </div>
+          <div className="stat"><b>{company.activity.hires}</b><span>{t("activity.hires")}</span></div>
+          <div className="stat"><b>{company.activity.tasks}</b><span>{t("activity.tasks")}</span></div>
+        </div>
+      </div>
       <h2 className="pub-h2">{t("company.jobs")}</h2>
       {company.jobs.length === 0 && <div className="card hint">{t("company.no_jobs")}</div>}
       <div className="job-grid">{company.jobs.map((j) => <PublicJobCard key={j.id} job={j} />)}</div>
+      <p style={{ marginTop: 16 }}><ReportButton me={me} kind="company" id={company.id} /></p>
     </div>
   );
 }

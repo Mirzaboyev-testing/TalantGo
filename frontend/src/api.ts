@@ -175,6 +175,22 @@ export interface UniversityProfile {
 export interface PublicUniversity { id: number; name: string; short_name: string; city: string; region: string; students: number; partners: number }
 export interface MyOutcome { id: number; company: string; position: string; kind: OutcomeKind; started_on: string | null; source: string; confirmed: boolean; confirmed_by: string }
 export interface Opportunity extends Job { partner: boolean; recommended: boolean; our_applicants: number }
+export type AdminRole = "owner" | "admin" | "moderator" | "analyst";
+export interface RankingRow {
+  university_id: number; name: string; short_name: string; city: string; students: number; employed: number; interned: number;
+  score: number | null; rank: number | null;
+}
+export interface RankingMethod { internship_weight: number; min_sample: number; formula: string }
+export interface RankingSnapshot { id: number; period: string; config: { internship_weight: number; min_sample: number }; published_by: string; published_at: string; rows?: RankingRow[] }
+export interface AdminComplaint {
+  id: number; target_kind: "job" | "company" | "task" | "user"; target_id: number; target: string; reason: string; text: string;
+  status: "open" | "resolved" | "dismissed"; admin_note: string; reporter: string | null; created_at: string; resolved_at: string | null;
+}
+export interface AdminOutcome {
+  id: number; student: string; university: string | null; company: string; position: string; kind: OutcomeKind; source: string;
+  confirmed: boolean; confirmed_by: string; created_at: string;
+}
+export interface CompanyActivity { applications: number; answer_rate: number | null; hires: number; tasks: number; min_applications: number }
 export interface AppNotification {
   id: number; kind: string; text: string; link: string; params: Record<string, string | number | boolean | null>;
   created_at: string; read: boolean;
@@ -376,13 +392,16 @@ export const api = {
   myUniversity: () => request<{ university: UniversityProfile | null; verified?: boolean; recommended: (Job & { note: string })[]; outcomes: MyOutcome[] }>("GET", "/me/university"),
   addOutcome: (o: { company_name: string; position: string; kind: OutcomeKind; started_on?: string | null }) => request<MyOutcome>("POST", "/me/outcomes", o),
   deleteOutcome: (id: number) => request<null>("DELETE", `/me/outcomes/${id}`),
+  complain: (c: { target_kind: "job" | "company" | "task" | "user"; target_id: number; reason: string; text: string }) =>
+    request<{ status: string }>("POST", "/complaints", c),
   public: {
     stats: () => request<PublicStats>("GET", "/public/stats"),
     jobs: (params: Record<string, string>) => request<{ items: PublicJob[]; total: number }>("GET", `/public/jobs?${new URLSearchParams(params)}`),
     job: (id: number) => request<PublicJob>("GET", `/public/jobs/${id}`),
     companies: (params: Record<string, string>) => request<{ items: PublicCompany[]; total: number }>("GET", `/public/companies?${new URLSearchParams(params)}`),
-    company: (id: number) => request<PublicCompany & { jobs: PublicJob[] }>("GET", `/public/companies/${id}`),
+    company: (id: number) => request<PublicCompany & { jobs: PublicJob[]; activity: CompanyActivity }>("GET", `/public/companies/${id}`),
     universities: (q = "") => request<{ items: PublicUniversity[]; total: number }>("GET", `/public/universities${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+    ranking: () => request<{ published: RankingSnapshot | null; live: { method: RankingMethod; rows: RankingRow[]; computed_at: string } }>("GET", "/public/ranking"),
     university: (id: number) => request<UniversityProfile>("GET", `/public/universities/${id}`),
   },
   apply: (id: number, note: string) => request<MyApplication>("POST", `/jobs/${id}/apply`, { note }),
@@ -525,8 +544,16 @@ export const api = {
     applications: (params: Record<string, string>) => request<AdminApplication[]>("GET", `/admin/applications?${new URLSearchParams(params)}`, undefined, true),
     allJobs: (status: string) => request<Job[]>("GET", `/admin/jobs${status ? `?status=${status}` : ""}`, undefined, true),
     accounts: () => request<AdminAccount[]>("GET", "/admin/accounts", undefined, true),
-    updateAccount: (id: number, changes: { role?: "owner" | "admin"; status?: "active" | "disabled" }) =>
+    updateAccount: (id: number, changes: { role?: AdminRole; status?: "active" | "disabled" }) =>
       request<AdminAccount>("PATCH", `/admin/accounts/${id}`, changes, true),
+    complaints: (status = "open") => request<AdminComplaint[]>("GET", `/admin/complaints?status=${status}`, undefined, true),
+    decideComplaint: (id: number, status: "resolved" | "dismissed", note: string) =>
+      request<{ status: string }>("POST", `/admin/complaints/${id}`, { status, note }, true),
+    ranking: () => request<{ method: RankingMethod; rows: RankingRow[]; snapshots: RankingSnapshot[] }>("GET", "/admin/ranking", undefined, true),
+    saveRanking: (c: { internship_weight: number; min_sample: number }) => request<RankingMethod>("PUT", "/admin/ranking/config", c, true),
+    publishRanking: (period: string) => request<RankingSnapshot>("POST", "/admin/ranking/publish", { period }, true),
+    partnerships: () => request<PartnershipRow[]>("GET", "/admin/partnerships", undefined, true),
+    outcomes: () => request<AdminOutcome[]>("GET", "/admin/outcomes", undefined, true),
     resetPassword: (id: number) => request<{ temporary_password: string }>("POST", `/admin/accounts/${id}/reset-password`, undefined, true),
     resetUserPassword: (id: number) => request<{ temporary_password: string; email: string }>("POST", `/admin/users/${id}/reset-password`, undefined, true),
     groups: () => request<AdminGroup[]>("GET", "/admin/groups", undefined, true),
@@ -633,7 +660,7 @@ export const formatPhone = (p: string) => p.replace(/^\+998(\d{2})(\d{3})(\d{2})
 export const courseLabel = (c: number | null | undefined) => (!c ? "" : c === 7 ? "magistratura" : `${c}-kurs`);
 
 export interface AdminAccount {
-  id: number; name: string; email: string; role: "owner" | "admin"; status: "pending" | "active" | "disabled";
+  id: number; name: string; email: string; role: AdminRole; status: "pending" | "active" | "disabled";
   created_at: string; last_login_at: string | null;
 }
 export interface AdminApplication {

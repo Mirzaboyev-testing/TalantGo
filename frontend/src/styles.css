@@ -402,6 +402,7 @@ input.invalid, textarea.invalid, select.invalid { border-color: var(--bad) !impo
 .pick-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--line); cursor: pointer; color: var(--text); margin: 0; }
 .pick-row:last-child { border-bottom: 0; }
 .pick-row input { width: 18px; height: 18px; flex: none; }
+.link-btn { border: 0; background: none; color: var(--hint); font-size: 13px; text-decoration: underline; cursor: pointer; padding: 0; }
 .saved-remove { position: absolute; top: 12px; right: 12px; }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-hello .pub-search .btn { padding: 0 14px; }

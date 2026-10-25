@@ -7,7 +7,7 @@ Switch to Alembic once a change is not purely additive.
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from ..models import APPLICATION_STATES
+from ..models import ADMIN_ROLES, APPLICATION_STATES
 
 
 def _states(values: tuple[str, ...]) -> str:
@@ -100,6 +100,9 @@ STATEMENTS = [
     "ALTER TABLE universities ADD COLUMN IF NOT EXISTS description text NOT NULL DEFAULT ''",
     "ALTER TABLE universities ADD COLUMN IF NOT EXISTS website varchar(256) NOT NULL DEFAULT ''",
     "ALTER TABLE universities ADD COLUMN IF NOT EXISTS region varchar(60) NOT NULL DEFAULT ''",
+    # admin roles: moderator and analyst (2026-10-26)
+    "ALTER TABLE admin_accounts DROP CONSTRAINT IF EXISTS admin_role_valid",
+    f"ALTER TABLE admin_accounts ADD CONSTRAINT admin_role_valid CHECK (role IN ({_states(ADMIN_ROLES)}))",
 ]
 
 

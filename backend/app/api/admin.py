@@ -789,7 +789,7 @@ async def accounts(_: OwnerActor, session: Session) -> list[dict]:
 
 
 class AccountPatch(BaseModel):
-    role: Literal["owner", "admin"] | None = None
+    role: Literal["owner", "admin", "moderator", "analyst"] | None = None
     status: Literal["active", "disabled"] | None = None
 
 
@@ -800,7 +800,7 @@ async def update_account(account_id: int, body: AccountPatch, actor: OwnerActor,
         raise HTTPException(404, "Hisob topilmadi")
     changes = body.model_dump(exclude_none=True)
     losing_owner = account.role == "owner" and account.status == "active" and (
-        changes.get("role") == "admin" or changes.get("status") == "disabled")
+        changes.get("role", "owner") != "owner" or changes.get("status") == "disabled")
     if losing_owner and await session.scalar(select(func.count()).select_from(AdminAccount).where(
             AdminAccount.role == "owner", AdminAccount.status == "active")) <= 1:
         raise HTTPException(400, "Kamida bitta faol ega qolishi kerak")

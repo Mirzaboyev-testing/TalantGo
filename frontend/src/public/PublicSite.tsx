@@ -7,13 +7,14 @@ import WebLogin from "../screens/WebLogin";
 import Home from "./Home";
 import { CompaniesPage, CompanyPage } from "./PublicCompanies";
 import { JobPage, JobsPage } from "./PublicJobs";
+import { RankingPage } from "./PublicRanking";
 import { UniversitiesPage, UniversityPage } from "./PublicUniversities";
 import { PanelChooser, panelBase, type Panel } from "./panels";
 
 type GetToken = () => Promise<{ token: string; moved_to?: string | null }>;
 
 /** Pages anyone can open: the home page with the three panels, jobs, companies and the sign-in pages. */
-export const isPublicPath = (path: string) => /^\/($|vakansiyalar(\/|$)|korxonalar(\/|$)|universitetlar(\/|$)|kirish(\/|$))/.test(path);
+export const isPublicPath = (path: string) => /^\/($|vakansiyalar(\/|$)|korxonalar(\/|$)|universitetlar(\/|$)|reyting$|kirish(\/|$))/.test(path);
 
 export default function PublicSite({ me, dev, onSignIn, onDev }: {
   me: Me | null; dev: boolean; onSignIn: (getToken: GetToken) => void; onDev: (id: number, name: string) => void;
@@ -25,6 +26,7 @@ export default function PublicSite({ me, dev, onSignIn, onDev }: {
   if (section === "vakansiyalar") page = id ? <JobPage id={Number(id)} me={me} /> : <JobsPage me={me} />;
   else if (section === "korxonalar") page = id ? <CompanyPage id={Number(id)} me={me} /> : <CompaniesPage />;
   else if (section === "universitetlar") page = id ? <UniversityPage id={Number(id)} /> : <UniversitiesPage />;
+  else if (section === "reyting") page = <RankingPage />;
   else if (section === "kirish") {
     page = id === "talaba" || id === "korxona" || id === "universitet"
       ? <WebLogin dev={dev} panel={id as Panel} onSignIn={onSignIn} onDev={onDev} />
@@ -42,6 +44,7 @@ export default function PublicSite({ me, dev, onSignIn, onDev }: {
             <NavLink to="/vakansiyalar" active={section === "vakansiyalar"}>{t("pub.nav.jobs")}</NavLink>
             <NavLink to="/korxonalar" active={section === "korxonalar"}>{t("pub.nav.companies")}</NavLink>
             <NavLink to="/universitetlar" active={section === "universitetlar"}>{t("pub.nav.universities")}</NavLink>
+            <NavLink to="/reyting" active={section === "reyting"}>{t("pub.nav.ranking")}</NavLink>
           </nav>
           <span className="grow" />
           <LangSwitch />
