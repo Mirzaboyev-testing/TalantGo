@@ -10,6 +10,7 @@ import LeaderboardScreen from "./screens/Leaderboard";
 import ProfileScreen from "./screens/Profile";
 import JobsScreen from "./screens/Jobs";
 import StudentHome from "./screens/StudentHome";
+import MyUniversity from "./screens/MyUniversity";
 import Welcome, { PendingScreen } from "./screens/Welcome";
 import EmployerApp from "./screens/employer/EmployerApp";
 import EmployerSignup from "./screens/employer/EmployerSignup";
@@ -33,9 +34,11 @@ const storeToken = (t: string) => { try { localStorage.setItem(TOKEN_KEY, t); } 
 const storedToken = () => { try { return localStorage.getItem(TOKEN_KEY) ?? ""; } catch { return ""; } };
 const forgetToken = () => { try { localStorage.removeItem(TOKEN_KEY); } catch { /* storage blocked */ } };
 
-type Tab = "home" | "path" | "jobs" | "review" | "community" | "profile";
+type Tab = "home" | "path" | "jobs" | "review" | "university" | "community" | "profile";
 // /talaba/<segment>; /talaba/arizalar and /talaba/saqlangan open the jobs tab on that view
-const STUDENT_TABS: Record<Tab, string> = { home: "", path: "yol", jobs: "vakansiyalar", review: "tekshirish", community: "hamjamiyat", profile: "profil" };
+const STUDENT_TABS: Record<Tab, string> = {
+  home: "", path: "yol", jobs: "vakansiyalar", review: "tekshirish", university: "universitetim", community: "hamjamiyat", profile: "profil",
+};
 let joinHandled = false;
 type AuthState = { kind: "loading" } | { kind: "login"; dev: boolean } | { kind: "error"; text: string } | { kind: "ok" };
 
@@ -198,6 +201,7 @@ function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
     { id: "path", icon: "path", label: t("nav.student.path") },
     { id: "jobs", icon: "briefcase", label: t("nav.student.jobs") },
     { id: "review", icon: "check", label: t(me.role === "student" ? "nav.student.review" : "nav.student.mentor") },
+    { id: "university", icon: "school", label: t("nav.student.university") },
     { id: "community", icon: "users", label: t("nav.student.community"), badge: unread },
     { id: "profile", icon: "user", label: t("nav.student.profile") },
   ];
@@ -209,6 +213,7 @@ function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
       {tab === "home" && <StudentHome me={me} />}
       {tab === "path" && <PathScreen me={me} onChanged={refreshMe} onChangeTrack={onChangeTrack} />}
       {tab === "review" && <ReviewScreen me={me} onChanged={refreshMe} />}
+      {tab === "university" && <MyUniversity me={me} />}
       {tab === "jobs" && <JobsScreen key={segment} me={me}
                                      initialView={segment === "arizalar" ? "mine" : segment === "saqlangan" ? "saved" : "jobs"}
                                      onOpenProfile={() => setTab("profile")} />}

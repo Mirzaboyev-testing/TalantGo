@@ -5,16 +5,25 @@ import Groups from "../Groups";
 import Shell, { type ShellTab } from "../Shell";
 import { useRouteTab } from "../../router";
 import { t } from "../../i18n";
+import UniEmployment from "./UniEmployment";
+import { UniOpportunities, UniPartners, UniProfile } from "./UniCollab";
 
-type Tab = "dashboard" | "verify" | "students" | "groups";
+type Tab = "dashboard" | "employment" | "verify" | "students" | "partners" | "opportunities" | "profile" | "groups";
 const tabs = (): ShellTab<Tab>[] => [
   { id: "dashboard", icon: "chart", label: t("nav.university.dashboard") },
+  { id: "employment", icon: "briefcase", label: t("nav.university.employment") },
   { id: "verify", icon: "verified", label: t("nav.university.verify") },
   { id: "students", icon: "school", label: t("nav.university.students") },
+  { id: "partners", icon: "building", label: t("nav.university.partners") },
+  { id: "opportunities", icon: "flag", label: t("nav.university.opportunities") },
+  { id: "profile", icon: "globe", label: t("nav.university.profile") },
   { id: "groups", icon: "chat", label: t("nav.university.groups") },
 ];
 
-const ROUTES: Record<Tab, string> = { dashboard: "", verify: "tasdiqlash", students: "talabalar", groups: "guruhlar" };
+const ROUTES: Record<Tab, string> = {
+  dashboard: "", employment: "bandlik", verify: "tasdiqlash", students: "talabalar", partners: "hamkorlar",
+  opportunities: "imkoniyatlar", profile: "profil", groups: "guruhlar",
+};
 
 export default function UniversityApp({ me, onLogout }: { me: Me; onLogout: () => void }) {
   const [tab, setTab] = useRouteTab<Tab>("/universitet", ROUTES, "dashboard");
@@ -22,6 +31,10 @@ export default function UniversityApp({ me, onLogout }: { me: Me; onLogout: () =
     <Shell tabs={tabs()} active={tab} onChange={setTab} onLogout={onLogout}
            user={{ name: me.full_name, photo: me.photo_url, subtitle: `${me.staff_university?.short_name ?? ""} karyera markazi` }}>
         {tab === "dashboard" && <Dashboard />}
+        {tab === "employment" && <UniEmployment />}
+        {tab === "partners" && <UniPartners />}
+        {tab === "opportunities" && <UniOpportunities />}
+        {tab === "profile" && <UniProfile />}
         {tab === "verify" && <StudentList mode="verify" />}
         {tab === "students" && <StudentList mode="all" />}
         {tab === "groups" && <Groups />}

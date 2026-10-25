@@ -405,3 +405,26 @@ input.invalid, textarea.invalid, select.invalid { border-color: var(--bad) !impo
 .saved-remove { position: absolute; top: 12px; right: 12px; }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-hello .pub-search .btn { padding: 0 14px; }
+
+/* charts: 100% stacked share bar with a legend table, bar list */
+.share-chart { margin-top: 10px; }
+.share-bar { display: flex; gap: 2px; height: 22px; border-radius: 6px; overflow: visible; background: var(--bg); }
+.share-seg { position: relative; min-width: 4px; height: 100%; transition: opacity .15s; cursor: default; }
+.share-seg:first-child { border-radius: 4px 0 0 4px; }
+.share-seg:last-child { border-radius: 0 4px 4px 0; }
+.share-seg:only-child { border-radius: 4px; }
+.share-seg.dim { opacity: .35; }
+.share-empty { flex: 1; background: var(--bg2); border-radius: 4px; }
+.share-tip { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: var(--text); color: #fff; font-size: 12.5px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; z-index: 3; pointer-events: none; }
+.share-legend { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+.share-legend td { padding: 5px 4px; border-bottom: 1px solid var(--line); }
+.share-legend tr.on td { background: var(--bg2); }
+.share-legend .num { text-align: right; width: 56px; font-variant-numeric: tabular-nums; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: 0; }
+.bar-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.bar-list-row { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) 32px; align-items: center; gap: 10px; font-size: 14px; }
+.bar-list-track { height: 8px; border-radius: 4px; background: var(--bg2); overflow: hidden; }
+.bar-list-track span { display: block; height: 100%; background: var(--brand); border-radius: 4px; }
+.bar-list-row .num { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.big-rate { font-size: 34px; font-weight: 700; line-height: 1.1; color: var(--brand-ink); }
+@media (min-width: 720px) { .filters.two { grid-template-columns: 1fr 1fr; } }

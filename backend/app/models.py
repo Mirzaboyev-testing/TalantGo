@@ -61,6 +61,10 @@ class University(Base):
     short_name: Mapped[str] = mapped_column(String(40))
     city: Mapped[str] = mapped_column(String(60), default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    # the public profile, edited by the university's approved staff
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    website: Mapped[str] = mapped_column(String(256), default="", server_default="")
+    region: Mapped[str] = mapped_column(String(60), default="", server_default="")
 
 
 class Company(Base):
@@ -441,6 +445,71 @@ class ApplicationEvent(Base):
     actor_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     note: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+OUTCOME_KINDS = ("full_time", "part_time", "internship", "dual_education")
+OUTCOME_SOURCES = ("application", "self")
+
+
+class EmploymentOutcome(Base):
+    """Where a student works or interns. University statistics count only confirmed outcomes
+    (a hire on the platform, or one the company or the university confirmed); what a student only
+    reported is shown apart. `university_id` is the student's university when it was recorded."""
+    __tablename__ = "employment_outcomes"
+    __table_args__ = (_in("kind", OUTCOME_KINDS, "outcome_kind_valid"),
+                      _in("source", OUTCOME_SOURCES, "outcome_source_valid"),
+                      UniqueConstraint("application_id"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    university_id: Mapped[int | None] = mapped_column(ForeignKey("universities.id", ondelete="SET NULL"), index=True)
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id", ondelete="SET NULL"))
+    company_name: Mapped[str] = mapped_column(String(160))
+    position: Mapped[str] = mapped_column(String(160), default="")
+    kind: Mapped[str] = mapped_column(String(16))
+    started_on: Mapped[date | None] = mapped_column(Date)
+    source: Mapped[str] = mapped_column(String(12))
+    application_id: Mapped[int | None] = mapped_column(ForeignKey("applications.id", ondelete="SET NULL"))
+    confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    confirmed_by: Mapped[str] = mapped_column(String(12), default="")          # company / university
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    student: Mapped[User] = relationship(lazy="selectin")
+
+
+class Partnership(Base):
+    """A company and a university agreeing to work together (internships, tasks, hiring)."""
+    __tablename__ = "partnerships"
+    __table_args__ = (UniqueConstraint("company_id", "university_id"),
+                      _in("status", ("pending", "accepted", "rejected"), "partnership_status_valid"),
+                      _in("initiated_by", ("company", "university"), "partnership_initiator_valid"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    university_id: Mapped[int] = mapped_column(ForeignKey("universities.id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(10), default="pending")
+    initiated_by: Mapped[str] = mapped_column(String(10))
+    message: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    company: Mapped[Company] = relationship(lazy="selectin")
+    university: Mapped[University] = relationship(lazy="selectin")
+
+
+class JobRecommendation(Base):
+    """A university pointing its students to a vacancy (they get a notice; "Universitetim" lists it)."""
+    __tablename__ = "job_recommendations"
+    __table_args__ = (UniqueConstraint("university_id", "job_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    university_id: Mapped[int] = mapped_column(ForeignKey("universities.id", ondelete="CASCADE"), index=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"))
+    note: Mapped[str] = mapped_column(String(500), default="")
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    job: Mapped[Job] = relationship(lazy="selectin")
 
 
 class Notification(Base):

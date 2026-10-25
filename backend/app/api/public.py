@@ -8,7 +8,8 @@ from datetime import date
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, or_, select
 
-from ..models import Company, Job, University, User
+from ..models import Company, EmploymentOutcome, Job, Partnership, Track, University, User
+from ..services.outcomes import university_stats
 from .deps import Session
 from .jobs import visible_jobs
 
@@ -110,3 +111,51 @@ async def company(company_id: int, session: Session) -> dict:
     rows = (await session.execute(visible_jobs().where(Job.company_id == company_id)
                                   .order_by(Job.created_at.desc()).limit(50))).scalars().all()
     return {**public_company(found, len(rows)), "jobs": [public_job(j) for j in rows]}
+
+
+def _verified_students(university_id):
+    return (select(func.count()).select_from(User).where(
+        User.university_id == university_id, User.account_type == "student", User.verification == "verified",
+        User.is_blocked.is_(False)))
+
+
+async def university_profile(session, uni: University) -> dict:
+    """Aggregates only: no student is named. Shares follow the minimum-sample rule of university_stats."""
+    data = await university_stats(session, uni.id)
+    partners = (await session.execute(select(Company.id, Company.name).join(Partnership, Partnership.company_id == Company.id)
+                                      .where(Partnership.university_id == uni.id, Partnership.status == "accepted",
+                                             Company.status == "approved").order_by(Company.name))).all()
+    tracks = (await session.execute(select(Track.title, func.count()).join(User, User.track_id == Track.id).where(
+        User.university_id == uni.id, User.account_type == "student", User.verification == "verified")
+        .group_by(Track.title).order_by(func.count().desc()).limit(5))).all()
+    return {"id": uni.id, "name": uni.name, "short_name": uni.short_name, "city": uni.city, "region": uni.region,
+            "description": uni.description, "website": uni.website,
+            "students": data["students"], "placed": data["placed"], "employed": data["employed"], "interned": data["interned"],
+            "placement_rate": data["placement_rate"], "min_sample": data["min_sample"], "top_employers": data["top_employers"][:5],
+            "hires_on_platform": data["hires_on_platform"],
+            "partners": [{"id": i, "name": n} for i, n in partners], "tracks": [{"title": t, "count": c} for t, c in tracks]}
+
+
+@router.get("/universities")
+async def universities(session: Session, q: str | None = Query(default=None, max_length=80),
+                       limit: int = Query(default=60, ge=1, le=100), offset: int = Query(default=0, ge=0)) -> dict:
+    students = _verified_students(University.id).correlate(University).scalar_subquery().label("students")
+    partners = (select(func.count()).select_from(Partnership).where(
+        Partnership.university_id == University.id, Partnership.status == "accepted")
+        .correlate(University).scalar_subquery().label("partners"))
+    query = select(University, students, partners).where(University.is_active.is_(True))
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        query = query.where(University.name.ilike(like) | University.short_name.ilike(like))
+    total = await session.scalar(select(func.count()).select_from(query.subquery()))
+    rows = (await session.execute(query.order_by(students.desc(), University.name).offset(offset).limit(limit))).all()
+    return {"items": [{"id": u.id, "name": u.name, "short_name": u.short_name, "city": u.city, "region": u.region,
+                       "students": s, "partners": p} for u, s, p in rows], "total": total}
+
+
+@router.get("/universities/{university_id}")
+async def university(university_id: int, session: Session) -> dict:
+    uni = await session.get(University, university_id)
+    if uni is None or not uni.is_active:
+        raise HTTPException(404, "Universitet topilmadi")
+    return await university_profile(session, uni)

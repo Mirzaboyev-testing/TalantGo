@@ -5,6 +5,9 @@ import { Icon } from "../icons";
 import { navigate, usePath } from "../router";
 import { ErrorText, Sheet, message } from "../ui";
 
+const PLACEHOLDERS = ["job", "company", "student", "university", "task", "test", "challenge", "note", "verifier",
+                      "points", "score", "max", "status"];
+
 /** The message in the reader's language: Uzbek is stored as written; ru/en use a template by kind. */
 export function notificationText(n: AppNotification): string {
   if (getLang() === "uz") return n.text;
@@ -12,7 +15,9 @@ export function notificationText(n: AppNotification): string {
   const variant = typeof p.status === "string" ? `.${p.status}`
     : "approved" in p ? (p.approved ? ".ok" : ".no")
     : "accepted" in p ? (p.accepted ? ".ok" : ".no") : "";
-  const params = Object.fromEntries(Object.entries(p).map(([k, v]) => [k, v == null ? "" : String(v)]));
+  // every placeholder a template may use: a notice sent to one side leaves the other side's name out
+  const params: Record<string, string> = Object.fromEntries(PLACEHOLDERS.map((k) => [k, ""]));
+  for (const [k, v] of Object.entries(p)) params[k] = v == null ? "" : String(v);
   return tMaybe(`notif.${n.kind}${variant}`, params) ?? tMaybe(`notif.${n.kind}`, params) ?? n.text;
 }
 

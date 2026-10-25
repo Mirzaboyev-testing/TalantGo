@@ -149,6 +149,32 @@ export interface EmployerDashboard {
   recent: { application_id: number; student: string; job: string; status: string; created_at: string }[];
 }
 export interface CandidateRow extends Applicant { job_id: number; job_title: string; match: number }
+export type OutcomeKind = "full_time" | "part_time" | "internship" | "dual_education";
+export interface UniversityStats {
+  min_sample: number; students: number; with_graduation_year: number; placed: number; employed: number; interned: number;
+  placement_rate: number | null; employed_rate: number | null; intern_rate: number | null;
+  where: Record<OutcomeKind | "seeking" | "unknown", number>; self_reported: number; hires_on_platform: number;
+  top_employers: { name: string; count: number }[]; partners: number; cohorts: number[]; faculties: string[];
+}
+export interface UniversityOutcome {
+  id: number; student_id: number; student: string; faculty: string; graduation_year: number | null; company: string;
+  position: string; kind: OutcomeKind; started_on: string | null; source: "application" | "self"; confirmed: boolean;
+  confirmed_by: string; created_at: string;
+}
+export interface PartnershipRow {
+  id: number; company_id: number; company: string; industry: string; university_id: number; university: string;
+  university_short: string; status: "pending" | "accepted" | "rejected"; initiated_by: "company" | "university";
+  message: string; created_at: string; decided_at: string | null;
+}
+export interface UniversityProfile {
+  id: number; name: string; short_name: string; city: string; region: string; description: string; website: string;
+  students: number; placed: number; employed: number; interned: number; placement_rate: number | null; min_sample: number;
+  top_employers: { name: string; count: number }[]; hires_on_platform: number;
+  partners: { id: number; name: string }[]; tracks: { title: string; count: number }[];
+}
+export interface PublicUniversity { id: number; name: string; short_name: string; city: string; region: string; students: number; partners: number }
+export interface MyOutcome { id: number; company: string; position: string; kind: OutcomeKind; started_on: string | null; source: string; confirmed: boolean; confirmed_by: string }
+export interface Opportunity extends Job { partner: boolean; recommended: boolean; our_applicants: number }
 export interface AppNotification {
   id: number; kind: string; text: string; link: string; params: Record<string, string | number | boolean | null>;
   created_at: string; read: boolean;
@@ -347,12 +373,17 @@ export const api = {
   unsaveJob: (id: number) => request<null>("DELETE", `/jobs/${id}/save`),
   savedJobs: () => request<Job[]>("GET", "/me/saved-jobs"),
   studentDashboard: () => request<StudentDashboard>("GET", "/me/dashboard"),
+  myUniversity: () => request<{ university: UniversityProfile | null; verified?: boolean; recommended: (Job & { note: string })[]; outcomes: MyOutcome[] }>("GET", "/me/university"),
+  addOutcome: (o: { company_name: string; position: string; kind: OutcomeKind; started_on?: string | null }) => request<MyOutcome>("POST", "/me/outcomes", o),
+  deleteOutcome: (id: number) => request<null>("DELETE", `/me/outcomes/${id}`),
   public: {
     stats: () => request<PublicStats>("GET", "/public/stats"),
     jobs: (params: Record<string, string>) => request<{ items: PublicJob[]; total: number }>("GET", `/public/jobs?${new URLSearchParams(params)}`),
     job: (id: number) => request<PublicJob>("GET", `/public/jobs/${id}`),
     companies: (params: Record<string, string>) => request<{ items: PublicCompany[]; total: number }>("GET", `/public/companies?${new URLSearchParams(params)}`),
     company: (id: number) => request<PublicCompany & { jobs: PublicJob[] }>("GET", `/public/companies/${id}`),
+    universities: (q = "") => request<{ items: PublicUniversity[]; total: number }>("GET", `/public/universities${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+    university: (id: number) => request<UniversityProfile>("GET", `/public/universities/${id}`),
   },
   apply: (id: number, note: string) => request<MyApplication>("POST", `/jobs/${id}/apply`, { note }),
   myApplications: () => request<MyApplication[]>("GET", "/me/applications"),
@@ -436,6 +467,10 @@ export const api = {
     closeJob: (id: number) => request<Job>("POST", `/employer/jobs/${id}/close`),
     applicants: (jobId: number) => request<Applicant[]>("GET", `/employer/jobs/${jobId}/applicants`),
     dashboard: (days = 30) => request<EmployerDashboard>("GET", `/employer/dashboard?days=${days}`),
+    universities: (q = "") => request<(PublicUniversity & { partnership: PartnershipRow | null })[]>("GET", `/employer/universities${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+    university: (id: number) => request<UniversityProfile & { partnership: PartnershipRow | null }>("GET", `/employer/universities/${id}`),
+    askPartnership: (universityId: number, message: string) => request<PartnershipRow>("POST", `/employer/universities/${universityId}/partnership`, { message }),
+    decidePartnership: (id: number, accept: boolean) => request<PartnershipRow>("POST", `/employer/partnerships/${id}/decide`, { accept }),
     tasks: () => request<Challenge[]>("GET", "/employer/tasks"),
     createTask: (task: CompanyTaskInput) => request<Challenge>("POST", "/employer/tasks", task),
     editTask: (id: number, changes: { title?: string; description?: string; prize?: string; ends_on?: string; is_archived?: boolean }) =>
@@ -457,6 +492,17 @@ export const api = {
     students: (params: Record<string, string>) => request<UniversityStudent[]>("GET", `/university/students?${new URLSearchParams(params)}`),
     verify: (id: number, approve: boolean, note: string) => request<{ verification: string }>("POST", `/university/verifications/${id}`, { approve, note }),
     exportCsv: () => download("/university/export.csv", "talabalar-hisobot.csv"),
+    profile: () => request<{ id: number; name: string; short_name: string; city: string; region: string; description: string; website: string }>("GET", "/university/profile"),
+    editProfile: (changes: { description?: string; website?: string; city?: string; region?: string }) =>
+      request<{ id: number; name: string; short_name: string; city: string; region: string; description: string; website: string }>("PATCH", "/university/profile", changes),
+    stats: (params: Record<string, string>) => request<UniversityStats>("GET", `/university/stats?${new URLSearchParams(params)}`),
+    outcomes: (confirmed?: boolean) => request<UniversityOutcome[]>("GET", `/university/outcomes${confirmed === undefined ? "" : `?confirmed=${confirmed}`}`),
+    decideOutcome: (id: number, confirm: boolean, note = "") => request<{ confirmed: boolean }>("POST", `/university/outcomes/${id}`, { confirm, note }),
+    partners: () => request<PartnershipRow[]>("GET", "/university/partners"),
+    askPartner: (companyId: number, message: string) => request<PartnershipRow>("POST", "/university/partners", { company_id: companyId, message }),
+    decidePartner: (id: number, accept: boolean) => request<PartnershipRow>("POST", `/university/partners/${id}/decide`, { accept }),
+    opportunities: () => request<Opportunity[]>("GET", "/university/opportunities"),
+    recommend: (jobId: number, note: string) => request<{ recommended: boolean; students: number }>("POST", `/university/jobs/${jobId}/recommend`, { note }),
   },
   tasks: (trackId: number) => request<Task[]>("GET", `/tracks/${trackId}/tasks`),
   completeProfile: (taskId: number) => request<Submission>("POST", `/tasks/${taskId}/complete-profile`),

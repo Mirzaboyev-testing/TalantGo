@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import ACTIVE_APPLICATION_STATES, Application, ApplicationEvent, User
-from . import inbox
+from . import inbox, outcomes
 
 STATUS_LABEL = {
     "new": "Yuborildi", "viewed": "Ko'rib chiqilmoqda", "shortlisted": "Saralandi", "interview": "Suhbat",
@@ -74,6 +74,8 @@ async def employer_move(session: AsyncSession, app: Application, employer: User,
             app.interview_place = interview_place.strip()
     app.status = target
     record(session, app, current, target, "employer", employer.id)
+    if target == "hired":
+        outcomes.record_hire(session, app)
     await session.commit()
     if target in STUDENT_NOTICE:
         company = app.job.company.name

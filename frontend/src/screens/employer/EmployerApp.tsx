@@ -15,23 +15,25 @@ import { navigate, useRouteTab, useSearch } from "../../router";
 import Candidates from "./Candidates";
 import CompanyHome from "./CompanyHome";
 import CompanyTasks from "./CompanyTasks";
+import CompanyUniversities from "./CompanyUniversities";
 import { t, useLang } from "../../i18n";
 import { ApplicantCard, CardBody } from "./ApplicantCard";
 
-type Tab = "home" | "candidates" | "jobs" | "students" | "tasks" | "tests" | "groups" | "profile";
+type Tab = "home" | "candidates" | "jobs" | "students" | "tasks" | "universities" | "tests" | "groups" | "profile";
 const tabs = (): ShellTab<Tab>[] => [
   { id: "home", icon: "home", label: t("nav.company.home") },
   { id: "candidates", icon: "inbox", label: t("nav.company.candidates") },
   { id: "jobs", icon: "briefcase", label: t("nav.company.jobs") },
   { id: "students", icon: "users", label: t("nav.company.students") },
   { id: "tasks", icon: "flag", label: t("nav.company.tasks") },
+  { id: "universities", icon: "school", label: t("nav.company.universities") },
   { id: "tests", icon: "check", label: t("nav.company.tests") },
   { id: "groups", icon: "chat", label: t("nav.company.groups") },
   { id: "profile", icon: "building", label: t("nav.company.profile") },
 ];
 // /korxona/<segment>
 const ROUTES: Record<Tab, string> = {
-  home: "", candidates: "nomzodlar", jobs: "vakansiyalar", students: "talabalar", tasks: "vazifalar", tests: "testlar",
+  home: "", candidates: "nomzodlar", jobs: "vakansiyalar", students: "talabalar", tasks: "vazifalar", universities: "universitetlar", tests: "testlar",
   groups: "guruhlar", profile: "profil",
 };
 const JOB_STATUS: Record<string, [string, string]> = {
@@ -50,6 +52,7 @@ export default function EmployerApp({ me, onChanged, onLogout }: { me: Me; onCha
         {tab === "home" && <CompanyHome onNewJob={() => navigate("/korxona/vakansiyalar?yangi=1")} />}
         {tab === "candidates" && <Candidates />}
         {tab === "tasks" && <CompanyTasks />}
+        {tab === "universities" && <CompanyUniversities />}
         {tab === "students" && (
           <>
             <div className="segmented">

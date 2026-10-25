@@ -6,12 +6,13 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from ..models import Application, ApplicationEvent, Company, ContactRequest, Job, Role, Status, Submission, User
 from ..schemas import (ApplicantOut, ApplicationPatch, CompanyIn, CompanyOut, ContactIn, JobIn, JobOut)
 from ..core import ratelimit
-from ..services import applications, inbox, notify
+from ..services import applications, inbox, notify, partnerships
 from ..core.security import create_token
 from ..models import CompanyTest, TestAttempt
 from ..services.career import JOB_KIND_LABEL, anonymous_card, identity, student_row
@@ -432,3 +433,74 @@ async def all_applications(user: ApprovedEmployer, session: Session, job_id: int
         "total": total,
         "jobs": [{"id": i, "title": t} for i, t in jobs],
     }
+
+
+
+# --------------------------------------------------------------------------- universities and partnerships
+
+@router.get("/universities")
+async def universities_for_company(user: ApprovedEmployer, session: Session,
+                                   q: str | None = Query(default=None, max_length=80)) -> list[dict]:
+    """Universities with their verified students and this company's partnership state."""
+    from ..models import Partnership, University
+    students = (select(func.count()).select_from(User).where(
+        User.university_id == University.id, User.account_type == "student", User.verification == "verified",
+        User.is_blocked.is_(False)).correlate(University).scalar_subquery().label("students"))
+    query = select(University, students).where(University.is_active.is_(True))
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        query = query.where(University.name.ilike(like) | University.short_name.ilike(like))
+    rows = (await session.execute(query.order_by(students.desc(), University.name).limit(100))).all()
+    mine = {p.university_id: p for p in (await session.execute(select(Partnership).where(
+        Partnership.company_id == user.company_id))).scalars()}
+    return [{"id": u.id, "name": u.name, "short_name": u.short_name, "city": u.city, "students": n,
+             "partnership": partnerships.out(mine[u.id]) if u.id in mine else None} for u, n in rows]
+
+
+@router.get("/universities/{university_id}")
+async def university_for_company(university_id: int, user: ApprovedEmployer, session: Session) -> dict:
+    from ..models import Partnership, University
+    from .public import university_profile
+    uni = await session.get(University, university_id)
+    if uni is None or not uni.is_active:
+        raise HTTPException(404, "Universitet topilmadi")
+    p = (await session.execute(select(Partnership).where(Partnership.company_id == user.company_id,
+                                                         Partnership.university_id == university_id))).scalar_one_or_none()
+    return {**await university_profile(session, uni), "partnership": partnerships.out(p) if p else None}
+
+
+class PartnershipIn(BaseModel):
+    message: str = Field(default="", max_length=1000)
+
+
+@router.post("/universities/{university_id}/partnership", status_code=201)
+async def ask_partnership(university_id: int, body: PartnershipIn, user: ApprovedEmployer, session: Session) -> dict:
+    from ..models import University
+    uni = await session.get(University, university_id)
+    if uni is None or not uni.is_active:
+        raise HTTPException(404, "Universitet topilmadi")
+    p = await partnerships.open_request(session, user.company, uni, "company", body.message)
+    staff = (await session.execute(select(User.id).where(User.staff_university_id == uni.id,
+                                                         User.staff_status == "approved"))).scalars().all()
+    await inbox.push(session, staff, "partnership_request", f"{user.company.name} hamkorlik taklif qildi.",
+                     link="/universitet/hamkorlar", params={"company": user.company.name})
+    return partnerships.out(p)
+
+
+class PartnershipDecisionIn(BaseModel):
+    accept: bool
+
+
+@router.post("/partnerships/{partnership_id}/decide")
+async def decide_partnership(partnership_id: int, body: PartnershipDecisionIn, user: ApprovedEmployer, session: Session) -> dict:
+    from ..models import Partnership
+    p = await session.get(Partnership, partnership_id)
+    if p is None or p.company_id != user.company_id:
+        raise HTTPException(404, "So'rov topilmadi")
+    await partnerships.decide(session, p, "company", body.accept)
+    staff = (await session.execute(select(User.id).where(User.staff_university_id == p.university_id,
+                                                         User.staff_status == "approved"))).scalars().all()
+    verdict = "qabul qildi" if body.accept else "rad etdi"
+    await inbox.push(session, staff, "partnership_decision", f"{user.company.name} hamkorlik taklifingizni {verdict}.",
+                     link="/universitet/hamkorlar", params={"approved": body.accept, "company": user.company.name})
+    return partnerships.out(p)

@@ -1,10 +1,13 @@
 """Student side of the early-career job board: browse, apply, answer employers' contact requests."""
 from datetime import UTC, date, datetime
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 
-from ..models import Application, ApplicationEvent, Company, ContactRequest, Job, SavedJob, User
+from ..models import (Application, ApplicationEvent, Company, ContactRequest, EmploymentOutcome, Job, JobRecommendation,
+                      SavedJob, User)
 from ..schemas import ApplyIn, ContactAnswerIn, JobOut, MyApplicationOut
 from ..services import applications, inbox
 from ..services.applications import company_staff_ids
@@ -227,3 +230,61 @@ async def student_dashboard(user: CurrentUser, session: Session) -> dict:
         "saved": saved,
         "open_jobs": len(open_jobs),
     }
+
+
+
+# --------------------------------------------------------------------------- my university, my work
+
+class OutcomeIn(BaseModel):
+    company_name: str = Field(min_length=2, max_length=160)
+    position: str = Field(default="", max_length=160)
+    kind: Literal["full_time", "part_time", "internship", "dual_education"]
+    started_on: date | None = None
+
+
+def my_outcome_out(o: EmploymentOutcome) -> dict:
+    return {"id": o.id, "company": o.company_name, "position": o.position, "kind": o.kind, "started_on": o.started_on,
+            "source": o.source, "confirmed": o.confirmed, "confirmed_by": o.confirmed_by}
+
+
+@router.get("/me/university")
+async def my_university(user: CurrentUser, session: Session) -> dict:
+    """The student's university page: its profile, vacancies it recommends, partner companies, my work."""
+    from .public import university_profile
+    mine = (await session.execute(select(EmploymentOutcome).where(EmploymentOutcome.student_id == user.id)
+                                  .order_by(EmploymentOutcome.created_at.desc()))).scalars().all()
+    if user.university_ref is None:
+        return {"university": None, "recommended": [], "outcomes": [my_outcome_out(o) for o in mine]}
+    recs = (await session.execute(select(JobRecommendation).join(Job, Job.id == JobRecommendation.job_id).where(
+        JobRecommendation.university_id == user.university_id, Job.id.in_(visible_jobs().with_only_columns(Job.id)))
+        .order_by(JobRecommendation.created_at.desc()).limit(20))).scalars().all()
+    return {"university": await university_profile(session, user.university_ref),
+            "verified": user.verification == "verified",
+            "recommended": [{**job_out(r.job, match=match_score(r.job, user)).model_dump(), "note": r.note} for r in recs],
+            "outcomes": [my_outcome_out(o) for o in mine]}
+
+
+@router.post("/me/outcomes", status_code=201)
+async def add_outcome(body: OutcomeIn, user: CurrentUser, session: Session) -> dict:
+    """The student says where they work or intern. It counts for the university once it is confirmed."""
+    if user.account_type != "student":
+        raise HTTPException(403, "Faqat talabalar uchun")
+    if await session.scalar(select(func.count()).select_from(EmploymentOutcome).where(EmploymentOutcome.student_id == user.id)) >= 10:
+        raise HTTPException(409, "10 tadan ortiq ish joyi qo'shib bo'lmaydi")
+    o = EmploymentOutcome(student_id=user.id, university_id=user.university_id, company_name=body.company_name.strip(),
+                          position=body.position.strip(), kind=body.kind, started_on=body.started_on, source="self")
+    session.add(o)
+    await session.commit()
+    await session.refresh(o)
+    return my_outcome_out(o)
+
+
+@router.delete("/me/outcomes/{outcome_id}", status_code=204)
+async def delete_outcome(outcome_id: int, user: CurrentUser, session: Session) -> None:
+    o = await session.get(EmploymentOutcome, outcome_id)
+    if o is None or o.student_id != user.id:
+        raise HTTPException(404, "Yozuv topilmadi")
+    if o.source == "application":
+        raise HTTPException(409, "Platformadagi ishga olish yozuvini o'chirib bo'lmaydi")
+    await session.delete(o)
+    await session.commit()

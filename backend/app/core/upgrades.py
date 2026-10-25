@@ -96,6 +96,10 @@ STATEMENTS = [
     "ALTER TABLE challenges ADD COLUMN IF NOT EXISTS university_id integer REFERENCES universities(id) ON DELETE SET NULL",
     "ALTER TABLE challenges ADD COLUMN IF NOT EXISTS invited_ids integer[] NOT NULL DEFAULT '{}'",
     "CREATE INDEX IF NOT EXISTS ix_challenges_company_id ON challenges (company_id)",
+    # university panel: public profile fields (2026-10-26)
+    "ALTER TABLE universities ADD COLUMN IF NOT EXISTS description text NOT NULL DEFAULT ''",
+    "ALTER TABLE universities ADD COLUMN IF NOT EXISTS website varchar(256) NOT NULL DEFAULT ''",
+    "ALTER TABLE universities ADD COLUMN IF NOT EXISTS region varchar(60) NOT NULL DEFAULT ''",
 ]
 
 

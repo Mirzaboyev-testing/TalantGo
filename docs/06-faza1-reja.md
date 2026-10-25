@@ -16,6 +16,7 @@ Deploy faqat foydalanuvchi ruxsati bilan.
 | Q6 | Admin rollari: owner, admin, moderator, analyst. Foydalanuvchi parolini tiklash faqat owner |
 | Q7 | Har faza tugagach, ruxsat bilan, staging testidan keyin deploy |
 | Q8 | ishGO (`ishgo-vakansiyalar-namuna.png`) va Career EDU (`career-edu-talaba-namuna.webp`) namunalari olindi |
+| Q9 (2026-10-26) | Universitet statistikasi va reytingi hozircha faqat ishga joylashgan va amaliyotga borgan talabalar soni bilan hisoblanadi, sifat mezonlari (mutaxassislikka moslik, ish beruvchi bahosi) bilan emas. Bandlik = tasdiqlangan ish yoki amaliyoti bor tasdiqlangan talabalar / tasdiqlangan talabalar (bitiruvchilar emas, hamma talaba); har talaba bir marta, eng kuchli natija bo'yicha |
 
 ## 2. URL xaritasi
 

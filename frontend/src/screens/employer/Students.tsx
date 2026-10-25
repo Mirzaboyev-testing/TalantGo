@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { t } from "../../i18n";
-import { navigate } from "../../router";
+import { navigate, useSearch } from "../../router";
 import { absoluteUrl, api, ATTEMPT_STATUS, courseLabel, formatPhone, JOB_KIND, loadCatalog, VERIFICATION_LABEL,
          type Catalog, type JobKind, type StudentDetail, type StudentRow, type Track, type University } from "../../api";
 import { haptic, openAfter, openLink } from "../../tg";
@@ -21,7 +21,8 @@ export default function Students({ onTest }: { onTest?: (attemptId: number) => v
   const [unis, setUnis] = useState<University[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
-  const [filters, setFilters] = useState({ q: "", university_id: "", track_id: "", course: "", industry: "", job_type: "",
+  const fromUrl = useSearch();         // /korxona/talabalar?university=<id> comes from a university page
+  const [filters, setFilters] = useState({ q: "", university_id: fromUrl.university ?? "", track_id: "", course: "", industry: "", job_type: "",
                                            verified_only: false, open_only: false, sort: "rating" });
   const [rows, setRows] = useState<StudentRow[] | null>(null);
   const [open, setOpen] = useState<number | null>(null);
