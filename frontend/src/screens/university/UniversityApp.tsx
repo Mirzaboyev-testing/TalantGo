@@ -3,19 +3,23 @@ import { api, APPLICATION_STATUS, VERIFICATION_LABEL, type Me, type UniversityDa
 import { ErrorText, message } from "../../ui";
 import Groups from "../Groups";
 import Shell, { type ShellTab } from "../Shell";
+import { useRouteTab } from "../../router";
+import { t } from "../../i18n";
 
 type Tab = "dashboard" | "verify" | "students" | "groups";
-const TABS: ShellTab<Tab>[] = [
-  { id: "dashboard", icon: "chart", label: "Ko'rsatkichlar" },
-  { id: "verify", icon: "verified", label: "Tasdiqlash" },
-  { id: "students", icon: "school", label: "Talabalar" },
-  { id: "groups", icon: "chat", label: "Guruhlar" },
+const tabs = (): ShellTab<Tab>[] => [
+  { id: "dashboard", icon: "chart", label: t("nav.university.dashboard") },
+  { id: "verify", icon: "verified", label: t("nav.university.verify") },
+  { id: "students", icon: "school", label: t("nav.university.students") },
+  { id: "groups", icon: "chat", label: t("nav.university.groups") },
 ];
 
+const ROUTES: Record<Tab, string> = { dashboard: "", verify: "tasdiqlash", students: "talabalar", groups: "guruhlar" };
+
 export default function UniversityApp({ me, onLogout }: { me: Me; onLogout: () => void }) {
-  const [tab, setTab] = useState<Tab>("dashboard");
+  const [tab, setTab] = useRouteTab<Tab>("/universitet", ROUTES, "dashboard");
   return (
-    <Shell tabs={TABS} active={tab} onChange={setTab} onLogout={onLogout}
+    <Shell tabs={tabs()} active={tab} onChange={setTab} onLogout={onLogout}
            user={{ name: me.full_name, photo: me.photo_url, subtitle: `${me.staff_university?.short_name ?? ""} karyera markazi` }}>
         {tab === "dashboard" && <Dashboard />}
         {tab === "verify" && <StudentList mode="verify" />}

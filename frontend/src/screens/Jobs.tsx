@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
-import { api, APPLICATION_STATUS, JOB_KIND, salary, WORK_MODE, type Job, type JobKind, type Me, type MyApplication,
+import { useCallback, useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { api, JOB_KIND, salary, WORK_MODE, type Job, type JobKind, type Me, type MyApplication,
          type StudentContact } from "../api";
+import { formatDateTime, t } from "../i18n";
+import { ACTIVE_STATES, statusBadge, statusLabel } from "../pipeline";
 import { ask, haptic } from "../tg";
 import { ErrorText, Sheet, message } from "../ui";
 import StudentTests from "./StudentTests";
@@ -8,8 +10,10 @@ import StudentTests from "./StudentTests";
 const KINDS: [JobKind | "", string][] = [["", "Hammasi"], ["internship", "Amaliyot"], ["part_time", "Yarim stavka"],
                                         ["junior", "Junior"], ["project", "Loyiha"]];
 
-export default function JobsScreen({ me, onOpenProfile }: { me: Me; onOpenProfile: () => void }) {
-  const [view, setView] = useState<"jobs" | "mine" | "tests">("jobs");
+export default function JobsScreen({ me, onOpenProfile, initialView = "jobs" }: {
+  me: Me; onOpenProfile: () => void; initialView?: "jobs" | "mine";
+}) {
+  const [view, setView] = useState<"jobs" | "mine" | "tests">(initialView);
   const [kind, setKind] = useState<JobKind | "">("");
   const [paidOnly, setPaidOnly] = useState(false);
   const [practiceOnly, setPracticeOnly] = useState(false);
@@ -40,11 +44,11 @@ export default function JobsScreen({ me, onOpenProfile }: { me: Me; onOpenProfil
 
   return (
     <div>
-      <h1>Vakansiyalar</h1>
+      <h1>{t("jobs.title")}</h1>
       <div className="segmented">
-        <button className={view === "jobs" ? "on" : ""} onClick={() => setView("jobs")}>Amaliyot va ish</button>
-        <button className={view === "mine" ? "on" : ""} onClick={() => setView("mine")}>Arizalarim</button>
-        <button className={view === "tests" ? "on" : ""} onClick={() => setView("tests")}>Testlar</button>
+        <button className={view === "jobs" ? "on" : ""} onClick={() => setView("jobs")}>{t("jobs.tab.jobs")}</button>
+        <button className={view === "mine" ? "on" : ""} onClick={() => setView("mine")}>{t("jobs.tab.mine")}</button>
+        <button className={view === "tests" ? "on" : ""} onClick={() => setView("tests")}>{t("jobs.tab.tests")}</button>
       </div>
 
       {pending.map((c) => <ContactCard key={c.id} contact={c} onAnswered={loadContacts} />)}
@@ -77,32 +81,64 @@ export default function JobsScreen({ me, onOpenProfile }: { me: Me; onOpenProfil
       {view === "tests" && <StudentTests />}
       {view === "mine" && (
         <>
-          {!mine && !error && <div className="hint">Yuklanmoqda…</div>}
-          {mine?.length === 0 && <div className="center hint">Hali ariza topshirmagansiz</div>}
+          {!mine && !error && <div className="hint">{t("common.loading")}</div>}
+          {mine?.length === 0 && <div className="center hint">{t("app.mine.empty")}</div>}
           {mine?.map((a) => (
-            <div key={a.id} className="card tap" onClick={() => setOpen(a.job)}>
-              <div className="row between">
-                <span className="hint">{a.job.company_name}</span>
-                <span className={`badge ${a.status === "hired" || a.status === "shortlisted" ? "peer_verified" : a.status === "rejected" ? "rejected" : "pending"}`}>
-                  {APPLICATION_STATUS[a.status]}
-                </span>
-              </div>
-              <b>{a.job.title}</b>
-              <div className="hint">{new Date(a.created_at).toLocaleDateString()} da topshirilgan</div>
-              {(a.status === "new" || a.status === "viewed") && (
-                <button className="btn small ghost" style={{ marginTop: 8 }} onClick={async (e) => {
-                  e.stopPropagation();
-                  if (!(await ask("Ariza qaytarib olinsinmi?"))) return;
-                  try { await api.withdraw(a.id); setMine((cur) => cur?.filter((x) => x.id !== a.id) ?? null); }
-                  catch (err) { setError(message(err)); }
-                }}>Arizani qaytarib olish</button>
-              )}
-            </div>
+            <ApplicationCard key={a.id} app={a} onOpen={() => setOpen({ ...a.job, application_status: a.status })}
+                             onWithdrawn={(updated) => setMine((cur) => cur?.map((x) => (x.id === updated.id ? updated : x)) ?? null)}
+                             onError={setError} />
           ))}
         </>
       )}
 
-      {open && <JobSheet job={open} canApply={!notReady} onClose={() => setOpen(null)} onApplied={() => { setOpen(null); loadJobs(); }} />}
+      {open && <JobSheet job={open} canApply={!notReady} onClose={() => setOpen(null)} onApplied={() => {
+        setOpen(null);
+        if (view === "mine") api.myApplications().then(setMine, (e) => setError(message(e)));
+        else loadJobs();
+      }} />}
+    </div>
+  );
+}
+
+function ApplicationCard({ app, onOpen, onWithdrawn, onError }: {
+  app: MyApplication; onOpen: () => void; onWithdrawn: (a: MyApplication) => void; onError: (e: string) => void;
+}) {
+  async function withdraw(e: ReactMouseEvent) {
+    e.stopPropagation();
+    if (!(await ask(t("app.mine.withdraw_confirm")))) return;
+    try {
+      await api.withdraw(app.id);
+      onWithdrawn({ ...app, status: "withdrawn", history: [...app.history, { status: "withdrawn", at: new Date().toISOString() }] });
+    } catch (err) {
+      onError(message(err));
+    }
+  }
+  return (
+    <div className="card tap" onClick={onOpen}>
+      <div className="row between">
+        <span className="hint">{app.job.company_name}</span>
+        <span className={`badge ${statusBadge(app.status)}`}>{statusLabel(app.status)}</span>
+      </div>
+      <b>{app.job.title}</b>
+      <div className="hint">{t("app.mine.sent_on", { date: formatDateTime(app.created_at, false) })}</div>
+      {app.status === "interview" && (app.interview_at || app.interview_place) && (
+        <div className="notice" style={{ marginTop: 8 }}>
+          {t("app.interview.at", { when: [formatDateTime(app.interview_at), app.interview_place].filter(Boolean).join(", ") })}
+        </div>
+      )}
+      {app.status === "offer" && <div className="notice" style={{ marginTop: 8 }}>{t("app.mine.offer")}</div>}
+      {app.status === "hired" && <div className="notice" style={{ marginTop: 8 }}>{t("app.mine.hired")}</div>}
+      {app.history.length > 1 && (
+        <div className="timeline">{app.history.map((h, i) => <span key={i}>{statusLabel(h.status)}</span>)}</div>
+      )}
+      {ACTIVE_STATES.includes(app.status) && (
+        <button className="btn small ghost" style={{ marginTop: 8 }} onClick={withdraw}>{t("app.mine.withdraw")}</button>
+      )}
+      {app.status === "withdrawn" && (
+        <button className="btn small ghost" style={{ marginTop: 8 }} onClick={(e) => { e.stopPropagation(); onOpen(); }}>
+          {t("app.mine.reapply")}
+        </button>
+      )}
     </div>
   );
 }
@@ -121,7 +157,7 @@ function JobCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
         <span className="chip">{salary(job)}</span>
         {job.counts_as_practice && <span className="chip">Amaliyotga o'tadi</span>}
       </div>
-      {job.applied && <div className="hint" style={{ marginTop: 6 }}>Ariza topshirilgan: {APPLICATION_STATUS[job.application_status ?? "new"]}</div>}
+      {job.applied && <div className="hint" style={{ marginTop: 6 }}>{t("app.mine.applied", { status: statusLabel(job.application_status ?? "new") })}</div>}
     </div>
   );
 }
@@ -170,8 +206,8 @@ function JobSheet({ job, canApply, onClose, onApplied }: { job: Job; canApply: b
       {job.skills.length > 0 && (
         <div className="chips" style={{ marginBottom: 10 }}>{job.skills.map((s) => <span key={s} className="chip">{s}</span>)}</div>
       )}
-      {job.applied ? (
-        <p className="notice">Ariza topshirgansiz: {APPLICATION_STATUS[job.application_status ?? "new"]}</p>
+      {job.applied && job.application_status !== "withdrawn" ? (
+        <p className="notice">{t("app.mine.applied", { status: statusLabel(job.application_status ?? "new") })}</p>
       ) : (
         <div className="card">
           <b>Ariza topshirish</b>

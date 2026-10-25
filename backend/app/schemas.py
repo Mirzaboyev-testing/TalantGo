@@ -1,7 +1,8 @@
 from datetime import date, datetime
 from typing import Annotated, Literal
+from zoneinfo import ZoneInfo
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from .models import ReviewKind, Role, Status
 from .services.catalog import COMPANY_SIZES, INDUSTRIES, LEGAL_FORMS, REGIONS
@@ -215,6 +216,8 @@ class MeOut(ORM):
     email: str | None = None
     has_password: bool = False
     has_telegram: bool = True
+    language: str = "uz"
+    visible_to_employers: bool = True
 
 
 class MeUpdate(BaseModel):
@@ -245,6 +248,8 @@ class MeUpdate(BaseModel):
     show_phone: bool | None = None
     work_industries: list[Industry] | None = Field(default=None, max_length=6)
     job_title: str | None = Field(default=None, max_length=120)
+    language: Literal["uz", "ru", "en"] | None = None
+    visible_to_employers: bool | None = None
 
 
 class UniversityOut(ORM):
@@ -374,6 +379,9 @@ class MyApplicationOut(BaseModel):
     note: str
     created_at: datetime
     updated_at: datetime
+    interview_at: datetime | None = None
+    interview_place: str = ""
+    history: list[dict] = []          # [{status, at}], oldest first
     job: JobOut
 
 
@@ -383,13 +391,24 @@ class ApplicantOut(BaseModel):
     note: str
     employer_note: str
     created_at: datetime
+    updated_at: datetime | None = None
+    interview_at: datetime | None = None
+    interview_place: str = ""
     card: dict
     identity: dict
 
 
 class ApplicationPatch(BaseModel):
-    status: Literal["viewed", "shortlisted", "rejected", "hired"] | None = None
+    status: Literal["viewed", "shortlisted", "interview", "offer", "hired", "rejected"] | None = None
     employer_note: str | None = Field(default=None, max_length=1000)
+    interview_at: datetime | None = None
+    interview_place: str | None = Field(default=None, max_length=300)
+
+    @field_validator("interview_at")
+    @classmethod
+    def _aware(cls, v: datetime | None) -> datetime | None:
+        # a time typed without a zone is Tashkent time
+        return v.replace(tzinfo=ZoneInfo("Asia/Tashkent")) if v is not None and v.tzinfo is None else v
 
 
 class ContactIn(BaseModel):

@@ -9,10 +9,13 @@ const when = (s: string) => new Date(s).toLocaleString("uz", { day: "2-digit", m
 
 const APP_TILES: [keyof Data["applications"], string, string][] = [
   ["new", "Yangi", "accent-new"],
-  ["viewed", "Ko'rildi", "accent-progress"],
-  ["shortlisted", "Keyingi bosqich", "accent-progress"],
-  ["hired", "Qabul qilindi", "accent-good"],
+  ["viewed", "Ko'rib chiqilmoqda", "accent-progress"],
+  ["shortlisted", "Saralandi", "accent-progress"],
+  ["interview", "Suhbat", "accent-progress"],
+  ["offer", "Taklif", "accent-progress"],
+  ["hired", "Ishga olindi", "accent-good"],
   ["rejected", "Rad etildi", "accent-bad"],
+  ["withdrawn", "Qaytarib olindi", "accent-bad"],
 ];
 
 export default function Dashboard({ go }: { go: (page: string) => void }) {

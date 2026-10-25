@@ -10,7 +10,8 @@ from sqlalchemy import func, select
 
 from ..models import Application, Company, ContactRequest, Job, Role, Status, Submission, User
 from ..schemas import (ApplicantOut, ApplicationPatch, CompanyIn, CompanyOut, ContactIn, JobIn, JobOut)
-from ..services import notify
+from ..core import ratelimit
+from ..services import applications, inbox, notify
 from ..core.security import create_token
 from ..models import CompanyTest, TestAttempt
 from ..services.career import JOB_KIND_LABEL, anonymous_card, identity, student_row
@@ -93,6 +94,8 @@ async def my_jobs(user: Employer, session: Session) -> list[JobOut]:
 
 @router.post("/jobs", response_model=JobOut, status_code=201)
 async def create_job(body: JobIn, user: ApprovedEmployer, session: Session) -> JobOut:
+    ratelimit.limit(f"job-create:{user.company_id}", 20, 24 * 3600,
+                    "Bir kunda 20 tadan ortiq vakansiya yaratib bo'lmaydi")
     job = Job(**body.model_dump(), company_id=user.company_id, created_by_id=user.id)
     session.add(job)
     await session.commit()
@@ -128,6 +131,13 @@ async def close_job(job_id: int, user: Employer, session: Session) -> JobOut:
     return job_out(job)
 
 
+def applicant_out(app: Application, verified_tasks: int) -> ApplicantOut:
+    return ApplicantOut(id=app.id, status=app.status, note=app.note, employer_note=app.employer_note,
+                        created_at=app.created_at, updated_at=app.updated_at, interview_at=app.interview_at,
+                        interview_place=app.interview_place, card=anonymous_card(app.user, verified_tasks),
+                        identity=identity(app.user))      # the student chose to apply: identity is shared
+
+
 @router.get("/jobs/{job_id}/applicants", response_model=list[ApplicantOut])
 async def applicants(job_id: int, user: ApprovedEmployer, session: Session) -> list[ApplicantOut]:
     await _own_job(session, user, job_id)
@@ -135,22 +145,8 @@ async def applicants(job_id: int, user: ApprovedEmployer, session: Session) -> l
     rows = (await session.execute(select(Application, verified).join(User, User.id == Application.user_id)
                                   .where(Application.job_id == job_id)
                                   .order_by(Application.created_at.desc()))).all()
-    out = []
-    for app, n in rows:
-        if app.status == "new":
-            app.status = "viewed"
-        out.append(ApplicantOut(id=app.id, status=app.status, note=app.note, employer_note=app.employer_note,
-                                created_at=app.created_at, card=anonymous_card(app.user, n),
-                                identity=identity(app.user)))      # the student chose to apply: identity is shared
-    await session.commit()
-    return out
-
-
-STATUS_MESSAGE = {
-    "shortlisted": "🎉 «{job}» ({company}) bo'yicha arizangiz keyingi bosqichga o'tdi. Kompaniya siz bilan bog'lanadi.",
-    "rejected": "«{job}» ({company}) bo'yicha arizangiz bu safar qabul qilinmadi. Boshqa vakansiyalarni ko'ring!",
-    "hired": "🏆 Tabriklaymiz! «{job}» ({company}) bo'yicha sizni qabul qilishdi.",
-}
+    await applications.mark_viewed(session, [app for app, _ in rows], user)
+    return [applicant_out(app, n) for app, n in rows]
 
 
 @router.patch("/applications/{application_id}", response_model=ApplicantOut)
@@ -158,16 +154,13 @@ async def update_application(application_id: int, body: ApplicationPatch, user: 
     app = await session.get(Application, application_id)
     if app is None or app.job.company_id != user.company_id:
         raise HTTPException(404, "Ariza topilmadi")
-    previous = app.status
-    for field, value in body.model_dump(exclude_unset=True, exclude_none=True).items():
-        setattr(app, field, value)
-    await session.commit()
-    if app.status != previous and app.status in STATUS_MESSAGE:
-        notify.send([app.user.telegram_id], STATUS_MESSAGE[app.status].format(job=app.job.title, company=user.company.name))
+    if body.employer_note is not None:
+        app.employer_note = body.employer_note
+    await applications.employer_move(session, app, user, body.status, body.interview_at, body.interview_place)
+    await session.refresh(app)
     n = await session.scalar(select(func.count()).where(Submission.user_id == app.user_id,
                                                         Submission.status.in_([Status.peer_verified, Status.mentor_verified])))
-    return ApplicantOut(id=app.id, status=app.status, note=app.note, employer_note=app.employer_note,
-                        created_at=app.created_at, card=anonymous_card(app.user, n), identity=identity(app.user))
+    return applicant_out(app, n)
 
 
 # --------------------------------------------------------------------------- talent search
@@ -181,9 +174,8 @@ async def talent(user: ApprovedEmployer, session: Session,
                  verified_only: bool = False, min_points: int = Query(default=0, ge=0)) -> list[dict]:
     """Anonymous cards of students who said they are open to work."""
     verified = _verified_count().label("verified")
-    query = select(User, verified).where(
-        User.account_type == "student", User.open_to_work.is_(True), User.is_blocked.is_(False),
-        User.consent_at.isnot(None), User.verification != "rejected", User.points >= min_points)
+    query = select(User, verified).where(*_visible_students(), User.open_to_work.is_(True),
+                                         User.verification != "rejected", User.points >= min_points)
     if university_id:
         query = query.where(User.university_id == university_id)
     if track_id:
@@ -221,9 +213,10 @@ async def contact(student_id: int, body: ContactIn, user: ApprovedEmployer, sess
     session.add(ContactRequest(company_id=user.company_id, employer_id=user.id, student_id=student_id,
                                job_id=body.job_id, message=body.message.strip()))
     await session.commit()
-    notify.send([student.telegram_id],
-                f"💼 {user.company.name} kompaniyasi siz bilan bog'lanmoqchi:\n\n{body.message.strip()}\n\n"
-                "Ilovadagi «Vakansiyalar» bo'limida rozilik bersangiz, ismingiz va profilingiz ularga ochiladi.")
+    await inbox.push(session, [student.id], "contact_request",
+                     f"{user.company.name} siz bilan bog'lanmoqchi: {body.message.strip()}\n\n"
+                     "Rozilik bersangiz, telefoningiz va kontaktlaringiz ularga ochiladi.",
+                     link="/talaba/arizalar", params={"company": user.company.name})
     return {"status": "pending"}
 
 
@@ -250,10 +243,10 @@ async def employer_stats(user: Employer, session: Session) -> dict:
 # --------------------------------------------------------------------------- students (named, by rating)
 
 def _visible_students():
-    """Every student who gave the current consent (v2: approved employers see name, study details,
-    results and CV). Blocked accounts and mentors are left out."""
+    """Students who gave the current consent (v2: approved employers see name, study details, results
+    and CV) and did not hide themselves from companies. Blocked accounts and mentors are left out."""
     return (User.account_type == "student", User.role == Role.student, User.is_blocked.is_(False),
-            User.consent_version >= CONSENT_VERSION)
+            User.consent_version >= CONSENT_VERSION, User.visible_to_employers.is_(True))
 
 
 async def _test_results(session: Session, company_id: int, user_ids: list[int]) -> dict[int, dict]:
@@ -352,6 +345,7 @@ async def student_detail(student_id: int, user: ApprovedEmployer, session: Sessi
         **student_row(student, n),
         "cv": await build_cv(session, student),
         "phone": student.phone if shared and student.phone else None,
+        "username": student.username if shared else None,
         "contact_status": contact,
         "applied": bool(applied),
         "tests": [{"attempt_id": a.id, "test_id": a.test_id, "title": a.test.title, "status": a.status,

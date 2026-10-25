@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 from sqlalchemy import select
 
+from ..core import ratelimit
 from ..core.config import settings
 from ..core.security import InitDataError, create_token, validate_init_data, validate_login_widget
 from ..models import User
@@ -106,8 +107,9 @@ async def dev_login(body: DevAuthIn, session: Session) -> TokenOut:
 # --------------------------------------------------------------------------- website: through the bot
 
 @router.post("/bot-login")
-async def bot_login_start(session: Session) -> dict:
+async def bot_login_start(request: Request, session: Session) -> dict:
     """A one-time link to the bot. Works on any domain: no Telegram login-widget setup is needed."""
+    ratelimit.limit(f"bot-login:{ratelimit.client_ip(request)}", 30, 60 * 60)
     username = await bots.username(session)
     if not username:
         raise HTTPException(503, "Bot hali sozlanmagan")

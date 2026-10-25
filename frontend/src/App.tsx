@@ -18,6 +18,8 @@ import Assistant, { type AiAudience } from "./screens/Assistant";
 import Shell, { type ShellTab } from "./screens/Shell";
 import WebLogin from "./screens/WebLogin";
 import { announceMove } from "./screens/MovedNotice";
+import { getLang, hasChosenLang, setLang, t, useLang } from "./i18n";
+import { navigate, useRouteTab } from "./router";
 
 // A group invite (t.me/<bot>?start=g<code>) opens the app with ?join=<code>.
 const joinCode = new URLSearchParams(window.location.search).get("join");
@@ -29,17 +31,17 @@ const storedToken = () => { try { return localStorage.getItem(TOKEN_KEY) ?? ""; 
 const forgetToken = () => { try { localStorage.removeItem(TOKEN_KEY); } catch { /* storage blocked */ } };
 
 type Tab = "path" | "jobs" | "review" | "community" | "profile";
+// /talaba/<segment>; /talaba/arizalar opens the jobs tab on "my applications"
+const STUDENT_TABS: Record<Tab, string> = { path: "yol", jobs: "vakansiyalar", review: "tekshirish", community: "hamjamiyat", profile: "profil" };
+let joinHandled = false;
 type AuthState = { kind: "loading" } | { kind: "login"; dev: boolean } | { kind: "error"; text: string } | { kind: "ok" };
 
 export default function App() {
+  useLang();
   const [auth, setAuth] = useState<AuthState>({ kind: "loading" });
   const [me, setMe] = useState<Me | null>(null);
-  const [tab, setTab] = useState<Tab>(joinCode ? "community" : "path");
-  const [unread, setUnread] = useState(0);
   const [changingTrack, setChangingTrack] = useState(false);
   const [chosenStudent, setChosenStudent] = useState(false);
-  const [communityView, setCommunityView] = useState<"groups" | "peers" | "top">("groups");
-  const refreshUnread = useCallback(() => api.groups.unread().then((r) => setUnread(r.unread), () => {}), []);
   const refreshMe = useCallback(async () => setMe(await api.me()), []);
 
   const showLogin = useCallback(() => {
@@ -63,8 +65,7 @@ export default function App() {
     forgetToken();
     setUserToken("");
     setMe(null);
-    setTab("path");                 // the next person starts on the home screen
-    setCommunityView("groups");
+    navigate("/", { replace: true });     // the next person starts on the home screen
     showLogin();
   }, [showLogin]);
 
@@ -82,13 +83,11 @@ export default function App() {
     refreshMe().then(() => setAuth({ kind: "ok" }), () => { forgetToken(); showLogin(); });
   }, [signIn, refreshMe, showLogin]);
 
-  // unread group messages on the community tab, refreshed every 30 seconds
+  // the language saved in the profile applies on a device where nobody picked one yet
+  const savedLanguage = me?.language;
   useEffect(() => {
-    if (auth.kind !== "ok") return;
-    void refreshUnread();
-    const timer = setInterval(refreshUnread, 30000);
-    return () => clearInterval(timer);
-  }, [auth.kind, refreshUnread]);
+    if (savedLanguage && !hasChosenLang() && savedLanguage !== getLang()) setLang(savedLanguage, false);
+  }, [savedLanguage]);
 
   if (auth.kind === "loading") return <div className="center hint">Yuklanmoqda…</div>;
   if (auth.kind === "login") {
@@ -137,30 +136,52 @@ export default function App() {
       {ai}
       <div className="app">
         {isNew && <button className="btn small ghost" onClick={() => setChosenStudent(false)}>Orqaga</button>}
-        <Onboarding me={me} onMe={setMe} onDone={async () => { await refreshMe(); setChangingTrack(false); setTab(isNew ? "profile" : "path"); }}
+        <Onboarding me={me} onMe={setMe} onDone={async () => { await refreshMe(); setChangingTrack(false); navigate(isNew ? "/talaba/profil" : "/talaba/yol"); }}
                     onCancel={changingTrack && me.signup_missing.length === 0 ? () => setChangingTrack(false) : undefined} />
       </div>
       </>
     );
   }
 
+  return <>{ai}<StudentApp me={me} refreshMe={refreshMe} setMe={setMe} onChangeTrack={() => setChangingTrack(true)} onLogout={logout} /></>;
+}
+
+function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
+  me: Me; refreshMe: () => Promise<void>; setMe: (m: Me) => void; onChangeTrack: () => void; onLogout: () => void;
+}) {
+  const [tab, setTab, segment] = useRouteTab<Tab>("/talaba", STUDENT_TABS, "path", { arizalar: "jobs" });
+  const [unread, setUnread] = useState(0);
+  const [communityView, setCommunityView] = useState<"groups" | "peers" | "top">("groups");
+  const refreshUnread = useCallback(() => api.groups.unread().then((r) => setUnread(r.unread), () => {}), []);
+
+  // a group invite (?join=) opens the community once
+  useEffect(() => {
+    if (joinCode && !joinHandled) { joinHandled = true; navigate(`/talaba/hamjamiyat${window.location.search}`, { replace: true }); }
+  }, []);
+
+  // unread group messages on the community tab, refreshed every 30 seconds
+  useEffect(() => {
+    void refreshUnread();
+    const timer = setInterval(refreshUnread, 30000);
+    return () => clearInterval(timer);
+  }, [refreshUnread]);
+
   const tabs: ShellTab<Tab>[] = [
-    { id: "path", icon: "path", label: "Yo'l" },
-    { id: "jobs", icon: "briefcase", label: "Vakansiyalar" },
-    { id: "review", icon: "check", label: me.role === "student" ? "Tekshirish" : "Mentor" },
-    { id: "community", icon: "users", label: "Hamjamiyat", badge: unread },
-    { id: "profile", icon: "user", label: "Profil" },
+    { id: "path", icon: "path", label: t("nav.student.path") },
+    { id: "jobs", icon: "briefcase", label: t("nav.student.jobs") },
+    { id: "review", icon: "check", label: t(me.role === "student" ? "nav.student.review" : "nav.student.mentor") },
+    { id: "community", icon: "users", label: t("nav.student.community"), badge: unread },
+    { id: "profile", icon: "user", label: t("nav.student.profile") },
   ];
   const subtitle = me.role === "student" ? me.headline || me.track?.title.split(":")[0] : "Mentor";
 
   return (
-    <>
-    {ai}
-    <Shell tabs={tabs} active={tab} onChange={setTab} onLogout={logout}
+    <Shell tabs={tabs} active={tab} onChange={setTab} onLogout={onLogout}
            user={{ name: me.full_name, photo: me.photo_url, subtitle: subtitle ?? undefined }}>
-      {tab === "path" && <PathScreen me={me} onChanged={refreshMe} onChangeTrack={() => setChangingTrack(true)} />}
+      {tab === "path" && <PathScreen me={me} onChanged={refreshMe} onChangeTrack={onChangeTrack} />}
       {tab === "review" && <ReviewScreen me={me} onChanged={refreshMe} />}
-      {tab === "jobs" && <JobsScreen me={me} onOpenProfile={() => setTab("profile")} />}
+      {tab === "jobs" && <JobsScreen key={segment} me={me} initialView={segment === "arizalar" ? "mine" : "jobs"}
+                                     onOpenProfile={() => setTab("profile")} />}
       {tab === "community" && (
         <>
           <div className="segmented">
@@ -173,8 +194,7 @@ export default function App() {
           {communityView === "top" && <LeaderboardScreen />}
         </>
       )}
-      {tab === "profile" && <ProfileScreen me={me} onSaved={setMe} onChangeTrack={() => setChangingTrack(true)} />}
+      {tab === "profile" && <ProfileScreen me={me} onSaved={setMe} onChangeTrack={onChangeTrack} />}
     </Shell>
-    </>
   );
 }

@@ -15,19 +15,21 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import aliased
 
 from ..core.config import settings
-from ..models import (AdminAccount, CompanyTest, Announcement, Application, AuditLog, Challenge, ChallengeEntry, Company, Group,
+from ..models import (APPLICATION_STATES, AdminAccount, CompanyTest, Announcement, Application, AuditLog, Challenge, ChallengeEntry, Company, Group,
                       GroupMember, GroupMessage, Job, Role, Status, Submission, Task, Track, University, User)
 from ..schemas import (AdminSubmissionOut, AdminTaskOut, AdminTrackOut, AdminUserOut, AnnouncementIn,
                        AnnouncementOut, AuditOut, BotStatusOut, BotTokenIn, CompanyOut, PointsAdjustIn,
                        ReviewDecisionIn, ReviewOut, TaskIn, TaskPatch, TrackIn, TrackPatch, UniversityIn,
                        UniversityOut, UniversityPatch, UserPatch)
-from ..services import ai_review, announcements, bots, files, notify, settings_store, telegram_bot
+from ..services import ai_review, announcements, bots, files, settings_store, telegram_bot
+from ..services import inbox as user_inbox
+from ..services.applications import company_staff_ids
 from ..services.admin_accounts import hash_password
 from ..services.career import decide_verification
 from ..services.rules import Rules, get_rules, save_rules
 from .deps import AdminActor, OwnerActor, Session, audit
 from ..seed import add_official_groups
-from .jobs import company_hr_ids, job_out
+from .jobs import job_out
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 VERIFIED = (Status.peer_verified, Status.mentor_verified)
@@ -93,8 +95,9 @@ async def users(_: AdminActor, session: Session,
 
 
 @router.post("/users/{user_id}/reset-password")
-async def reset_user_password(user_id: int, actor: AdminActor, session: Session) -> dict:
-    """For a website account whose owner forgot the password: a temporary one to hand over."""
+async def reset_user_password(user_id: int, actor: OwnerActor, session: Session) -> dict:
+    """For a website account whose owner forgot the password: a temporary one to hand over.
+    Owner only: whoever holds the temporary password controls the account."""
     import asyncio
     from ..services.admin_accounts import hash_password
     user = await session.get(User, user_id)
@@ -569,9 +572,10 @@ async def review_company(company_id: int, body: ReviewDecisionIn, actor: AdminAc
     company.status, company.review_note = ("approved" if body.approve else "rejected"), body.note.strip()
     audit(session, actor, "company.review", company.name, f"{company.status}: STIR {company.stir or '-'} {body.note}")
     await session.commit()
-    notify.send(await company_hr_ids(session, company.id),
-                f"✅ {company.name} tasdiqlandi. Endi vakansiya joylashingiz va talabalarni qidirishingiz mumkin."
-                if body.approve else f"{company.name} tasdiqlanmadi. Izoh: {body.note or '-'}")
+    await user_inbox.push(session, await company_staff_ids(session, company.id), "company_review",
+                     f"{company.name} tasdiqlandi. Endi vakansiya joylashingiz va talabalarni ko'rishingiz mumkin."
+                     if body.approve else f"{company.name} tasdiqlanmadi. Izoh: {body.note or '-'}",
+                     link="/korxona/profil", params={"approved": body.approve, "note": body.note})
     return company
 
 
@@ -590,12 +594,15 @@ async def review_job(job_id: int, body: ReviewDecisionIn, actor: AdminActor, ses
         raise HTTPException(404, "Vakansiya topilmadi")
     if body.approve and job.company.status != "approved":
         raise HTTPException(409, "Avval kompaniyani tasdiqlang")
+    if job.status == "closed":
+        raise HTTPException(409, "Kompaniya bu vakansiyani yopgan")
     job.status, job.review_note = ("approved" if body.approve else "rejected"), body.note.strip()
     audit(session, actor, "job.review", f"{job.company.name}: {job.title}", f"{job.status} {body.note}")
     await session.commit()
-    notify.send(await company_hr_ids(session, job.company_id),
-                f"✅ «{job.title}» vakansiyasi e'lon qilindi." if body.approve
-                else f"«{job.title}» vakansiyasi qaytarildi. Izoh: {body.note or '-'}")
+    await user_inbox.push(session, await company_staff_ids(session, job.company_id), "job_review",
+                     f"«{job.title}» vakansiyasi e'lon qilindi." if body.approve
+                     else f"«{job.title}» vakansiyasi qaytarildi. Izoh: {body.note or '-'}",
+                     link="/korxona/vakansiyalar", params={"approved": body.approve, "job": job.title, "note": body.note})
     return job_out(job)
 
 
@@ -617,8 +624,10 @@ async def review_staff(user_id: int, body: ReviewDecisionIn, actor: OwnerActor, 
     uni = user.staff_university.name if user.staff_university else "?"
     audit(session, actor, "staff.review", f"{user.full_name} ({uni})", user.staff_status)
     await session.commit()
-    notify.send([user.telegram_id], f"✅ {uni} karyera markazi paneliga kirish berildi." if body.approve
-                else "Universitet xodimi sifatidagi so'rovingiz tasdiqlanmadi.")
+    await user_inbox.push(session, [user.id], "staff_review",
+                     f"{uni} karyera markazi paneliga kirish berildi." if body.approve
+                     else "Universitet xodimi sifatidagi so'rovingiz tasdiqlanmadi.",
+                     link="/universitet", params={"approved": body.approve, "university": uni})
     return {"status": user.staff_status}
 
 
@@ -722,7 +731,7 @@ async def dashboard(_: AdminActor, session: Session,
                      + (await count(AdminAccount, AdminAccount.status == "pending"))
                      + (await count(CompanyTest, CompanyTest.status == "pending")),
         },
-        "applications": {s: apps_by_status.get(s, 0) for s in ("new", "viewed", "shortlisted", "hired", "rejected")},
+        "applications": {s: apps_by_status.get(s, 0) for s in APPLICATION_STATES},
         "submissions_by_status": {s.value: subs_by_status.get(s, 0) for s in Status},
         "series": {
             "dates": [frm + timedelta(days=i) for i in range((to - frm).days + 1)],

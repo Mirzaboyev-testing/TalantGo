@@ -276,3 +276,20 @@ input.invalid, textarea.invalid, select.invalid { border-color: var(--bad) !impo
 .answer-opt.wrong { border-color: var(--bad); }
 .timer { position: sticky; top: 0; z-index: 3; background: var(--bg); border-bottom: 1px solid var(--line); padding: 8px 0; margin-bottom: 8px; font-weight: 600; }
 .timer.low { color: var(--bad); }
+
+/* three panels: top bar on phones (language + notifications; the sidebar has them on a computer) */
+.topbar { position: sticky; top: 0; z-index: 4; display: flex; align-items: center; gap: 10px; padding: 8px 16px; background: rgba(255,255,255,.96); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.brand-mark.small { width: 28px; height: 28px; font-size: 14px; border-radius: 8px; }
+@media (min-width: 900px) { .topbar { display: none; } }
+.icon-btn.bell { position: relative; }
+.icon-btn.bell .dot { position: absolute; top: -6px; right: -6px; }
+.side-lang { padding: 10px 10px 0; }
+.lang-switch { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 10px; padding: 0 4px 0 8px; height: 38px; color: var(--hint); background: var(--bg); flex: none; }
+.lang-switch select { width: auto; border: 0; background: none; padding: 4px 2px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; box-shadow: none; }
+.notif-list { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+.notif { display: flex; flex-direction: column; gap: 2px; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); padding: 10px 12px; cursor: pointer; font-size: 14.5px; font-weight: 400; line-height: 1.45; color: var(--text); }
+.notif.unread { border-color: var(--brand); background: var(--brand-soft); }
+.notif.unread .notif-text { font-weight: 600; }
+.notif-text { white-space: pre-line; }
+.timeline { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; font-size: 12.5px; color: var(--hint); }
+.timeline span + span::before { content: "›"; margin-right: 10px; color: var(--line); }

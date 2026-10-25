@@ -4,9 +4,10 @@ from datetime import UTC, date, datetime
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import or_, select
 
-from ..models import Application, Company, ContactRequest, Job, User
+from ..models import Application, ApplicationEvent, Company, ContactRequest, Job, User
 from ..schemas import ApplyIn, ContactAnswerIn, JobOut, MyApplicationOut
-from ..services import notify
+from ..services import applications, inbox
+from ..services.applications import company_staff_ids
 from ..services.career import JOB_KIND_LABEL
 from .deps import CurrentUser, Session
 
@@ -32,11 +33,6 @@ def visible_jobs():
     return (select(Job).join(Company)
             .where(Job.status == "approved", Company.status == "approved",
                    or_(Job.deadline.is_(None), Job.deadline >= date.today())))
-
-
-async def company_hr_ids(session: Session, company_id: int) -> list[int]:
-    return list((await session.execute(select(User.telegram_id).where(
-        User.company_id == company_id, User.account_type == "employer", User.is_blocked.is_(False)))).scalars())
 
 
 @router.get("/jobs", response_model=list[JobOut])
@@ -79,6 +75,20 @@ async def job_detail(job_id: int, user: CurrentUser, session: Session) -> JobOut
                    match=match_score(job, user))
 
 
+async def my_applications_out(session: Session, apps: list[Application]) -> list[MyApplicationOut]:
+    """The student's view, with each application's status history (one query for all of them)."""
+    history: dict[int, list[dict]] = {a.id: [] for a in apps}
+    if apps:
+        for app_id, st, at in (await session.execute(
+                select(ApplicationEvent.application_id, ApplicationEvent.to_status, ApplicationEvent.created_at)
+                .where(ApplicationEvent.application_id.in_(list(history))).order_by(ApplicationEvent.id))).all():
+            history[app_id].append({"status": st, "at": at})
+    return [MyApplicationOut(id=a.id, status=a.status, note=a.note, created_at=a.created_at,
+                             updated_at=a.updated_at, interview_at=a.interview_at, interview_place=a.interview_place,
+                             history=history[a.id], job=job_out(a.job, applied=True, application_status=a.status))
+            for a in apps]
+
+
 @router.post("/jobs/{job_id}/apply", response_model=MyApplicationOut, status_code=201)
 async def apply(job_id: int, body: ApplyIn, user: CurrentUser, session: Session) -> MyApplicationOut:
     if user.account_type != "student":
@@ -89,24 +99,32 @@ async def apply(job_id: int, body: ApplyIn, user: CurrentUser, session: Session)
     job = (await session.execute(visible_jobs().where(Job.id == job_id))).scalar_one_or_none()
     if job is None:
         raise HTTPException(404, "Vakansiya topilmadi yoki yopilgan")
-    if await session.scalar(select(Application.id).where(Application.job_id == job_id, Application.user_id == user.id)):
+    app = (await session.execute(select(Application).where(Application.job_id == job_id,
+                                                           Application.user_id == user.id))).scalar_one_or_none()
+    if app is not None and app.status != "withdrawn":
         raise HTTPException(409, "Siz bu vakansiyaga ariza topshirgansiz")
-    app = Application(job_id=job_id, user_id=user.id, note=body.note.strip())
-    session.add(app)
+    if app is None:
+        app = Application(job_id=job_id, user_id=user.id, note=body.note.strip())
+        session.add(app)
+        await session.flush()
+        applications.record(session, app, "", "new", "student", user.id)
+    else:                                  # applying again after withdrawing: the same row comes back
+        app.status, app.note = "new", body.note.strip()
+        app.interview_at, app.interview_place = None, ""
+        applications.record(session, app, "withdrawn", "new", "student", user.id)
     await session.commit()
-    notify.send(await company_hr_ids(session, job.company_id),
-                f"Yangi ariza: «{job.title}» ({JOB_KIND_LABEL[job.kind]}). Nomzod: {user.full_name}.")
+    await inbox.push(session, await company_staff_ids(session, job.company_id), "application_new",
+                     f"Yangi ariza: «{job.title}» ({JOB_KIND_LABEL[job.kind]}). Nomzod: {user.full_name}.",
+                     link="/korxona/nomzodlar", params={"job": job.title, "student": user.full_name})
     await session.refresh(app)
-    return MyApplicationOut(id=app.id, status=app.status, note=app.note, created_at=app.created_at,
-                            updated_at=app.updated_at, job=job_out(job, applied=True, application_status=app.status))
+    return (await my_applications_out(session, [app]))[0]
 
 
 @router.get("/me/applications", response_model=list[MyApplicationOut])
 async def my_applications(user: CurrentUser, session: Session) -> list[MyApplicationOut]:
     apps = (await session.execute(select(Application).where(Application.user_id == user.id)
-                                  .order_by(Application.updated_at.desc()))).scalars()
-    return [MyApplicationOut(id=a.id, status=a.status, note=a.note, created_at=a.created_at, updated_at=a.updated_at,
-                             job=job_out(a.job, applied=True, application_status=a.status)) for a in apps]
+                                  .order_by(Application.updated_at.desc()).limit(200))).scalars().all()
+    return await my_applications_out(session, list(apps))
 
 
 @router.post("/me/applications/{application_id}/withdraw", status_code=204)
@@ -114,10 +132,7 @@ async def withdraw(application_id: int, user: CurrentUser, session: Session) -> 
     app = await session.get(Application, application_id)
     if app is None or app.user_id != user.id:
         raise HTTPException(404, "Ariza topilmadi")
-    if app.status == "hired":
-        raise HTTPException(409, "Qabul qilingan arizani qaytarib bo'lmaydi")
-    await session.delete(app)
-    await session.commit()
+    await applications.withdraw(session, app, user)
 
 
 @router.get("/me/contacts")
@@ -140,6 +155,7 @@ async def answer_contact(contact_id: int, body: ContactAnswerIn, user: CurrentUs
     contact.answered_at = datetime.now(UTC)
     await session.commit()
     if body.accept:
-        notify.send(await company_hr_ids(session, contact.company_id),
-                    f"Talaba {user.full_name} bog'lanishga rozi bo'ldi. Ilovadagi «Kontaktlar» bo'limida ma'lumotlari ochildi.")
+        await inbox.push(session, await company_staff_ids(session, contact.company_id), "contact_accepted",
+                         f"Talaba {user.full_name} bog'lanishga rozi bo'ldi: ma'lumotlari ochildi.",
+                         link="/korxona/talabalar", params={"student": user.full_name})
     return {"status": contact.status}

@@ -13,10 +13,11 @@ from pydantic import BaseModel, Field, StringConstraints, model_validator
 from sqlalchemy import func, select
 
 from ..models import Application, CompanyTest, Job, Role, TestAttempt, TestQuestion, Track, User
-from ..services import notify
+from ..core import ratelimit
+from ..services import inbox, notify
+from ..services.applications import company_staff_ids
 from .deps import AdminActor, CurrentUser, Session, audit
 from .employer import ApprovedEmployer, Employer
-from .jobs import company_hr_ids
 
 employer_router = APIRouter(prefix="/employer", tags=["company-tests"])
 student_router = APIRouter(prefix="/tests", tags=["company-tests"])
@@ -212,6 +213,7 @@ async def my_tests(user: Employer, session: Session) -> list[dict]:
 
 @employer_router.post("/tests", status_code=201)
 async def create_test(body: TestIn, user: ApprovedEmployer, session: Session) -> dict:
+    ratelimit.limit(f"test-create:{user.company_id}", 20, 24 * 3600, "Bir kunda 20 tadan ortiq test yaratib bo'lmaydi")
     await _check_links(session, user, body)
     test = CompanyTest(company_id=user.company_id, created_by_id=user.id)
     _fill(test, body)
@@ -322,8 +324,11 @@ async def grade(attempt_id: int, body: GradingIn, user: ApprovedEmployer, sessio
         attempt.status, attempt.graded_at = "graded", datetime.now(UTC)
     await session.commit()
     if attempt.status == "graded" and not was_graded:
-        notify.send([attempt.user.telegram_id],
-                    f"«{attempt.test.title}» testingiz baholandi ({user.company.name}): {attempt.score:g} / {attempt.max_score} ball.")
+        await inbox.push(session, [attempt.user_id], "test_graded",
+                         f"«{attempt.test.title}» testingiz baholandi ({user.company.name}): "
+                         f"{attempt.score:g} / {attempt.max_score} ball.",
+                         link="/talaba/vakansiyalar", params={"test": attempt.test.title, "company": user.company.name,
+                                                             "score": attempt.score, "max": attempt.max_score})
     return {**attempt_out(attempt, with_correct=True), "student": _student_brief(attempt.user)}
 
 
@@ -437,8 +442,9 @@ async def submit(test_id: int, body: SubmitIn, user: CurrentUser, session: Sessi
         attempt.graded_at = now
     await session.commit()
     if needs_grading:
-        notify.send(await company_hr_ids(session, test.company_id),
-                    f"«{test.title}» testini {user.full_name} topshirdi: yozma javoblarni baholang.")
+        await inbox.push(session, await company_staff_ids(session, test.company_id), "test_submitted",
+                         f"«{test.title}» testini {user.full_name} topshirdi: yozma javoblarni baholang.",
+                         link="/korxona/testlar", params={"test": test.title, "student": user.full_name})
     return _my_result(attempt)
 
 
@@ -475,6 +481,8 @@ async def review_test(test_id: int, body: DecisionIn, actor: AdminActor, session
         raise HTTPException(404, "Test topilmadi")
     if test.status == "draft":
         raise HTTPException(409, "Kompaniya bu testni hali tekshiruvga yubormagan")
+    if test.status == "closed":
+        raise HTTPException(409, "Kompaniya bu testni yopgan")
     if body.approve and test.company.status != "approved":
         raise HTTPException(409, "Avval kompaniyani tasdiqlang")
     if not body.approve and not body.note:
@@ -484,9 +492,10 @@ async def review_test(test_id: int, body: DecisionIn, actor: AdminActor, session
     audit(session, actor, "test.review", f"{test.company.name}: {test.title}", f"{test.status} {body.note}")
     await session.commit()
     await session.refresh(test)
-    notify.send(await company_hr_ids(session, test.company_id),
-                f"«{test.title}» testi tasdiqlandi va talabalarga ko'rinmoqda." if body.approve
-                else f"«{test.title}» testi qaytarildi. Izoh: {body.note}")
+    await inbox.push(session, await company_staff_ids(session, test.company_id), "test_review",
+                     f"«{test.title}» testi tasdiqlandi va talabalarga ko'rinmoqda." if body.approve
+                     else f"«{test.title}» testi qaytarildi. Izoh: {body.note}",
+                     link="/korxona/testlar", params={"approved": body.approve, "test": test.title, "note": body.note})
     if body.approve and not was_live:
         await _announce(session, test)
     return test_full(test)
@@ -494,13 +503,15 @@ async def review_test(test_id: int, body: DecisionIn, actor: AdminActor, session
 
 async def _announce(session: Session, test: CompanyTest) -> None:
     """Tells the students the test is meant for that it is open."""
-    query = select(User.telegram_id).where(User.account_type == "student", User.role == Role.student,
-                                           User.is_blocked.is_(False), User.track_id.isnot(None))
+    query = select(User.id).where(User.account_type == "student", User.role == Role.student,
+                                  User.is_blocked.is_(False), User.track_id.isnot(None))
     if test.audience == "tracks":
         query = query.where(User.track_id.in_(test.track_ids))
     elif test.audience == "applicants":
         query = query.join(Application, Application.user_id == User.id).where(Application.job_id == test.job_id)
     ids = (await session.execute(query)).scalars().all()
     deadline = f" Muddat: {test.deadline.strftime('%d.%m.%Y')}." if test.deadline else ""
-    notify.send(list(ids), f"{test.company.name} yangi test e'lon qildi: «{test.title}».{deadline} "
-                           "Ilovadagi «Vakansiyalar» > «Testlar» bo'limida ishlang.")
+    await inbox.push(session, list(ids), "test_new",
+                     f"{test.company.name} yangi test e'lon qildi: «{test.title}».{deadline} "
+                     "«Vakansiyalar» > «Testlar» bo'limida ishlang.",
+                     link="/talaba/vakansiyalar", params={"test": test.title, "company": test.company.name})

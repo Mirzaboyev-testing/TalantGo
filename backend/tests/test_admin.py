@@ -96,7 +96,7 @@ async def test_dashboard_and_applications(client, make_user):
     d = (await client.get("/api/v1/admin/dashboard", headers=owner)).json()
     assert d["kpis"]["students"] == 1 and d["kpis"]["new_students"] == 1
     assert len(d["series"]["dates"]) == 30 and sum(d["series"]["registrations"]) == 1
-    assert set(d["applications"]) == {"new", "viewed", "shortlisted", "hired", "rejected"}
+    assert set(d["applications"]) == {"new", "viewed", "shortlisted", "interview", "offer", "hired", "rejected", "withdrawn"}
     assert (await client.get("/api/v1/admin/dashboard", params={"from": "2026-10-10", "to": "2026-10-01"},
                              headers=owner)).status_code == 422
     assert (await client.get("/api/v1/admin/applications", headers=owner)).json() == []
@@ -107,7 +107,7 @@ async def test_blocked_user_is_locked_out_and_hidden(client, make_user):
     a, b = await make_user("Aziza"), await make_user("Bekzod")
     tracks = (await client.get("/api/v1/tracks")).json()
     for u in (a, b):
-        await client.patch("/api/v1/me", json={"track_id": tracks[0]["id"], "group_name": "MM-21"}, headers=u["headers"])
+        await client.patch("/api/v1/me", json={"track_id": tracks[0]["id"], "group_name": "MM-21", "consent": True}, headers=u["headers"])
     await client.patch(f"/api/v1/admin/users/{b['id']}", json={"is_blocked": True}, headers=owner)
     assert (await client.get("/api/v1/me", headers=b["headers"])).status_code == 403
     board = (await client.get("/api/v1/leaderboard", headers=a["headers"])).json()

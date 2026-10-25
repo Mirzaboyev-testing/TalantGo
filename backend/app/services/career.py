@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Role, Status, Submission, User
-from . import notify
+from . import inbox
 from .catalog import COMPANY_SIZES, CONSENT_VERSION, INDUSTRIES, LEGAL_FORMS, REGIONS
 
 VERIFIED_WORK = (Status.peer_verified, Status.mentor_verified)
@@ -105,7 +105,6 @@ def student_row(user: User, verified_tasks: int) -> dict:
     return {
         **anonymous_card(user, verified_tasks),
         "full_name": user.full_name,
-        "username": user.username,
         "photo_url": user.photo_url,
         "group_name": user.group_name,
         "bio": user.bio,
@@ -139,8 +138,9 @@ async def decide_verification(session: AsyncSession, student: User, approve: boo
     student.verification_note = note
     await session.commit()
     reason = note or "ko'rsatilmagan"
-    notify.send([student.telegram_id],
-                f"✅ Talabaligingiz tasdiqlandi ({verifier}). Endi ish beruvchilar sizni ishonchli nomzod sifatida ko'radi."
-                if approve else
-                f"Talabalik ma'lumotlaringiz tasdiqlanmadi. Sabab: {reason}. Profilda tuzatib, qayta yuboring.")
+    await inbox.push(session, [student.id], "verification_result",
+                     f"Talabaligingiz tasdiqlandi ({verifier}). Endi ish beruvchilar sizni ishonchli nomzod sifatida ko'radi."
+                     if approve else
+                     f"Talabalik ma'lumotlaringiz tasdiqlanmadi. Sabab: {reason}. Profilda tuzatib, qayta yuboring.",
+                     link="/talaba/profil", params={"approved": approve, "verifier": verifier, "note": note})
     return student

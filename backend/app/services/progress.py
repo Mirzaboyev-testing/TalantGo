@@ -12,7 +12,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Review, ReviewKind, Role, Status, Submission, SubmissionFile, Task, User
-from . import ai_review, notify
+from . import ai_review, inbox, notify
 from .rules import get_rules
 
 TASHKENT = ZoneInfo("Asia/Tashkent")
@@ -147,6 +147,8 @@ async def review(session: AsyncSession, reviewer: User, submission_id: int, appr
         raise HTTPException(404, "Ish topilmadi")
     if sub.user_id == reviewer.id:
         raise HTTPException(403, "O'z ishingizni baholay olmaysiz")
+    if reviewer.account_type != "student":
+        raise HTTPException(403, "Ishlarni faqat talabalar va mentorlar baholaydi")
     is_mentor = reviewer.role in (Role.mentor, Role.admin)
     if is_mentor:
         if sub.status in (Status.mentor_verified, Status.rejected):
@@ -230,16 +232,19 @@ async def _announce_decision(session: AsyncSession, sub: Submission, old_status:
         return
     title = sub.task.title
     message = {
-        Status.peer_verified: f"🎉 «{title}» ishingiz tasdiqlandi: +{sub.points_awarded} ball. Portfolioingizga qo'shildi.",
-        Status.mentor_verified: f"🏆 Mentor «{title}» ishingizni tasdiqladi. Endi jami {sub.points_awarded} ball.",
+        Status.peer_verified: f"«{title}» ishingiz tasdiqlandi: +{sub.points_awarded} ball. Portfolioingizga qo'shildi.",
+        Status.mentor_verified: f"Mentor «{title}» ishingizni tasdiqladi. Endi jami {sub.points_awarded} ball.",
         Status.rejected: f"«{title}» ishingiz qaytarildi. Izohlarni o'qib, tuzating va qayta topshiring.",
     }.get(sub.status)
     if message:
-        notify.send([sub.user.telegram_id], message)
+        await inbox.push(session, [sub.user_id], "work_result", message, link="/talaba/yol",
+                         params={"task": title, "status": sub.status.value, "points": sub.points_awarded})
     if sub.status is Status.peer_verified:
-        mentors = (await session.execute(select(User.telegram_id).where(
+        mentors = (await session.execute(select(User.id).where(
             User.role.in_([Role.mentor, Role.admin]), User.is_blocked.is_(False)))).scalars().all()
-        notify.send(list(mentors), f"«{title}» ({sub.user.full_name}) tasdiqlandi. Mentor bahosini kutmoqda.")
+        await inbox.push(session, mentors, "work_awaiting_mentor",
+                         f"«{title}» ({sub.user.full_name}) tasdiqlandi. Mentor bahosini kutmoqda.",
+                         link="/talaba/tekshirish", params={"task": title, "student": sub.user.full_name})
 
 
 async def _reload(session: AsyncSession, submission_id: int) -> Submission:

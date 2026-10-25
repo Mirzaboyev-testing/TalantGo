@@ -43,7 +43,9 @@ REVIEW_STATES = ("pending", "approved", "rejected")
 JOB_KINDS = ("internship", "part_time", "junior", "project")
 WORK_MODES = ("office", "remote", "hybrid")
 JOB_STATES = ("pending", "approved", "rejected", "closed")
-APPLICATION_STATES = ("new", "viewed", "shortlisted", "rejected", "hired")
+APPLICATION_STATES = ("new", "viewed", "shortlisted", "interview", "offer", "hired", "rejected", "withdrawn")
+# who may move an application where (services/applications.py enforces it)
+ACTIVE_APPLICATION_STATES = ("new", "viewed", "shortlisted", "interview", "offer")
 CONTACT_STATES = ("pending", "accepted", "declined")
 
 
@@ -192,6 +194,9 @@ class User(Base):
     staff_status: Mapped[str] = mapped_column(String(16), default="", server_default="")
     staff_position: Mapped[str] = mapped_column(String(120), default="", server_default="")
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    language: Mapped[str] = mapped_column(String(5), default="uz", server_default="uz")         # uz / ru / en
+    # the student can hide from the companies' named list; applications still share the profile
+    visible_to_employers: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -402,11 +407,45 @@ class Application(Base):
     note: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(16), default="new")
     employer_note: Mapped[str] = mapped_column(Text, default="")
+    interview_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    interview_place: Mapped[str] = mapped_column(String(300), default="", server_default="")   # address or call link
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     job: Mapped[Job] = relationship(lazy="selectin")
     user: Mapped[User] = relationship(lazy="selectin")
+
+
+class ApplicationEvent(Base):
+    """Every status change of an application, so the history (and the hiring statistics) can be trusted."""
+    __tablename__ = "application_events"
+    __table_args__ = (_in("actor", ("student", "employer", "admin", "system"), "application_event_actor_valid"),
+                      Index("ix_application_events_application_id", "application_id", "id"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"))
+    from_status: Mapped[str] = mapped_column(String(16), default="")       # "" for the first submission
+    to_status: Mapped[str] = mapped_column(String(16))
+    actor: Mapped[str] = mapped_column(String(8))
+    actor_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Notification(Base):
+    """The in-app inbox. Telegram is an extra channel; people who signed up on the website rely on this.
+    `kind` + `params` let the app show the message in the reader's language; `text` is the Uzbek fallback."""
+    __tablename__ = "notifications"
+    __table_args__ = (Index("ix_notifications_user_id_id", "user_id", "id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(40))
+    text: Mapped[str] = mapped_column(Text)
+    link: Mapped[str] = mapped_column(String(200), default="")               # an in-app path such as /talaba/arizalar
+    params: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ContactRequest(Base):

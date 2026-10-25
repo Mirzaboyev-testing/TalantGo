@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, APPLICATION_STATUS, JOB_KIND, salary, WORK_MODE, type Applicant, type EmployerContact, type Job,
+import { api, JOB_KIND, salary, WORK_MODE, type Applicant, type EmployerContact, type Job,
          type JobInput, type JobKind, type Me, type TalentCard, type Track, type WorkMode } from "../../api";
 import { Field, Req, useRequired, type Check } from "../../form";
 import { ask, haptic, openLink } from "../../tg";
-import { ErrorText, message, toast } from "../../ui";
+import { ErrorText, Sheet, message, toast } from "../../ui";
 import EmployerSignup from "./EmployerSignup";
 import Students, { downloadCv, StudentSheet } from "./Students";
 import Tests from "./Tests";
@@ -11,27 +11,32 @@ import LoginMethods from "../LoginMethods";
 import Groups from "../Groups";
 import Shell, { type ShellTab } from "../Shell";
 import { Icon } from "../../icons";
+import { useRouteTab } from "../../router";
+import { formatDateTime, t, useLang } from "../../i18n";
+import { actionLabel, EMPLOYER_MOVES, statusBadge, statusLabel } from "../../pipeline";
 
 type Tab = "students" | "jobs" | "tests" | "groups" | "profile";
-const TABS: ShellTab<Tab>[] = [
-  { id: "students", icon: "users", label: "Talabalar" },
-  { id: "jobs", icon: "briefcase", label: "Vakansiyalarim" },
-  { id: "tests", icon: "check", label: "Testlar" },
-  { id: "groups", icon: "chat", label: "Guruhlar" },
-  { id: "profile", icon: "building", label: "Profilim" },
+const tabs = (): ShellTab<Tab>[] => [
+  { id: "students", icon: "users", label: t("nav.company.students") },
+  { id: "jobs", icon: "briefcase", label: t("nav.company.jobs") },
+  { id: "tests", icon: "check", label: t("nav.company.tests") },
+  { id: "groups", icon: "chat", label: t("nav.company.groups") },
+  { id: "profile", icon: "building", label: t("nav.company.profile") },
 ];
+// /korxona/<segment>; notices about new applications open /korxona/nomzodlar (the jobs tab for now)
+const ROUTES: Record<Tab, string> = { students: "talabalar", jobs: "vakansiyalar", tests: "testlar", groups: "guruhlar", profile: "profil" };
 const JOB_STATUS: Record<string, [string, string]> = {
   pending: ["Tekshiruvda", "pending"], approved: ["E'lon qilingan", "peer_verified"],
   rejected: ["Qaytarilgan", "rejected"], closed: ["Yopilgan", "todo"],
 };
 
 export default function EmployerApp({ me, onChanged, onLogout }: { me: Me; onChanged: (m: Me) => void; onLogout: () => void }) {
-  const [tab, setTab] = useState<Tab>("students");
+  const [tab, setTab] = useRouteTab<Tab>("/korxona", ROUTES, "students", { nomzodlar: "jobs" });
   const [studentsView, setStudentsView] = useState<"all" | "contacts">("all");
   const [attempt, setAttempt] = useState<number | null>(null);
   const openAttempt = (id: number) => { setAttempt(id); setTab("tests"); };
   return (
-    <Shell tabs={TABS} active={tab} onChange={(t) => { setAttempt(null); setTab(t); }} onLogout={onLogout}
+    <Shell tabs={tabs()} active={tab} onChange={(t) => { setAttempt(null); setTab(t); }} onLogout={onLogout}
            user={{ name: me.full_name, photo: me.photo_url, subtitle: me.company?.name }}>
         {tab === "students" && (
           <>
@@ -226,51 +231,114 @@ function JobForm({ job, onDone }: { job?: Job; onDone: () => void }) {
   );
 }
 
-const NEXT_STATUS: [string, string, string][] = [["shortlisted", "Keyingi bosqich", "ok"], ["hired", "Qabul qilindi", "ok"], ["rejected", "Rad etish", "bad"]];
-
 function Applicants({ job, onBack }: { job: Job; onBack: () => void }) {
+  useLang();
   const [items, setItems] = useState<Applicant[] | null>(null);
   const [profile, setProfile] = useState<number | null>(null);
+  const [interviewFor, setInterviewFor] = useState<Applicant | null>(null);
   const [error, setError] = useState("");
   useEffect(() => { api.employer.applicants(job.id).then(setItems, (e) => setError(message(e))); }, [job.id]);
 
-  async function setStatus(a: Applicant, status: string) {
+  async function save(a: Applicant, changes: { status: string; interview_at?: string; interview_place?: string }) {
+    setError("");
     try {
-      const updated = await api.employer.updateApplication(a.id, { status });
+      const updated = await api.employer.updateApplication(a.id, changes);
       setItems((cur) => cur?.map((x) => (x.id === a.id ? updated : x)) ?? null);
+      haptic("success");
+      return true;
     } catch (e) {
       setError(message(e));
+      return false;
     }
+  }
+
+  async function act(a: Applicant, status: string) {
+    if (status === "interview") return setInterviewFor(a);
+    if (status === "hired" && !(await ask(t("app.confirm.hired")))) return;
+    if (status === "rejected" && !(await ask(t("app.confirm.rejected")))) return;
+    await save(a, { status });
   }
 
   return (
     <div>
-      <button className="btn small ghost" onClick={onBack}><Icon name="back" size={16} />Vakansiyalar</button>
+      <button className="btn small ghost" onClick={onBack}><Icon name="back" size={16} />{t("app.applicants.back")}</button>
       <h1>{job.title}</h1>
-      <p className="hint">Talaba o'zi ariza topshirgani uchun ismi va CV'si sizga ochiq. Holatni o'zgartirsangiz, talabaga bot orqali xabar boradi.</p>
+      <p className="hint">{t("app.applicants.hint")}</p>
       <ErrorText error={error} />
-      {items?.length === 0 && <div className="center hint">Hali ariza yo'q</div>}
+      {!items && !error && <div className="hint">{t("common.loading")}</div>}
+      {items?.length === 0 && <div className="center hint">{t("app.applicants.empty")}</div>}
       {items?.map((a) => (
         <div key={a.id} className="card">
           <div className="row between">
             <b>{a.identity.full_name}</b>
-            <span className={`badge ${a.status === "hired" || a.status === "shortlisted" ? "peer_verified" : a.status === "rejected" ? "rejected" : "pending"}`}>{APPLICATION_STATUS[a.status]}</span>
+            <span className={`badge ${statusBadge(a.status)}`}>{statusLabel(a.status)}</span>
           </div>
           <CardBody card={a.card} />
           {a.note && <p style={{ whiteSpace: "pre-line" }}>«{a.note}»</p>}
+          {a.status === "interview" && (a.interview_at || a.interview_place) && (
+            <div className="notice" style={{ marginTop: 8 }}>
+              {t("app.interview.at", { when: [formatDateTime(a.interview_at), a.interview_place].filter(Boolean).join(", ") })}
+            </div>
+          )}
           <div className="row wrap" style={{ marginTop: 8 }}>
             {a.identity.username && <button className="btn small" onClick={() => openLink(`https://t.me/${a.identity.username}`)}>Telegram'da yozish</button>}
             {a.identity.phone && <span className="hint">Tel: {a.identity.phone}</span>}
             <button className="btn small ghost" onClick={() => setProfile(a.card.id)}>Profil</button>
             <button className="btn small ghost" onClick={() => downloadCv(a.card.id)}>CV (PDF)</button>
-            {NEXT_STATUS.filter(([s]) => s !== a.status).map(([s, label, kind]) => (
-              <button key={s} className={`btn small ${kind === "bad" ? "ghost" : "ghost"}`} onClick={() => setStatus(a, s)}>{label}</button>
-            ))}
           </div>
+          {(EMPLOYER_MOVES[a.status] ?? []).length > 0 && (
+            <div className="row wrap" style={{ marginTop: 8 }}>
+              {(EMPLOYER_MOVES[a.status] ?? []).map((to) => (
+                <button key={to} className={`btn small ${to === "rejected" ? "ghost" : to === "hired" ? "ok" : "ghost"}`}
+                        onClick={() => act(a, to)}>{actionLabel(a.status, to)}</button>
+              ))}
+            </div>
+          )}
         </div>
       ))}
       {profile && <StudentSheet id={profile} catalog={null} onClose={() => setProfile(null)} />}
+      {interviewFor && (
+        <InterviewSheet applicant={interviewFor} onClose={() => setInterviewFor(null)}
+                        onSend={async (at, place) => {
+                          if (await save(interviewFor, { status: "interview", interview_at: at, interview_place: place })) setInterviewFor(null);
+                        }} />
+      )}
     </div>
+  );
+}
+
+/** Tashkent wall-clock time as the value of a datetime-local input ("2026-11-02T10:30"). */
+function localValue(iso: string | null): string {
+  if (!iso) return "";
+  const shifted = new Date(new Date(iso).getTime() + 5 * 3600_000);      // Asia/Tashkent is UTC+5 all year
+  return shifted.toISOString().slice(0, 16);
+}
+
+function InterviewSheet({ applicant, onClose, onSend }: {
+  applicant: Applicant; onClose: () => void; onSend: (at: string, place: string) => Promise<void>;
+}) {
+  const [at, setAt] = useState(localValue(applicant.interview_at));
+  const [place, setPlace] = useState(applicant.interview_place);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function send() {
+    if (!at) return setError(t("app.interview.need_time"));
+    setBusy(true);
+    await onSend(`${at}:00+05:00`, place.trim());
+    setBusy(false);
+  }
+  return (
+    <Sheet onClose={onClose}>
+      <h1>{t("app.interview.title")}</h1>
+      <p className="hint">{applicant.identity.full_name}</p>
+      <label>{t("app.interview.when")}</label>
+      <input type="datetime-local" value={at} onChange={(e) => { setAt(e.target.value); setError(""); }} />
+      <label>{t("app.interview.place")}</label>
+      <input value={place} maxLength={300} placeholder={t("app.interview.place_hint")} onChange={(e) => setPlace(e.target.value)} />
+      <ErrorText error={error} />
+      <button className="btn" style={{ marginTop: 12 }} disabled={busy} onClick={send}>{t("app.interview.send")}</button>
+      <button className="btn ghost" onClick={onClose}>{t("common.cancel")}</button>
+    </Sheet>
   );
 }
 

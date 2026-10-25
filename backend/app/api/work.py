@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 
 from ..core.security import read_token
 from ..models import Role, SubmissionFile, Task, TaskQuestion, User
-from ..services import files, notify
+from ..services import files, inbox
 from .challenges import Mentor
 from .deps import CurrentUser, Session
 
@@ -95,11 +95,14 @@ async def ask(task_id: int, body: QuestionIn, user: CurrentUser, session: Sessio
     await session.commit()
     # the task's author answers first; tasks without one go to every mentor
     if task.created_by_id:
-        to = [task.created_by.telegram_id] if task.created_by else []
+        to = [task.created_by_id]
     else:
-        to = list((await session.execute(select(User.telegram_id).where(
+        to = list((await session.execute(select(User.id).where(
             User.role.in_([Role.mentor, Role.admin]), User.is_blocked.is_(False)))).scalars())
-    notify.send(to, f"Savol «{task.title}» bo'yicha, {user.full_name}: {q.text[:300]}\n\nMentor panelidagi «Savollar» bo'limida javob bering.")
+    await inbox.push(session, to, "question_new",
+                     f"Savol «{task.title}» bo'yicha, {user.full_name}: {q.text[:300]}\n\n"
+                     "Mentor panelidagi «Savollar» bo'limida javob bering.",
+                     link="/talaba/tekshirish", params={"task": task.title, "student": user.full_name})
     return question_out(await _reload(session, q.id), user)
 
 
@@ -123,8 +126,12 @@ async def answer(question_id: int, body: AnswerIn, user: Mentor, session: Sessio
     q = await session.get(TaskQuestion, question_id)
     if q is None:
         raise HTTPException(404, "Savol topilmadi")
+    if q.answer and q.answered_by_id not in (None, user.id):
+        raise HTTPException(409, "Bu savolga boshqa mentor javob bergan")
     q.answer, q.answered_by_id, q.answered_at = body.answer.strip(), user.id, datetime.now(UTC)
     await session.commit()
     q = await _reload(session, question_id)
-    notify.send([q.user.telegram_id], f"Mentor «{q.task.title}» bo'yicha savolingizga javob berdi: {q.answer[:500]}")
+    await inbox.push(session, [q.user_id], "question_answered",
+                     f"Mentor «{q.task.title}» bo'yicha savolingizga javob berdi: {q.answer[:500]}",
+                     link="/talaba/yol", params={"task": q.task.title})
     return question_out(q, user)

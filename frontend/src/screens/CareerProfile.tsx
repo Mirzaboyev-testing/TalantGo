@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, courseLabel, JOB_KIND, loadCatalog, VERIFICATION_LABEL, type Catalog, type JobKind, type Me, type University } from "../api";
 import { Req } from "../form";
+import { t } from "../i18n";
 import { haptic } from "../tg";
 import { ErrorText, message, toast } from "../ui";
 
@@ -87,6 +88,12 @@ export default function CareerProfile({ me, onSaved }: { me: Me; onSaved: (m: Me
           <input type="checkbox" checked={me.open_to_work} style={{ width: 22, height: 22, flex: "none" }}
                  onChange={(e) => run(() => api.updateMe({ open_to_work: e.target.checked }),
                    e.target.checked ? "Kompaniyalar endi sizni topa oladi" : "Profilingiz kompaniyalardan yashirildi")} />
+        </label>
+        <label className="row between" style={{ color: "var(--text)", marginTop: 12, cursor: "pointer" }}>
+          <span><b>{t("profile.visible.title")}</b><div className="hint">{t("profile.visible.hint")}</div></span>
+          <input type="checkbox" checked={me.visible_to_employers} style={{ width: 22, height: 22, flex: "none" }}
+                 onChange={(e) => run(() => api.updateMe({ visible_to_employers: e.target.checked }),
+                   t(e.target.checked ? "profile.visible.on" : "profile.visible.off"))} />
         </label>
       </div>
 

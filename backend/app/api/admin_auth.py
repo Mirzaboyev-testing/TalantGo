@@ -1,10 +1,11 @@
 """Sign-up and sign-in for the admin website (email + password). Nothing here involves Telegram."""
 import asyncio
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
+from ..core import ratelimit
 from ..models import AdminAccount
 from ..services import admin_password
 from ..services.admin_accounts import (check_password, hash_password, issue_token, normalize_email, owners_count,
@@ -64,10 +65,11 @@ async def register(body: RegisterIn, session: Session) -> dict:
 
 
 @router.post("/login")
-async def login(body: LoginIn, session: Session) -> dict:
+async def login(body: LoginIn, request: Request, session: Session) -> dict:
+    ratelimit.limit(f"admin-login:{ratelimit.client_ip(request)}", 30, 15 * 60)
     account = (await session.execute(select(AdminAccount).where(
         AdminAccount.email == body.email.strip().lower()))).scalar_one_or_none()
-    if account is None or not check_password(body.password, account.password_hash):
+    if account is None or not await asyncio.to_thread(check_password, body.password, account.password_hash):
         await asyncio.sleep(1)                       # slows down password guessing
         raise HTTPException(401, "Email yoki parol noto'g'ri")
     if account.status == "pending":

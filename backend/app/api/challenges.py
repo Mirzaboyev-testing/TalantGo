@@ -9,7 +9,7 @@ from sqlalchemy import func, select, update
 
 from ..models import Challenge, ChallengeEntry, Role, Task, Track, User
 from ..schemas import Url
-from ..services import notify
+from ..services import inbox
 from .deps import CurrentUser, Session
 
 router = APIRouter(tags=["challenges"])
@@ -72,10 +72,12 @@ async def create_task(body: MentorTaskIn, user: Mentor, session: Session) -> dic
     task = Task(**body.model_dump(), sort_order=(last or 0) + 1, created_by_id=user.id)
     session.add(task)
     await session.commit()
-    students = (await session.execute(select(User.telegram_id).where(
+    students = (await session.execute(select(User.id).where(
         User.track_id == body.track_id, User.account_type == "student", User.is_blocked.is_(False),
         User.id != user.id))).scalars().all()
-    notify.send(list(students), f"Yangi topshiriq: «{task.title}» ({task.points} ball). Mentor: {user.full_name}.")
+    await inbox.push(session, students, "task_new",
+                     f"Yangi topshiriq: «{task.title}» ({task.points} ball). Mentor: {user.full_name}.",
+                     link="/talaba/yol", params={"task": task.title, "points": task.points})
     return task_out(task)
 
 
@@ -176,13 +178,13 @@ async def create_challenge(body: ChallengeIn, user: Mentor, session: Session) ->
     session.add(c)
     await session.commit()
     await session.refresh(c)
-    audience = select(User.telegram_id).where(User.account_type == "student", User.is_blocked.is_(False))
+    audience = select(User.id).where(User.account_type == "student", User.is_blocked.is_(False))
     if body.track_id:
         audience = audience.where(User.track_id == body.track_id)
     prize = f" Sovrin: {c.prize}." if c.prize else ""
-    notify.send(list((await session.execute(audience)).scalars()),
-                f"Yangi chellenj: «{c.title}». Muddat: {body.ends_on.strftime('%d.%m.%Y')}.{prize} "
-                f"Ilovadagi «Yo'l» bo'limida qatnashing.")
+    await inbox.push(session, (await session.execute(audience)).scalars().all(), "challenge_new",
+                     f"Yangi chellenj: «{c.title}». Muddat: {body.ends_on.strftime('%d.%m.%Y')}.{prize} "
+                     "«Yo'l» bo'limida qatnashing.", link="/talaba/yol", params={"challenge": c.title})
     return challenge_out(c, now, entries=0, to_review=0)
 
 
@@ -249,9 +251,10 @@ async def review_entry(challenge_id: int, entry_id: int, body: ReviewEntryIn, us
     await _set_award(session, entry, (c.points + PLACE_BONUS.get(body.place or 0, 0)) if body.accept else 0)
     await session.commit()
     place = f" Siz {body.place}-o'rinni egalladingiz!" if body.place else ""
-    notify.send([entry.user.telegram_id],
-                f"«{c.title}» chellenjidagi ishingiz qabul qilindi: +{entry.points_awarded} ball.{place}" if body.accept
-                else f"«{c.title}» chellenjidagi ishingiz qabul qilinmadi. Izoh: {entry.comment or '-'}")
+    await inbox.push(session, [entry.user_id], "challenge_result",
+                     f"«{c.title}» chellenjidagi ishingiz qabul qilindi: +{entry.points_awarded} ball.{place}"
+                     if body.accept else f"«{c.title}» chellenjidagi ishingiz qabul qilinmadi. Izoh: {entry.comment or '-'}",
+                     link="/talaba/yol", params={"challenge": c.title, "accepted": body.accept})
     return entry_out(entry)
 
 

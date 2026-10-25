@@ -38,6 +38,7 @@ export interface Me {
   completeness: { percent: number; missing: string[] };
   consent_current: boolean; work_industries: string[]; job_title: string; signup_missing: string[];
   email: string | null; has_password: boolean; has_telegram: boolean;
+  language: "uz" | "ru" | "en"; visible_to_employers: boolean;
 }
 export interface BotLink { code: string; url: string; expires_in: number }
 export type BotLoginStatus = { status: "pending" | "claimed" | "awaiting_pin" | "rejected" | "conflict" | "used" | "expired"; note?: string };
@@ -120,7 +121,14 @@ export interface Job {
 }
 export type JobInput = Pick<Job, "title" | "kind" | "work_mode" | "city" | "is_paid" | "salary_from" | "salary_to" |
   "hours_per_week" | "description" | "requirements" | "skills" | "track_ids" | "counts_as_practice" | "deadline"> & { rules_accepted: boolean };
-export interface MyApplication { id: number; status: string; note: string; created_at: string; updated_at: string; job: Job }
+export interface MyApplication {
+  id: number; status: string; note: string; created_at: string; updated_at: string; job: Job;
+  interview_at: string | null; interview_place: string; history: { status: string; at: string }[];
+}
+export interface AppNotification {
+  id: number; kind: string; text: string; link: string; params: Record<string, string | number | boolean | null>;
+  created_at: string; read: boolean;
+}
 export interface TalentCard {
   id: number; code: string; headline: string; university: string | null; university_name: string | null; faculty: string;
   course: number | null; graduation_year: number | null; gpa: number | null; gpa_scale: number; track: string | null;
@@ -128,7 +136,10 @@ export interface TalentCard {
   verified_tasks: number; verification: Verification; verified_by: string; contact_status?: string | null;
 }
 export interface Identity { full_name: string; username: string | null; photo_url: string | null; cv_url: string | null; github_url: string; linkedin_url: string; phone?: string | null }
-export interface Applicant { id: number; status: string; note: string; employer_note: string; created_at: string; card: TalentCard; identity: Identity }
+export interface Applicant {
+  id: number; status: string; note: string; employer_note: string; created_at: string; updated_at: string | null;
+  interview_at: string | null; interview_place: string; card: TalentCard; identity: Identity;
+}
 export interface EmployerContact { id: number; status: string; message: string; created_at: string; job_title: string | null; card: TalentCard; identity: Identity | null }
 export interface StudentContact { id: number; company: string; industry: string; message: string; job_title: string | null; status: string; created_at: string }
 export interface QueueItem {
@@ -310,6 +321,12 @@ export const api = {
   myApplications: () => request<MyApplication[]>("GET", "/me/applications"),
   withdraw: (id: number) => request<null>("POST", `/me/applications/${id}/withdraw`),
   myContacts: () => request<StudentContact[]>("GET", "/me/contacts"),
+  notifications: {
+    list: (beforeId?: number) => request<{ items: AppNotification[]; unread: number; more: boolean }>(
+      "GET", `/me/notifications${beforeId ? `?before_id=${beforeId}` : ""}`),
+    unread: () => request<{ unread: number }>("GET", "/me/notifications/unread"),
+    read: (ids?: number[]) => request<{ unread: number }>("POST", "/me/notifications/read", ids ? { ids } : {}),
+  },
   answerContact: (id: number, accept: boolean) => request<{ status: string }>("POST", `/me/contacts/${id}`, { accept }),
 
   adminAuth: {
@@ -381,7 +398,7 @@ export const api = {
     editJob: (id: number, j: JobInput) => request<Job>("PUT", `/employer/jobs/${id}`, j),
     closeJob: (id: number) => request<Job>("POST", `/employer/jobs/${id}/close`),
     applicants: (jobId: number) => request<Applicant[]>("GET", `/employer/jobs/${jobId}/applicants`),
-    updateApplication: (id: number, changes: { status?: string; employer_note?: string }) =>
+    updateApplication: (id: number, changes: { status?: string; employer_note?: string; interview_at?: string; interview_place?: string }) =>
       request<Applicant>("PATCH", `/employer/applications/${id}`, changes),
     talent: (params: Record<string, string>) => request<TalentCard[]>("GET", `/employer/talent?${new URLSearchParams(params)}`),
     contact: (studentId: number, message: string) => request<{ status: string }>("POST", `/employer/talent/${studentId}/contact`, { message }),
@@ -502,7 +519,8 @@ export interface UniversityDashboard {
 export const JOB_KIND: Record<JobKind, string> = { internship: "Amaliyot", part_time: "Yarim stavka", junior: "Junior", project: "Loyiha" };
 export const WORK_MODE: Record<WorkMode, string> = { office: "Ofisda", remote: "Masofaviy", hybrid: "Aralash" };
 export const APPLICATION_STATUS: Record<string, string> = {
-  new: "Yuborildi", viewed: "Ko'rildi", shortlisted: "Keyingi bosqich", rejected: "Rad etildi", hired: "Qabul qilindi",
+  new: "Yuborildi", viewed: "Ko'rib chiqilmoqda", shortlisted: "Saralandi", interview: "Suhbat", offer: "Taklif",
+  hired: "Ishga olindi", rejected: "Rad etildi", withdrawn: "Qaytarib olindi",
 };
 export const VERIFICATION_LABEL: Record<Verification, string> = {
   none: "Tasdiqlanmagan", pending: "Tasdiqlash kutilmoqda", verified: "Talabalik tasdiqlangan", rejected: "Rad etilgan",
@@ -533,7 +551,7 @@ export interface Dashboard {
   from: string; to: string;
   kpis: { students: number; new_students: number; active_7d: number; verified_students: number; submissions: number;
           awaiting_review: number; companies: number; live_jobs: number; queue: number };
-  applications: Record<"new" | "viewed" | "shortlisted" | "hired" | "rejected", number>;
+  applications: Record<"new" | "viewed" | "shortlisted" | "interview" | "offer" | "hired" | "rejected" | "withdrawn", number>;
   submissions_by_status: Record<Status, number>;
   series: { dates: string[]; registrations: number[]; submissions: number[]; applications: number[] };
   recent_applications: { id: number; candidate: string; job: string; company: string; status: string; created_at: string }[];

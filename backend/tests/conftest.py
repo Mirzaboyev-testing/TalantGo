@@ -13,6 +13,7 @@ import pytest  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy.engine import make_url  # noqa: E402
 
+from app.core import ratelimit  # noqa: E402
 from app.core.db import Base, SessionLocal, engine  # noqa: E402
 from app.core.security import create_token  # noqa: E402
 from app.main import app  # noqa: E402
@@ -42,6 +43,7 @@ async def fresh_db():
         await seed(session)
     rules._cache = None                      # in-process caches must not leak between tests
     settings_store._cache.clear()
+    ratelimit.reset()
     yield
 
 

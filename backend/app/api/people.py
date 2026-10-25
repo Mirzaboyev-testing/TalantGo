@@ -9,7 +9,8 @@ from datetime import UTC, datetime
 from ..models import Company, Role, Status, Submission, Track, University, User
 from ..schemas import (CompanyOut, EmployerSignupIn, LeaderboardOut, LeaderRow, MeOut, MeUpdate, PeerOut,
                        StaffRequestIn, TrackOut, UniversityOut)
-from ..services import notify
+from ..core import ratelimit
+from ..services import inbox, notify
 from ..services.career import completeness, signup_missing
 from ..services.catalog import CONSENT_VERSION, as_dict as catalog_dict
 from ..core.security import read_token
@@ -43,7 +44,8 @@ async def me_out(session: Session, user: User) -> MeOut:
         invited_count=await session.scalar(select(func.count()).select_from(User).where(User.referred_by_id == user.id)),
         completeness=completeness(user), consent_current=user.consent_version >= CONSENT_VERSION,
         work_industries=user.work_industries, job_title=user.job_title, signup_missing=signup_missing(user),
-        email=user.email, has_password=bool(user.password_hash), has_telegram=user.telegram_id is not None)
+        email=user.email, has_password=bool(user.password_hash), has_telegram=user.telegram_id is not None,
+        language=user.language, visible_to_employers=user.visible_to_employers)
 
 
 # Changing any of these after verification means the old check no longer covers the profile.
@@ -172,9 +174,10 @@ async def peers(user: CurrentUser, session: Session,
 @router.get("/leaderboard", response_model=LeaderboardOut)
 async def leaderboard(user: CurrentUser, session: Session,
                       scope: Literal["all", "track", "group", "university"] = "all") -> LeaderboardOut:
-    query = select(User).where(User.is_blocked.is_(False), User.account_type == "student")
+    # only students who agreed to the processing of their data are shown to others
+    query = select(User).where(User.is_blocked.is_(False), User.account_type == "student", User.consent_at.isnot(None))
     rank_query = select(func.count()).select_from(User).where(User.points > user.points, User.is_blocked.is_(False),
-                                                              User.account_type == "student")
+                                                              User.account_type == "student", User.consent_at.isnot(None))
     if scope == "track":
         query = query.where(User.track_id == user.track_id)
         rank_query = rank_query.where(User.track_id == user.track_id)
@@ -208,16 +211,18 @@ class UniversityIn(BaseModel):
 
 
 @router.post("/universities", response_model=UniversityOut)
-async def add_university(body: UniversityIn, _: CurrentUser, session: Session) -> University:
+async def add_university(body: UniversityIn, user: CurrentUser, session: Session) -> University:
     """A student whose university is not listed types its name, so sign-up never stops there.
     An existing name (any letter case) is reused; admins can tidy the list later."""
     name = " ".join(body.name.split())
     existing = (await session.execute(select(University).where(func.lower(University.name) == name.lower()))).scalar_one_or_none()
     if existing:
-        if not existing.is_active:
-            existing.is_active = True
-            await session.commit()
+        if not existing.is_active:              # switched off by an admin: only an admin brings it back
+            raise HTTPException(409, "Bu universitet ro'yxatdan olib tashlangan. Ro'yxatdan tanlang "
+                                     "yoki administratorga murojaat qiling.")
         return existing
+    ratelimit.limit(f"university-create:{user.id}", 3, 24 * 3600,
+                    "Bir kunda 3 tadan ortiq yangi universitet qo'shib bo'lmaydi")
     uni = University(name=name, short_name=name[:40], city="")
     session.add(uni)
     await session.commit()
@@ -239,9 +244,11 @@ async def request_verification(user: CurrentUser, session: Session) -> MeOut:
         raise HTTPException(422, "Avval shaxsiy ma'lumotlarni qayta ishlashga rozilik bering")
     user.verification, user.verification_note = "pending", ""
     await session.commit()
-    staff = (await session.execute(select(User.telegram_id).where(
+    staff = (await session.execute(select(User.id).where(
         User.staff_university_id == user.university_id, User.staff_status == "approved"))).scalars().all()
-    notify.send(list(staff), f"Yangi talaba tasdiqlashni kutmoqda: {user.full_name}, {user.faculty}, {user.course}-kurs.")
+    await inbox.push(session, staff, "verification_request",
+                     f"Yangi talaba tasdiqlashni kutmoqda: {user.full_name}, {user.faculty}, {user.course}-kurs.",
+                     link="/universitet/tasdiqlash", params={"student": user.full_name})
     await session.refresh(user)
     return await me_out(session, user)
 
@@ -346,6 +353,9 @@ async def request_staff(body: StaffRequestIn, user: CurrentUser, session: Sessio
 @router.post("/me/account-type/student", response_model=MeOut)
 async def back_to_student(user: CurrentUser, session: Session) -> MeOut:
     """Leaves a pending employer or staff request and returns to the student experience."""
+    if (user.company is not None and user.company.status == "approved") or user.staff_status == "approved":
+        raise HTTPException(409, "Tasdiqlangan kompaniya yoki universitet hisobini talaba hisobiga aylantirib "
+                                 "bo'lmaydi. Talaba sifatida alohida hisob oching.")
     user.account_type = "student"
     if user.staff_status != "approved":
         user.staff_university_id, user.staff_status = None, ""

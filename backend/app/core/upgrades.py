@@ -7,6 +7,13 @@ Switch to Alembic once a change is not purely additive.
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from ..models import APPLICATION_STATES
+
+
+def _states(values: tuple[str, ...]) -> str:
+    return ", ".join(repr(v) for v in values)
+
+
 STATEMENTS = [
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_owner boolean NOT NULL DEFAULT false",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked boolean NOT NULL DEFAULT false",
@@ -75,6 +82,14 @@ STATEMENTS = [
     "ALTER TABLE login_requests ADD COLUMN IF NOT EXISTS pin varchar(6) NOT NULL DEFAULT ''",
     "ALTER TABLE login_requests ADD COLUMN IF NOT EXISTS attempts integer NOT NULL DEFAULT 0",
     "ALTER TABLE login_requests ADD COLUMN IF NOT EXISTS tg_username varchar(64)",
+    # three panels (student / company / university): application pipeline, inbox, language (2026-10-26)
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS language varchar(5) NOT NULL DEFAULT 'uz'",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS visible_to_employers boolean NOT NULL DEFAULT true",
+    "ALTER TABLE applications ADD COLUMN IF NOT EXISTS interview_at timestamptz",
+    "ALTER TABLE applications ADD COLUMN IF NOT EXISTS interview_place varchar(300) NOT NULL DEFAULT ''",
+    # a CHECK constraint cannot be altered in place: drop and re-create it with the longer state list
+    "ALTER TABLE applications DROP CONSTRAINT IF EXISTS application_status_valid",
+    f"ALTER TABLE applications ADD CONSTRAINT application_status_valid CHECK (status IN ({_states(APPLICATION_STATES)}))",
 ]
 
 
