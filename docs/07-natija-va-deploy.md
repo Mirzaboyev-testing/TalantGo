@@ -43,11 +43,10 @@ Ish `uch-panel` branchida, `main` jonli saytdagi holat. Har faza alohida commit.
 - Reyting 10 tadan ko'p tasdiqlangan talabasi bor universitetlar uchun ball beradi: pilot boshida ko'p universitetda "ma'lumot yetarli emas" chiqadi.
 - Telegram bot o'zgartirilmadi. Bildirishnomadagi tugma endi tegishli sahifani ochadi (masalan, `/talaba/arizalar`).
 - Lokal `secrets/local-admin-test.txt` paroli lokal bazadagi hisobga mos emas (eskirgan).
-- Reyting ishonchliligi: universitet xodimi talabani ham tasdiqlaydi, talabaning o'zi kiritgan ish joyini ham.
-  Bu ikki tomonni bitta universitet boshqaradi. Hozircha yumshatildi: faqat universitet tasdig'idagi joylar
-  reytingda alohida ko'rsatiladi va xodimning har bir tasdig'i audit jurnaliga yoziladi. Keyingi qadam
-  (qaror kerak): reytingda faqat korxona yoki platforma tasdiqlagan joylarni sanash yoki dalil (shartnoma,
-  buyruq nusxasi) talab qilish.
+- Reyting va bandlik (foydalanuvchi qarori, 2026-10-26): hozircha faqat korxona tasdiqlagan ish joylari sanaladi:
+  platformada ishga olish yoki talaba tanlagan korxonaning tasdig'i. Universitet o'zi tasdiqlagan yozuvlar saqlanadi,
+  lekin bandlik foizi va reytingga kirmaydi (alohida ko'rsatiladi). Platformada yo'q korxonadagi ish hozircha
+  hisobga kirmaydi.
 - Admin saytida yangi ro'yxatdan o'tgan xodim "admin" roli bilan yaratiladi; ega uni tasdiqlashda kerakli rolni
   (moderator yoki tahlilchi) tanlashi kerak.
 

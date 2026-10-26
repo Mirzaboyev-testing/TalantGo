@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { api, type EmployerDashboard } from "../../api";
+import { api, type EmployerDashboard, type OutcomeRequest } from "../../api";
 import { formatDateTime, t, useLang } from "../../i18n";
 import { Icon } from "../../icons";
 import { statusBadge, statusLabel } from "../../pipeline";
 import { navigate } from "../../router";
+import { haptic } from "../../tg";
 import { ErrorText, message } from "../../ui";
 
 const PERIODS = [7, 30, 90, 365];
@@ -62,6 +63,8 @@ export default function CompanyHome({ onNewJob }: { onNewJob: () => void }) {
             <p className="hint" style={{ marginBottom: 0 }}>{t("cdash.how")}</p>
           </div>
 
+          <OutcomeRequests />
+
           <div className="grid-2">
             <div className="card">
               <b>{t("cdash.upcoming")}</b>
@@ -89,6 +92,35 @@ export default function CompanyHome({ onNewJob }: { onNewJob: () => void }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/** Students who say they work or intern here: the company's confirmation counts for their university. */
+function OutcomeRequests() {
+  const [rows, setRows] = useState<OutcomeRequest[]>([]);
+  const [error, setError] = useState("");
+  const load = () => api.employer.outcomeRequests().then(setRows, (e) => setError(message(e)));
+  useEffect(() => { void load(); }, []);
+  async function decide(id: number, confirm: boolean) {
+    try { await api.employer.decideOutcome(id, confirm); haptic("success"); void load(); } catch (e) { setError(message(e)); }
+  }
+  if (rows.length === 0 && !error) return null;
+  return (
+    <div className="card">
+      <b>{t("cdash.outcomes")}</b>
+      <p className="hint" style={{ marginTop: 4 }}>{t("cdash.outcomes_hint")}</p>
+      <ErrorText error={error} />
+      {rows.map((o) => (
+        <div key={o.id} className="list-row">
+          <div><b>{o.student}</b>{o.university ? ` · ${o.university}` : ""}</div>
+          <div className="hint">{[o.position, t(`outcome.kind.${o.kind}`), o.started_on && formatDateTime(o.started_on, false)].filter(Boolean).join(" · ")}</div>
+          <div className="row" style={{ marginTop: 6 }}>
+            <button className="btn small ghost" onClick={() => decide(o.id, false)}>{t("cdash.decline")}</button>
+            <button className="btn small ok" onClick={() => decide(o.id, true)}>{t("cdash.confirm")}</button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from ..models import Application, ApplicationEvent, Company, ContactRequest, Job, Role, Status, Submission, User
+from ..models import (Application, ApplicationEvent, Company, ContactRequest, EmploymentOutcome, Job, Partnership, Role,
+                      Status, Submission, University, User)
 from ..schemas import (ApplicantOut, ApplicationPatch, CompanyIn, CompanyOut, ContactIn, JobIn, JobOut)
 from ..core import ratelimit
 from ..services import applications, inbox, notify, partnerships
@@ -449,7 +450,6 @@ async def all_applications(user: ApprovedEmployer, session: Session, job_id: int
 async def universities_for_company(user: ApprovedEmployer, session: Session,
                                    q: str | None = Query(default=None, max_length=80)) -> list[dict]:
     """Universities with their verified students and this company's partnership state."""
-    from ..models import Partnership, University
     students = (select(func.count()).select_from(User).where(
         User.university_id == University.id, User.account_type == "student", User.verification == "verified",
         User.is_blocked.is_(False)).correlate(University).scalar_subquery().label("students"))
@@ -466,7 +466,6 @@ async def universities_for_company(user: ApprovedEmployer, session: Session,
 
 @router.get("/universities/{university_id}")
 async def university_for_company(university_id: int, user: ApprovedEmployer, session: Session) -> dict:
-    from ..models import Partnership, University
     from .public import university_profile
     uni = await session.get(University, university_id)
     if uni is None or not uni.is_active:
@@ -482,7 +481,6 @@ class PartnershipIn(BaseModel):
 
 @router.post("/universities/{university_id}/partnership", status_code=201)
 async def ask_partnership(university_id: int, body: PartnershipIn, user: ApprovedEmployer, session: Session) -> dict:
-    from ..models import University
     uni = await session.get(University, university_id)
     if uni is None or not uni.is_active:
         raise HTTPException(404, "Universitet topilmadi")
@@ -501,7 +499,6 @@ class PartnershipDecisionIn(BaseModel):
 
 @router.post("/partnerships/{partnership_id}/decide")
 async def decide_partnership(partnership_id: int, body: PartnershipDecisionIn, user: ApprovedEmployer, session: Session) -> dict:
-    from ..models import Partnership
     p = await session.get(Partnership, partnership_id)
     if p is None or p.company_id != user.company_id:
         raise HTTPException(404, "So'rov topilmadi")
@@ -512,3 +509,40 @@ async def decide_partnership(partnership_id: int, body: PartnershipDecisionIn, u
     await inbox.push(session, staff, "partnership_decision", f"{user.company.name} hamkorlik taklifingizni {verdict}.",
                      link="/universitet/hamkorlar", params={"approved": body.accept, "company": user.company.name})
     return partnerships.out(p)
+
+
+
+# --------------------------------------------------------------------------- confirming where students work
+
+@router.get("/outcomes")
+async def outcome_requests(user: ApprovedEmployer, session: Session) -> list[dict]:
+    """Students who said they work or intern at this company and wait for its confirmation."""
+    rows = (await session.execute(select(EmploymentOutcome).where(
+        EmploymentOutcome.company_id == user.company_id, EmploymentOutcome.source == "self",
+        EmploymentOutcome.confirmed_by != "company").order_by(EmploymentOutcome.created_at.desc()).limit(200))).scalars().all()
+    return [{"id": o.id, "student": o.student.full_name,
+             "university": o.student.university_ref.short_name if o.student.university_ref else None,
+             "position": o.position, "kind": o.kind, "started_on": o.started_on, "created_at": o.created_at} for o in rows]
+
+
+class OutcomeDecisionIn(BaseModel):
+    confirm: bool
+
+
+@router.post("/outcomes/{outcome_id}")
+async def decide_outcome_request(outcome_id: int, body: OutcomeDecisionIn, user: ApprovedEmployer, session: Session) -> dict:
+    """Confirming counts the student as placed for their university; declining removes the claim."""
+    o = await session.get(EmploymentOutcome, outcome_id)
+    if o is None or o.company_id != user.company_id or o.source != "self":
+        raise HTTPException(404, "So'rov topilmadi")
+    student_id, company = o.student_id, o.company_name
+    if body.confirm:
+        o.confirmed, o.confirmed_by = True, "company"
+    else:
+        await session.delete(o)
+    await session.commit()
+    await inbox.push(session, [student_id], "outcome_company_review",
+                     f"{company} sizning ish joyingizni tasdiqladi." if body.confirm
+                     else f"{company} ish joyingiz haqidagi yozuvni tasdiqlamadi.",
+                     link="/talaba/universitetim", params={"approved": body.confirm, "company": company})
+    return {"confirmed": body.confirm}

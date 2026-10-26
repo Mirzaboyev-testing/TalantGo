@@ -81,7 +81,8 @@ async def decide_complaint(complaint_id: int, body: ComplaintDecisionIn, actor: 
 # --------------------------------------------------------------------------- ranking
 
 def _method(config: ranking.RankingConfig) -> dict:
-    return {**config.model_dump(), "formula": "100 * (employed + internship_weight * interned) / verified students"}
+    return {**config.model_dump(), "formula": "100 * (employed + internship_weight * interned) / verified students; "
+                                              "only work confirmed by a company counts"}
 
 
 @router.get("/public/ranking")

@@ -48,7 +48,7 @@ export function RankingPage() {
                   <td data-label={t("rank.col.interned")}>{r.interned ?? "–"}</td>
                   <td data-label={t("rank.col.score")}>
                     {r.score == null ? <span className="hint">{t("rank.no_score")}</span> : <b className="match">{r.score}</b>}
-                    {!!r.confirmed_only_by_university && <div className="hint" style={{ fontSize: 12 }}>{t("rank.only_university", { n: r.confirmed_only_by_university })}</div>}
+                    {!!r.university_confirmed && <div className="hint" style={{ fontSize: 12 }}>{t("rank.only_university", { n: r.university_confirmed })}</div>}
                   </td>
                 </tr>
               ))}

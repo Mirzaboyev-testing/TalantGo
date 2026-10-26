@@ -239,15 +239,16 @@ async def student_dashboard(user: CurrentUser, session: Session) -> dict:
 # --------------------------------------------------------------------------- my university, my work
 
 class OutcomeIn(BaseModel):
-    company_name: str = Field(min_length=2, max_length=160)
+    company_id: int | None = None          # a company on the platform: it is asked to confirm
+    company_name: str = Field(default="", max_length=160)
     position: str = Field(default="", max_length=160)
     kind: Literal["full_time", "part_time", "internship", "dual_education"]
     started_on: date | None = None
 
 
 def my_outcome_out(o: EmploymentOutcome) -> dict:
-    return {"id": o.id, "company": o.company_name, "position": o.position, "kind": o.kind, "started_on": o.started_on,
-            "source": o.source, "confirmed": o.confirmed, "confirmed_by": o.confirmed_by}
+    return {"id": o.id, "company": o.company_name, "company_id": o.company_id, "position": o.position, "kind": o.kind,
+            "started_on": o.started_on, "source": o.source, "confirmed": o.confirmed, "confirmed_by": o.confirmed_by}
 
 
 @router.get("/me/university")
@@ -269,16 +270,30 @@ async def my_university(user: CurrentUser, session: Session) -> dict:
 
 @router.post("/me/outcomes", status_code=201)
 async def add_outcome(body: OutcomeIn, user: CurrentUser, session: Session) -> dict:
-    """The student says where they work or intern. It counts for the university once it is confirmed."""
+    """The student says where they work or intern. It counts for the university once the company confirms it,
+    so naming a company registered on the platform sends it a confirmation request."""
     if user.account_type != "student":
         raise HTTPException(403, "Faqat talabalar uchun")
     if await session.scalar(select(func.count()).select_from(EmploymentOutcome).where(EmploymentOutcome.student_id == user.id)) >= 10:
         raise HTTPException(409, "10 tadan ortiq ish joyi qo'shib bo'lmaydi")
-    o = EmploymentOutcome(student_id=user.id, university_id=user.university_id, company_name=body.company_name.strip(),
-                          position=body.position.strip(), kind=body.kind, started_on=body.started_on, source="self")
+    company = None
+    if body.company_id is not None:
+        company = await session.get(Company, body.company_id)
+        if company is None or company.status != "approved":
+            raise HTTPException(404, "Kompaniya topilmadi")
+    name = company.name if company else " ".join(body.company_name.split())
+    if len(name) < 2:
+        raise HTTPException(422, "Korxona nomini yozing yoki ro'yxatdan tanlang")
+    o = EmploymentOutcome(student_id=user.id, university_id=user.university_id, company_id=company.id if company else None,
+                          company_name=name, position=body.position.strip(), kind=body.kind, started_on=body.started_on,
+                          source="self")
     session.add(o)
     await session.commit()
     await session.refresh(o)
+    if company:
+        await inbox.push(session, await company_staff_ids(session, company.id), "outcome_confirm_request",
+                         f"{user.full_name} {company.name}da ishlayotganini (yoki amaliyotda ekanini) tasdiqlashingizni so'radi.",
+                         link="/korxona", params={"student": user.full_name, "company": company.name})
     return my_outcome_out(o)
 
 

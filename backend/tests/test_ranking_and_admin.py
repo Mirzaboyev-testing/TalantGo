@@ -12,7 +12,7 @@ async def place(short: str, ids: list[int], kind: str) -> None:
     uni = await uni_id(short)
     async with SessionLocal() as s:
         s.add_all([EmploymentOutcome(student_id=i, university_id=uni, company_name="Firma", kind=kind,
-                                     source="self", confirmed=True, confirmed_by="university") for i in ids])
+                                     source="self", confirmed=True, confirmed_by="company") for i in ids])
         await s.commit()
 
 

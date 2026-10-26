@@ -153,7 +153,7 @@ export type OutcomeKind = "full_time" | "part_time" | "internship" | "dual_educa
 export interface UniversityStats {
   min_sample: number; students: number; with_graduation_year: number; placed: number; employed: number; interned: number;
   placement_rate: number | null; employed_rate: number | null; intern_rate: number | null;
-  where: Record<OutcomeKind | "seeking" | "unknown", number>; self_reported: number; hires_on_platform: number;
+  where: Record<OutcomeKind | "seeking" | "unknown", number>; self_reported: number; university_confirmed: number; hires_on_platform: number;
   top_employers: { name: string; count: number }[]; partners: number; cohorts: number[]; faculties: string[];
 }
 export interface UniversityOutcome {
@@ -173,12 +173,13 @@ export interface UniversityProfile {
   partners: { id: number; name: string }[]; tracks: { title: string; count: number }[];
 }
 export interface PublicUniversity { id: number; name: string; short_name: string; city: string; region: string; students: number; partners: number }
-export interface MyOutcome { id: number; company: string; position: string; kind: OutcomeKind; started_on: string | null; source: string; confirmed: boolean; confirmed_by: string }
+export interface OutcomeRequest { id: number; student: string; university: string | null; position: string; kind: OutcomeKind; started_on: string | null; created_at: string }
+export interface MyOutcome { id: number; company: string; company_id: number | null; position: string; kind: OutcomeKind; started_on: string | null; source: string; confirmed: boolean; confirmed_by: string }
 export interface Opportunity extends Job { partner: boolean; recommended: boolean; our_applicants: number }
 export type AdminRole = "owner" | "admin" | "moderator" | "analyst";
 export interface RankingRow {
   university_id: number; name: string; short_name: string; city: string; students: number; employed: number | null;
-  interned: number | null; score: number | null; rank: number | null; confirmed_only_by_university?: number | null;
+  interned: number | null; score: number | null; rank: number | null; university_confirmed?: number | null;
 }
 export interface RankingMethod { internship_weight: number; min_sample: number; formula: string }
 export interface RankingSnapshot { id: number; period: string; config: { internship_weight: number; min_sample: number }; published_by: string; published_at: string; rows?: RankingRow[] }
@@ -390,7 +391,8 @@ export const api = {
   savedJobs: () => request<Job[]>("GET", "/me/saved-jobs"),
   studentDashboard: () => request<StudentDashboard>("GET", "/me/dashboard"),
   myUniversity: () => request<{ university: UniversityProfile | null; verified?: boolean; recommended: (Job & { note: string })[]; outcomes: MyOutcome[] }>("GET", "/me/university"),
-  addOutcome: (o: { company_name: string; position: string; kind: OutcomeKind; started_on?: string | null }) => request<MyOutcome>("POST", "/me/outcomes", o),
+  addOutcome: (o: { company_id?: number | null; company_name: string; position: string; kind: OutcomeKind; started_on?: string | null }) =>
+    request<MyOutcome>("POST", "/me/outcomes", o),
   deleteOutcome: (id: number) => request<null>("DELETE", `/me/outcomes/${id}`),
   complain: (c: { target_kind: "job" | "company" | "task" | "user"; target_id: number; reason: string; text: string }) =>
     request<{ status: string }>("POST", "/complaints", c),
@@ -490,6 +492,8 @@ export const api = {
     university: (id: number) => request<UniversityProfile & { partnership: PartnershipRow | null }>("GET", `/employer/universities/${id}`),
     askPartnership: (universityId: number, message: string) => request<PartnershipRow>("POST", `/employer/universities/${universityId}/partnership`, { message }),
     decidePartnership: (id: number, accept: boolean) => request<PartnershipRow>("POST", `/employer/partnerships/${id}/decide`, { accept }),
+    outcomeRequests: () => request<OutcomeRequest[]>("GET", "/employer/outcomes"),
+    decideOutcome: (id: number, confirm: boolean) => request<{ confirmed: boolean }>("POST", `/employer/outcomes/${id}`, { confirm }),
     tasks: () => request<Challenge[]>("GET", "/employer/tasks"),
     createTask: (task: CompanyTaskInput) => request<Challenge>("POST", "/employer/tasks", task),
     editTask: (id: number, changes: { title?: string; description?: string; prize?: string; ends_on?: string; is_archived?: boolean }) =>

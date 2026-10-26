@@ -59,6 +59,7 @@ export default function UniEmployment() {
               <b>{t("emp.where")}</b>
               <StackedShare parts={WHERE.map((k) => ({ key: k, label: label(k), value: s.where[k] }))} neutralKey="unknown" />
               {s.self_reported > 0 && <p className="hint" style={{ marginBottom: 0 }}>{t("emp.self_reported", { n: s.self_reported })}</p>}
+              {s.university_confirmed > 0 && <p className="hint" style={{ marginBottom: 0 }}>{t("emp.university_confirmed", { n: s.university_confirmed })}</p>}
             </div>
             <div className="card">
               <b>{t("emp.top_employers")}</b>
@@ -97,6 +98,7 @@ function Outcomes({ onChanged }: { onChanged: () => void }) {
   return (
     <>
       <h2 className="pub-h2">{t("emp.outcomes")}</h2>
+      <p className="hint">{t("emp.outcomes_hint")}</p>
       <ErrorText error={error} />
       {rows?.length === 0 && <div className="card hint">{t("emp.no_outcomes")}</div>}
       {rows?.map((o) => (

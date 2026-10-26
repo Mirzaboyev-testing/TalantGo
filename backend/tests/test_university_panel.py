@@ -60,15 +60,15 @@ async def test_shares_need_a_minimum_sample_and_only_confirmed_outcomes_count(cl
     tdiu = await uni_id("TDIU")
     async with SessionLocal() as s:
         s.add_all([EmploymentOutcome(student_id=i, university_id=tdiu, company_name="Bank A",
-                                     kind="full_time", source="self", confirmed=True, confirmed_by="university")
+                                     kind="full_time", source="self", confirmed=True, confirmed_by="company")
                    for i in ids[:3]])
         # a student with both an internship and a job is counted once, as employed
         s.add_all([EmploymentOutcome(student_id=ids[3], university_id=tdiu, company_name="Bank A", kind="internship",
-                                     source="self", confirmed=True, confirmed_by="university"),
+                                     source="self", confirmed=True, confirmed_by="company"),
                    EmploymentOutcome(student_id=ids[3], university_id=tdiu, company_name="Bank A", kind="full_time",
-                                     source="self", confirmed=True, confirmed_by="university"),
+                                     source="self", confirmed=True, confirmed_by="company"),
                    EmploymentOutcome(student_id=ids[5], university_id=tdiu, company_name="IT Park", kind="internship",
-                                     source="self", confirmed=True, confirmed_by="university")])
+                                     source="self", confirmed=True, confirmed_by="company")])
         s.add(EmploymentOutcome(student_id=ids[4], university_id=tdiu, company_name="Startap",
                                 kind="part_time", source="self", confirmed=False))
         await s.commit()
@@ -84,7 +84,9 @@ async def test_shares_need_a_minimum_sample_and_only_confirmed_outcomes_count(cl
     assert [o["company"] for o in pending] == ["Startap"]
     r = await client.post(f"{API}/university/outcomes/{pending[0]['id']}", json={"confirm": True}, headers=staff["headers"])
     assert r.status_code == 200
-    assert (await client.get(f"{API}/university/stats", headers=staff["headers"])).json()["placement_rate"] == 60
+    # the university's own confirmation is recorded but does not count (user rule: company confirmations only)
+    st = (await client.get(f"{API}/university/stats", headers=staff["headers"])).json()
+    assert st["placement_rate"] == 50 and st["university_confirmed"] == 1 and st["self_reported"] == 0
 
     # another university's staff sees none of it
     other = await approved_staff(client, make_user, short="WIUT", name="WIUT xodimi")
@@ -171,3 +173,36 @@ async def test_university_profile_is_edited_by_its_staff_and_public_pages_show_a
     student = await make_student(client, make_user, "Aziza")
     assert (await client.patch(f"{API}/university/profile", json={"description": "x"},
                                headers=student["headers"])).status_code == 403
+
+
+
+async def test_company_confirms_where_a_student_works(client, make_user):
+    hr, _ = await live_job(client, make_user)
+    staff = await approved_staff(client, make_user)
+    ids = await graduates("TDIU", 9)
+    student = await make_student(client, make_user, "Aziza")
+    await client.post(f"{API}/me/verification", headers=student["headers"])
+    await client.post(f"{API}/university/verifications/{student['id']}", json={"approve": True}, headers=staff["headers"])
+    r = await client.post(f"{API}/me/outcomes", json={"company_id": hr["company_id"], "kind": "internship", "position": "Analitik"},
+                          headers=student["headers"])
+    assert r.status_code == 201 and r.json()["company"] == "Data Solutions MChJ" and r.json()["confirmed"] is False
+    assert (await client.get(f"{API}/university/stats", headers=staff["headers"])).json()["placed"] == 0
+
+    kinds = [n["kind"] for n in (await client.get(f"{API}/me/notifications", headers=hr["headers"])).json()["items"]]
+    assert "outcome_confirm_request" in kinds
+    pending = (await client.get(f"{API}/employer/outcomes", headers=hr["headers"])).json()
+    assert pending[0]["student"] == "Aziza" and pending[0]["university"] == "TDIU"
+    other, _ = await live_job(client, make_user, stir="309876543", name="HR Boshqa")
+    assert (await client.post(f"{API}/employer/outcomes/{pending[0]['id']}", json={"confirm": True},
+                              headers=other["headers"])).status_code == 404
+    assert (await client.post(f"{API}/employer/outcomes/{pending[0]['id']}", json={"confirm": True},
+                              headers=hr["headers"])).status_code == 200
+    st = (await client.get(f"{API}/university/stats", headers=staff["headers"])).json()
+    assert st["students"] == 10 and st["placed"] == 1 and st["interned"] == 1 and st["placement_rate"] == 10
+    assert (await client.get(f"{API}/employer/outcomes", headers=hr["headers"])).json() == []
+    # the university cannot overrule a company's confirmation
+    assert (await client.post(f"{API}/university/outcomes/{pending[0]['id']}", json={"confirm": False},
+                              headers=staff["headers"])).status_code == 409
+    assert (await client.post(f"{API}/me/outcomes", json={"company_name": "", "kind": "internship"},
+                              headers=student["headers"])).status_code == 422
+    assert len(ids) == 9

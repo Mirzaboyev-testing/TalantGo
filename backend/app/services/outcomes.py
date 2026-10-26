@@ -5,11 +5,13 @@ or went to an internship, not by quality measures (field match, employer feedbac
 universities next to every number:
 - Students counted: verified students of the university (account not blocked); optionally one faculty or
   one graduation year.
-- Placed: at least one CONFIRMED outcome (a hire on the platform, or confirmed by the company or the
-  university) recorded while the student belonged to this university: a job (full_time, part_time,
-  dual_education) or an internship. Each student is counted once, under the strongest outcome.
+- Placed: at least one outcome CONFIRMED BY A COMPANY (a hire on the platform, or the company confirmed what
+  the student reported; user decision 2026-10-26: university confirmations do not count for now) recorded
+  while the student belonged to this university: a job (full_time, part_time, dual_education) or an
+  internship. Each student is counted once, under the strongest outcome.
 - A share is shown only when at least MIN_SAMPLE students are behind it; otherwise "not enough data".
-- What students only reported themselves is counted apart and never mixed into the confirmed figures.
+- Work confirmed only by the university, and work students only reported, are counted apart and never
+  mixed into the placement figures.
 """
 from datetime import date
 
@@ -30,6 +32,11 @@ def record_hire(session: AsyncSession, app: Application) -> None:
         student_id=app.user_id, university_id=app.user.university_id, company_id=app.job.company_id,
         company_name=app.job.company.name, position=app.job.title, kind=JOB_KIND_TO_OUTCOME.get(app.job.kind, "full_time"),
         started_on=date.today(), source="application", application_id=app.id, confirmed=True, confirmed_by="company"))
+
+
+def counts(o: EmploymentOutcome) -> bool:
+    """Only a company's confirmation (or a hire on the platform) places a student, for now."""
+    return o.confirmed and o.confirmed_by == "company"
 
 
 def share(part: int, whole: int) -> int | None:
@@ -53,27 +60,28 @@ async def university_stats(session: AsyncSession, university_id: int, cohort: in
                 EmploymentOutcome.student_id.in_(ids), EmploymentOutcome.university_id == university_id))).scalars():
             outcomes[o.student_id].append(o)
 
-    def best(student_id: int, confirmed: bool) -> str | None:
-        kinds = {o.kind for o in outcomes[student_id] if o.confirmed == confirmed}
+    def best(student_id: int, which) -> str | None:
+        kinds = {o.kind for o in outcomes[student_id] if which(o)}
         return next((k for k in STRENGTH if k in kinds), None)
 
     where: dict[str, int] = {"full_time": 0, "part_time": 0, "dual_education": 0, "internship": 0, "seeking": 0, "unknown": 0}
     for r in rows:
-        kind = best(r.id, True)
+        kind = best(r.id, counts)
         where[kind or ("seeking" if r.open_to_work else "unknown")] += 1
     employed = sum(where[k] for k in JOB_KINDS)
     interned = where["internship"]
     placed = employed + interned
-    # placed students whose only confirmation is the university's own (shown next to the ranking score)
-    only_university = sum(1 for r in rows if best(r.id, True) is not None and all(
-        o.confirmed_by == "university" for o in outcomes[r.id] if o.confirmed))
-    self_reported = sum(1 for r in rows if best(r.id, True) is None and best(r.id, False) is not None)
+    # not placed, but the university confirmed work / the student only reported it: shown apart
+    unplaced = [r for r in rows if best(r.id, counts) is None]
+    university_confirmed = sum(1 for r in unplaced if best(r.id, lambda o: o.confirmed) is not None)
+    self_reported = sum(1 for r in unplaced if best(r.id, lambda o: o.confirmed) is None
+                        and best(r.id, lambda o: not o.confirmed) is not None)
 
     companies: dict[str, set[int]] = {}           # students per employer, each student once per company
     platform: dict[str, set[int]] = {}            # the same, only companies registered on the platform
     for items in outcomes.values():
         for o in items:
-            if o.confirmed:
+            if counts(o):
                 companies.setdefault(o.company_name, set()).add(o.student_id)
                 if o.company_id:
                     platform.setdefault(o.company_name, set()).add(o.student_id)
@@ -97,7 +105,7 @@ async def university_stats(session: AsyncSession, university_id: int, cohort: in
         "hires_on_platform": hires,
         "top_employers": top(companies),
         "top_platform_employers": top(platform),
-        "confirmed_only_by_university": only_university,
+        "university_confirmed": university_confirmed,
         "partners": partners,
         "cohorts": sorted({r.graduation_year for r in all_rows if r.graduation_year}, reverse=True),
     }

@@ -84,7 +84,8 @@ export function Ranking({ canEdit }: { canEdit: boolean }) {
       <div className="card">
         <b>Hisoblash usuli</b>
         <p className="hint">
-          Hozircha faqat bandlik: tasdiqlangan ish yoki amaliyoti bor tasdiqlangan talabalar ulushi. Sifat mezonlari kirmaydi.
+          Hozircha faqat bandlik: korxona tasdiqlagan ish yoki amaliyoti bor tasdiqlangan talabalar ulushi (platformada ishga olish yoki
+          korxona tasdig'i). Universitet tasdig'i va sifat mezonlari kirmaydi.
           Ball = 100 × (ishda + amaliyot vazni × amaliyotda) / tasdiqlangan talabalar. Talabalari minimal sondan kam universitetga ball berilmaydi.
         </p>
         <div className="row">
@@ -107,7 +108,7 @@ export function Ranking({ canEdit }: { canEdit: boolean }) {
                 <tr key={r.university_id}>
                   <td>{r.rank ?? "—"}</td><td>{r.short_name} · {r.name}</td><td>{r.students}</td><td>{r.employed ?? "—"}</td><td>{r.interned ?? "—"}</td>
                   <td>{r.score == null ? <span className="hint">Ma'lumot yetarli emas</span> : r.score}
-                    {!!r.confirmed_only_by_university && <div className="hint">{r.confirmed_only_by_university} tasi faqat universitet tasdig'ida</div>}</td>
+                    {!!r.university_confirmed && <div className="hint">{r.university_confirmed} talabani faqat universitet tasdiqlagan (hisobga kirmaydi)</div>}</td>
                 </tr>
               ))}
               {data.rows.length === 0 && <tr><td colSpan={6} className="hint">Tasdiqlangan talabasi bor universitet yo'q</td></tr>}

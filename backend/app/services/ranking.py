@@ -1,7 +1,8 @@
 """The university ranking. User rule (2026-10-26): for now it measures only placement, the share of
 verified students with a confirmed job or internship, never quality measures.
 
-score = 100 * (employed + internship_weight * interned) / verified students
+score = 100 * (employed + internship_weight * interned) / verified students, counting only work a company
+confirmed (a hire on the platform or the company's confirmation; university confirmations do not count)
 A university with fewer than `min_sample` verified students gets no score ("not enough data") instead of
 a low one, so a small or new university is never ranked below a big one for lack of data.
 """
@@ -65,7 +66,7 @@ async def compute(session: AsyncSession, config: RankingConfig | None = None) ->
         rows.append({"university_id": uni.id, "name": uni.name, "short_name": uni.short_name, "city": uni.city,
                      "students": s["students"], "employed": s["employed"] if enough else None,
                      "interned": s["interned"] if enough else None, "score": score,
-                     "confirmed_only_by_university": s["confirmed_only_by_university"] if enough else None})
+                     "university_confirmed": s["university_confirmed"] if enough else None})
     rows.sort(key=lambda r: (r["score"] is None, -(r["score"] or 0), -r["students"], r["name"]))
     rank, previous = 0, None
     for position, r in enumerate(rows, start=1):

@@ -230,8 +230,8 @@ async def decide_outcome(outcome_id: int, body: OutcomeDecisionIn, user: Staff, 
     o = await session.get(EmploymentOutcome, outcome_id)
     if o is None or o.university_id != user.staff_university_id or o.student.university_id != user.staff_university_id:
         raise HTTPException(404, "Yozuv topilmadi")
-    if o.source == "application":
-        raise HTTPException(409, "Platformadagi ishga olish allaqachon tasdiqlangan")
+    if o.source == "application" or o.confirmed_by == "company":
+        raise HTTPException(409, "Bu ish joyini korxona allaqachon tasdiqlagan")
     student_id, company = o.student_id, o.company_name
     session.add(AuditLog(actor=f"{user.full_name} ({user.staff_university.short_name})"[:160], action="outcome.confirm"
                          if body.confirm else "outcome.remove", target=f"{o.student.full_name}: {company}"[:200]))
