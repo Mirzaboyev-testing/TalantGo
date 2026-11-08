@@ -41,7 +41,7 @@ export default function PublicSite({ me, dev, onSignIn, onDev }: {
   return (
     <div className="pub">
       <header className="pub-header">
-        <div className="pub-header-inner">
+        <div className="pub-wrap pub-header-inner">
           <a className="pub-brand" href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }}>
             <span className="brand-mark small">T</span>TalantGo
           </a>
@@ -58,8 +58,24 @@ export default function PublicSite({ me, dev, onSignIn, onDev }: {
             : section !== "kirish" && <button className="btn small" onClick={() => navigate("/kirish")}>{t("pub.nav.login")}</button>}
         </div>
       </header>
-      <main className={section === "kirish" ? "" : "pub-main"}>{page}</main>
-      {section !== "kirish" && <footer className="pub-footer">{t("pub.footer")}</footer>}
+      <main className={section === "kirish" ? "" : section ? "pub-main" : "pub-home"}>{page}</main>
+      {section !== "kirish" && (
+        <footer className="pub-footer">
+          <div className="pub-wrap pub-footer-inner">
+            <div className="pub-footer-about">
+              <span className="pub-brand"><span className="brand-mark small">T</span>TalantGo</span>
+              <p>{t("pub.footer")}</p>
+            </div>
+            <nav className="pub-footer-nav">
+              <NavLink to="/vakansiyalar" active={false}>{t("pub.nav.jobs")}</NavLink>
+              <NavLink to="/korxonalar" active={false}>{t("pub.nav.companies")}</NavLink>
+              <NavLink to="/universitetlar" active={false}>{t("pub.nav.universities")}</NavLink>
+              <NavLink to="/reyting" active={false}>{t("pub.nav.ranking")}</NavLink>
+            </nav>
+            <small>© {new Date().getFullYear()} TalantGo</small>
+          </div>
+        </footer>
+      )}
     </div>
   );
 }

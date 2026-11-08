@@ -2,6 +2,7 @@ import type { Me } from "../api";
 import { t, type MsgKey } from "../i18n";
 import { Icon } from "../icons";
 import { navigate } from "../router";
+import { PanelArt } from "./art";
 
 export type Panel = "talaba" | "korxona" | "universitet";
 
@@ -34,9 +35,9 @@ export function PanelCards() {
   return (
     <div className="panel-cards">
       {PANELS.map((p) => (
-        <div key={p.id} className="panel-card">
-          <span className="panel-icon"><Icon name={p.icon} size={24} /></span>
-          <b>{t(p.title)}</b>
+        <div key={p.id} className={`panel-card ${p.id}`}>
+          <div className="panel-art-box"><PanelArt panel={p.id} /></div>
+          <div className="panel-title"><span className="panel-icon"><Icon name={p.icon} size={20} /></span><b>{t(p.title)}</b></div>
           <p className="hint">{t(p.text)}</p>
           <button className="btn" onClick={() => navigate(`/kirish/${p.id}`)}>{t("pub.panel.enter")}</button>
         </div>
@@ -48,7 +49,7 @@ export function PanelCards() {
 export function PanelChooser() {
   return (
     <div className="pub-main">
-      <h1 style={{ textAlign: "center" }}>{t("login.choose")}</h1>
+      <h1 className="pub-chooser-title">{t("login.choose")}</h1>
       <PanelCards />
     </div>
   );
