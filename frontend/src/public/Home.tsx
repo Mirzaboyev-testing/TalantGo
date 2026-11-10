@@ -3,7 +3,7 @@ import { api, type Me, type PublicCompany, type PublicJob, type PublicStats } fr
 import { t, type MsgKey } from "../i18n";
 import { Icon } from "../icons";
 import { navigate } from "../router";
-import { BOT_URL, insideTelegram, openLink } from "../tg";
+import { BOT_URL, insideTelegram, offerTelegram, openLink, TELEGRAM_ON_SITE } from "../tg";
 import { HeroArt, UniversityArt } from "./art";
 import { PanelCards } from "./panels";
 import { CompanyTile } from "./PublicCompanies";
@@ -50,7 +50,7 @@ export default function Home({ me }: { me: Me | null }) {
               <button className="btn" type="submit">{t("pub.hero.search_btn")}</button>
             </form>
             <ul className="hero-points">
-              {(["pub.hero.point1", "pub.hero.point2", "pub.hero.point3"] as const).map((k) => (
+              {(offerTelegram ? ["pub.hero.point1", "pub.hero.point2", "pub.hero.point3"] as const : ["pub.hero.point1", "pub.hero.point3"] as const).map((k) => (
                 <li key={k}><span><Icon name="tick" size={13} /></span>{t(k)}</li>
               ))}
             </ul>
@@ -136,7 +136,7 @@ export default function Home({ me }: { me: Me | null }) {
             </div>
             <div className="btn-row">
               <button className="btn light" onClick={() => navigate("/kirish")}>{t("pub.cta.start")}</button>
-              {!insideTelegram && (
+              {TELEGRAM_ON_SITE && !insideTelegram && (
                 <a className="btn outline-light" href={BOT_URL} onClick={(e) => { e.preventDefault(); openLink(BOT_URL); }}>
                   <Icon name="send" size={18} />{t("pub.cta.telegram")}
                 </a>

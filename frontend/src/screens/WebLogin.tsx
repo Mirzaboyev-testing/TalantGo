@@ -1,22 +1,29 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
-import { t, useLang } from "../i18n";
+import { t, useLang, type MsgKey } from "../i18n";
+import { Icon } from "../icons";
+import { PanelArt } from "../public/art";
 import { PANELS, rememberPanel, type Panel } from "../public/panels";
 import { navigate } from "../router";
 import { Field, useRequired } from "../form";
-import { BOT_URL } from "../tg";
+import { BOT_URL, offerTelegram } from "../tg";
 import { ErrorText, isFullName, message } from "../ui";
 import { BotWaiting, useBotLink } from "./BotLink";
 
 type GetToken = () => Promise<{ token: string; moved_to?: string | null }>;
 
 /**
- * The website's sign-in. Two ways, both on any domain:
- * through the bot (the same account as in Telegram), or with email and password (no Telegram needed;
- * Telegram can be tied to that account later in the profile).
+ * The website's sign-in: the panel's picture and what it offers on one side, the form on the other.
+ * Email and password always; through the bot (the same account as in Telegram) only where
+ * `offerTelegram` allows it.
  */
 const PANEL_HINT: Record<Panel, "login.student_hint" | "login.company_hint" | "login.university_hint"> = {
   talaba: "login.student_hint", korxona: "login.company_hint", universitet: "login.university_hint",
+};
+const PANEL_POINTS: Record<Panel, MsgKey[]> = {
+  talaba: ["login.points.student.1", "login.points.student.2", "login.points.student.3"],
+  korxona: ["login.points.company.1", "login.points.company.2", "login.points.company.3"],
+  universitet: ["login.points.university.1", "login.points.university.2", "login.points.university.3"],
 };
 
 export default function WebLogin({ dev, panel, onSignIn, onDev }: {
@@ -61,79 +68,97 @@ export default function WebLogin({ dev, panel, onSignIn, onDev }: {
     }
   }
 
+  const telegram = offerTelegram && (
+    <>
+      <div className="card" style={{ textAlign: "center" }}>
+        <button className="btn" disabled={bot.state !== "idle"} onClick={bot.begin}>{t("s.web.via_tg")}</button>
+        <p className="hint" style={{ marginBottom: 0 }}>{t("s.web.tg_hint")}</p>
+        {bot.link && bot.state !== "idle" && <BotWaiting link={bot.link} state={bot.state} onCancel={bot.stop} onPin={bot.submitPin} />}
+        <ErrorText error={bot.error} />
+      </div>
+      <div className="login-or"><span>{t("s.web.or_email")}</span></div>
+    </>
+  );
+
   return (
     <div className="login">
-      <div className="login-card">
-        <span className="brand-mark" style={{ display: "grid" }}>T</span>
-        {panelInfo && panel ? (
-          <>
-            <h1 style={{ marginBottom: 6 }}>{t(panelInfo.title)}</h1>
-            <p className="hint" style={{ marginTop: 0 }}>{t(PANEL_HINT[panel])}</p>
-            <a href="/kirish" onClick={(e) => { e.preventDefault(); navigate("/kirish"); }}>{t("login.other_panel")}</a>
-          </>
-        ) : (
-          <>
-            <h1 style={{ marginBottom: 6 }}>TalantGo</h1>
-            <p className="hint" style={{ marginTop: 0 }}>{t("s.web.tagline")}</p>
-          </>
-        )}
+      <div className={`login-grid ${panel ?? "talaba"}`}>
+        <aside className="login-side">
+          <span className="pub-brand"><span className="brand-mark small">T</span>TalantGo</span>
+          <h1>{panelInfo ? t(panelInfo.title) : "TalantGo"}</h1>
+          <p>{panel ? t(PANEL_HINT[panel]) : t("s.web.tagline")}</p>
+          <PanelArt panel={panel ?? "talaba"} />
+          {panel && (
+            <ul className="tick-list login-points">
+              {PANEL_POINTS[panel].map((k) => <li key={k}><span><Icon name="tick" size={14} /></span>{t(k)}</li>)}
+            </ul>
+          )}
+        </aside>
 
-        <div className="card" style={{ marginTop: 18 }}>
-          <button className="btn" disabled={bot.state !== "idle"} onClick={bot.begin}>{t("s.web.via_tg")}</button>
-          <p className="hint" style={{ marginBottom: 0 }}>{t("s.web.tg_hint")}</p>
-          {bot.link && bot.state !== "idle" && <BotWaiting link={bot.link} state={bot.state} onCancel={bot.stop} onPin={bot.submitPin} />}
-          <ErrorText error={bot.error} />
-        </div>
+        <div className="login-main">
+          {panel && (
+            <nav className="panel-switch" aria-label={t("login.choose")}>
+              {PANELS.map((p) => (
+                <a key={p.id} href={`/kirish/${p.id}`} className={p.id === panel ? "on" : ""}
+                   onClick={(e) => { e.preventDefault(); navigate(`/kirish/${p.id}${window.location.search}`); }}>
+                  <Icon name={p.icon} size={17} />{t(`login.tab.${p.id}` as MsgKey)}
+                </a>
+              ))}
+            </nav>
+          )}
 
-        <div className="hint" style={{ margin: "6px 0 10px" }}>{t("s.web.or_email")}</div>
+          {telegram}
 
-        <div className="card" style={{ textAlign: "left" }}>
-          <div className="segmented">
-            <button className={mode === "login" ? "on" : ""} onClick={() => { setMode("login"); setError(""); }}>{t("s.web.login")}</button>
-            <button className={mode === "register" ? "on" : ""} onClick={() => { setMode("register"); setError(""); }}>{t("s.web.register")}</button>
-          </div>
-          <form onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-            {mode === "register" && (
-              <Field id="w-name" label={t("s.common.full_name")} required error={errors["w-name"] && t("s.common.full_name_error")}>
-                <input id="w-name" className={cls("w-name")} value={f.name} maxLength={128} autoComplete="name" onChange={set("name", "w-name")} />
+          <div className="login-form">
+            <div className="segmented">
+              <button className={mode === "login" ? "on" : ""} onClick={() => { setMode("login"); setError(""); }}>{t("s.web.login")}</button>
+              <button className={mode === "register" ? "on" : ""} onClick={() => { setMode("register"); setError(""); }}>{t("s.web.register")}</button>
+            </div>
+            <form onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+              {mode === "register" && (
+                <Field id="w-name" label={t("s.common.full_name")} required error={errors["w-name"] && t("s.common.full_name_error")}>
+                  <input id="w-name" className={cls("w-name")} value={f.name} maxLength={128} autoComplete="name" onChange={set("name", "w-name")} />
+                </Field>
+              )}
+              <Field id="w-email" label="Email" required error={errors["w-email"] && t("s.web.email_error")}>
+                <input id="w-email" className={cls("w-email")} value={f.email} inputMode="email" autoComplete="email" onChange={set("email", "w-email")} />
               </Field>
-            )}
-            <Field id="w-email" label="Email" required error={errors["w-email"] && t("s.web.email_error")}>
-              <input id="w-email" className={cls("w-email")} value={f.email} inputMode="email" autoComplete="email" onChange={set("email", "w-email")} />
-            </Field>
-            <Field id="w-pass" label={t("s.common.password")} required
-                   error={errors["w-pass"] && (mode === "register" ? t("s.common.min8") : t("s.web.pass_needed"))}>
-              <input id="w-pass" type="password" className={cls("w-pass")} value={f.password} maxLength={128}
-                     autoComplete={mode === "register" ? "new-password" : "current-password"} onChange={set("password", "w-pass")} />
-            </Field>
-            {mode === "register" && (
-              <Field id="w-pass2" label={t("s.web.pass2")} required error={errors["w-pass2"] && t("s.web.pass_mismatch")}>
-                <input id="w-pass2" type="password" className={cls("w-pass2")} value={f.password2} maxLength={128} autoComplete="new-password" onChange={set("password2", "w-pass2")} />
+              <Field id="w-pass" label={t("s.common.password")} required
+                     error={errors["w-pass"] && (mode === "register" ? t("s.common.min8") : t("s.web.pass_needed"))}>
+                <input id="w-pass" type="password" className={cls("w-pass")} value={f.password} maxLength={128}
+                       autoComplete={mode === "register" ? "new-password" : "current-password"} onChange={set("password", "w-pass")} />
               </Field>
+              {mode === "register" && (
+                <Field id="w-pass2" label={t("s.web.pass2")} required error={errors["w-pass2"] && t("s.web.pass_mismatch")}>
+                  <input id="w-pass2" type="password" className={cls("w-pass2")} value={f.password2} maxLength={128} autoComplete="new-password" onChange={set("password2", "w-pass2")} />
+                </Field>
+              )}
+              <ErrorText error={error} />
+              <button className="btn" type="submit" style={{ marginTop: 16 }} disabled={busy}>
+                {busy ? t("s.common.waiting") : mode === "register" ? t("s.web.register") : t("s.web.login")}
+              </button>
+            </form>
+            {(mode === "login" || offerTelegram) && (
+              <p className="hint" style={{ marginBottom: 0 }}>
+                {mode === "register" ? t("s.web.hint_register") : t(offerTelegram ? "s.web.hint_login" : "s.web.hint_login_email")}
+              </p>
             )}
-            <ErrorText error={error} />
-            <button className="btn" type="submit" style={{ marginTop: 14 }} disabled={busy}>
-              {busy ? t("s.common.waiting") : mode === "register" ? t("s.web.register") : t("s.web.login")}
-            </button>
-          </form>
-          <p className="hint" style={{ marginBottom: 0 }}>
-            {mode === "register" ? t("s.web.hint_register") : t("s.web.hint_login")}
-          </p>
-        </div>
-
-        <p className="hint">{t("s.web.phone_better")} <a href={BOT_URL}>{t("s.web.open_tg")}</a></p>
-
-        {dev && (
-          <div className="card" style={{ textAlign: "left" }}>
-            <b>{t("s.web.dev_title")}</b>
-            <p className="hint">{t("s.web.dev_hint")}</p>
-            <label>{t("s.web.dev_name")}</label>
-            <input value={devName} onChange={(e) => setDevName(e.target.value)} />
-            <label>{t("s.web.dev_id")}</label>
-            <input value={devId} inputMode="numeric" onChange={(e) => setDevId(e.target.value.replace(/\D/g, ""))} />
-            <button className="btn" style={{ marginTop: 12 }} disabled={!devName.trim() || !devId} onClick={() => onDev(Number(devId), devName.trim())}>{t("s.web.login")}</button>
           </div>
-        )}
+
+          {offerTelegram && <p className="hint">{t("s.web.phone_better")} <a href={BOT_URL}>{t("s.web.open_tg")}</a></p>}
+
+          {dev && (
+            <div className="card" style={{ textAlign: "left" }}>
+              <b>{t("s.web.dev_title")}</b>
+              <p className="hint">{t("s.web.dev_hint")}</p>
+              <label>{t("s.web.dev_name")}</label>
+              <input value={devName} onChange={(e) => setDevName(e.target.value)} />
+              <label>{t("s.web.dev_id")}</label>
+              <input value={devId} inputMode="numeric" onChange={(e) => setDevId(e.target.value.replace(/\D/g, ""))} />
+              <button className="btn" style={{ marginTop: 12 }} disabled={!devName.trim() || !devId} onClick={() => onDev(Number(devId), devName.trim())}>{t("s.web.login")}</button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

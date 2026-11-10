@@ -42,6 +42,12 @@ export function setBotUsername(name: string): void {
   BOT_URL = `https://t.me/${name}`;
 }
 
+// The website's own Telegram entry points: sign-in through the bot and "open in Telegram" buttons.
+// Off for now. Accounts made through Telegram stay as they are, and inside Telegram nothing changes.
+export const TELEGRAM_ON_SITE: boolean = false;
+/** Whether this screen may offer Telegram (always inside the Mini App). */
+export const offerTelegram = insideTelegram || TELEGRAM_ON_SITE;
+
 export function boot(): void {
   app?.ready();
   app?.expand();
