@@ -280,7 +280,8 @@ async def my_feed(user: CurrentUser, session: Session) -> dict:
 
 async def _open_event(session, user: User, event_id: int) -> UniversityEvent:
     e = await session.get(UniversityEvent, event_id)
-    if e is None or e.university_id != user.university_id or user.account_type != "student":
+    # Company events (university_id NULL) register through /me/events; a student without a university must not match them here
+    if e is None or e.university_id is None or e.university_id != user.university_id or user.account_type != "student":
         raise HTTPException(404, "Tadbir topilmadi")
     return e
 

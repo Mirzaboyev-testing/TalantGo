@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Me } from "../../api";
 import { t, useLang } from "../../i18n";
 import { Icon } from "../../icons";
-import Challenges from "../Challenges";
+import TaskBoard from "./TaskBoard";
 import PathScreen from "../Path";
 import ReviewScreen from "../Review";
 import { PageHead } from "../employer/kit";
@@ -35,7 +35,7 @@ export default function TasksHub({ me, onChanged, initial }: { me: Me; onChanged
           </button>
         ))}
       </div>
-      {view === "company" && <div className="st-list-grid"><Challenges /></div>}
+      {view === "company" && <TaskBoard />}
       {view === "weekly" && <PathScreen me={me} onChanged={onChanged} />}
       {view === "review" && <div className="st-list-grid"><ReviewScreen me={me} onChanged={onChanged} /></div>}
     </div>

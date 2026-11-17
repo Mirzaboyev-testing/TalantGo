@@ -53,8 +53,12 @@ async def list_jobs(user: CurrentUser, session: Session,
                     kind: str | None = None, work_mode: str | None = None,
                     city: str | None = Query(default=None, max_length=60),
                     paid_only: bool = False, practice_only: bool = False,
-                    q: str | None = Query(default=None, max_length=80)) -> list[JobOut]:
+                    q: str | None = Query(default=None, max_length=80),
+                    field: str | None = Query(default=None, max_length=24),
+                    sort: Literal["match", "new"] = "match") -> list[JobOut]:
     query = visible_jobs()
+    if field:                                       # a job function (catalog.JOB_FIELDS)
+        query = query.where(Job.job_fields.contains([field]))
     if kind:
         query = query.where(Job.kind == kind)
     if work_mode:
@@ -74,6 +78,8 @@ async def list_jobs(user: CurrentUser, session: Session,
     saved = set((await session.execute(select(SavedJob.job_id).where(SavedJob.user_id == user.id))).scalars())
     out = [job_out(j, applied=j.id in mine, application_status=mine.get(j.id), match=match_score(j, user),
                    saved=j.id in saved) for j in jobs]
+    if sort == "new":
+        return sorted(out, key=lambda j: -j.created_at.timestamp())
     return sorted(out, key=lambda j: (-j.match, -j.created_at.timestamp()))
 
 

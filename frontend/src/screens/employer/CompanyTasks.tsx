@@ -319,7 +319,12 @@ function EntryCard({ taskId, entry, onDone }: { taskId: number; entry: Challenge
       </div>
       <div className="hint">{[entry.university, entry.username && `@${entry.username}`].filter(Boolean).join(" · ")}</div>
       {entry.note && <p style={{ margin: "8px 0 0", whiteSpace: "pre-line" }}>{entry.note}</p>}
-      <button className="btn small ghost" style={{ marginTop: 10 }} onClick={() => openLink(entry.proof_url)}>{t("task.e.open")}</button>
+      <div className="row wrap" style={{ gap: 6, marginTop: 10 }}>
+        {entry.proof_url && <button className="btn small ghost" style={{ width: "auto" }} onClick={() => openLink(entry.proof_url)}>{t("task.e.open")}</button>}
+        {(entry.files ?? []).map((f, i) => (
+          <a key={f.id} className="btn small ghost" style={{ width: "auto" }} href={f.url} target="_blank" rel="noreferrer">{t("co.task.file_n", { n: i + 1 })}</a>
+        ))}
+      </div>
       <div className="row" style={{ marginTop: 10 }}>
         <div className="grow"><label>{t("task.e.score")}</label>
           <input value={score} inputMode="numeric" onChange={(e) => setScore(e.target.value.replace(/\D/g, "").slice(0, 3))} />

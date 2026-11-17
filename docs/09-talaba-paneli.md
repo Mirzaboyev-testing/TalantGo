@@ -116,7 +116,18 @@ Dastlabki reja:
 - Korxona tomoni: ariza kartochkasi va ochiq CV'da portfolio, ishonch belgilari bilan.
 - Completeness qayta hisoblanadi (rasm, bio, 3 ko'nikma, 1 portfolio, tajriba yoki sertifikat, tasdiq).
 
-### 3-bosqich: Topshiriqlar, Arizalar, Xabarlar, Tadbirlar, qolganlari
+### 3-bosqich: Topshiriqlar, Arizalar, Xabarlar, Tadbirlar, qolganlari (bajarildi, 2026-11-17)
+
+Qilingani: `conversations` va `chat_messages` jadvallari, `api/chat.py` (talaba va korxona; suhbat faqat ariza yoki
+qabul qilingan bog'lanishdan keyin ochiladi, talaba yopa oladi, har xabar bildirishnoma beradi, parallel ochishda
+`ON CONFLICT`), `university_events.company_id` (+ `university_id` endi ixtiyoriy) va `api/events.py` (talabaga
+universitet + korxona tadbirlari, korxona tadbir yaratadi/bekor qiladi/ro'yxatni ko'radi), topshiriq ishiga fayllar
+(`challenge_entries.file_ids`, Excel/Word/ZIP yuklab olinadi), `/jobs?field=&sort=`. Frontend: TaskBoard (filtrlar,
+batafsil sahifa, bosqichlar, topshirish), Vakansiyalar chap filtr paneli va moslik chizig'i, Arizalarim holatlar
+xulosasi, `DirectChat` (talaba va korxona uchun bitta komponent), Tadbirlar, Universitetim va Hamjamiyat keng layoutda,
+korxona panelida "Xabarlar" va "Tadbirlar", talaba kartochkasida "Xabar yozish". Testlar: `tests/test_student_panel2.py`.
+
+Dastlabki reja:
 
 - Topshiriqlar: filtrlar (Ochiq / Men qatnashayotgan / Natijalar), kartochka (muddat, sovrin, ball, qatnashchilar),
   batafsil sahifa + yopishqoq o'ng kartochka, "Qatnashaman", topshirish (fayl + havola + izoh, muddatgacha

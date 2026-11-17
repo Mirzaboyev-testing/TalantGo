@@ -7,9 +7,10 @@ import StudentSignup from "./screens/student/StudentSignup";
 import TasksHub from "./screens/student/TasksHub";
 import StudentProfile from "./screens/student/StudentProfile";
 import StudentSettings from "./screens/student/StudentSettings";
+import DirectChat from "./screens/student/DirectChat";
+import Events from "./screens/student/Events";
+import Community from "./screens/student/Community";
 import "./screens/student/student.css";
-import PeersScreen from "./screens/Peers";
-import LeaderboardScreen from "./screens/Leaderboard";
 import ProfileScreen from "./screens/Profile";
 import JobsScreen from "./screens/Jobs";
 import StudentHome from "./screens/StudentHome";
@@ -20,7 +21,6 @@ import CompanySignup from "./screens/employer/CompanySignup";
 import CompanyReview from "./screens/employer/CompanyReview";
 import UniversityApp from "./screens/university/UniversityApp";
 import UniPending from "./screens/university/UniPending";
-import Groups from "./screens/Groups";
 import Assistant, { type AiAudience } from "./screens/Assistant";
 import Shell, { type ShellTab } from "./screens/Shell";
 import WebLogin from "./screens/WebLogin";
@@ -40,11 +40,12 @@ const storeToken = (t: string) => { try { localStorage.setItem(TOKEN_KEY, t); } 
 const storedToken = () => { try { return localStorage.getItem(TOKEN_KEY) ?? ""; } catch { return ""; } };
 const forgetToken = () => { try { localStorage.removeItem(TOKEN_KEY); } catch { /* storage blocked */ } };
 
-type Tab = "home" | "jobs" | "applications" | "tasks" | "university" | "community" | "profile" | "settings";
+type Tab = "home" | "jobs" | "applications" | "tasks" | "messages" | "events" | "university" | "community" | "profile" | "settings";
 // /talaba/<segment>. Student panel v2 (2026-11-17): applications and tasks have their own sections;
 // the older /talaba/yol and /talaba/tekshirish open "Topshiriqlar", /talaba/saqlangan the saved jobs
 const STUDENT_TABS: Record<Tab, string> = {
-  home: "", jobs: "vakansiyalar", applications: "arizalar", tasks: "topshiriqlar", university: "universitetim",
+  home: "", jobs: "vakansiyalar", applications: "arizalar", tasks: "topshiriqlar", messages: "xabarlar", events: "tadbirlar",
+  university: "universitetim",
   community: "hamjamiyat", profile: "profil", settings: "sozlamalar",
 };
 let joinHandled = false;
@@ -195,8 +196,9 @@ function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
   useLang();
   const [tab, setTab, segment] = useRouteTab<Tab>("/talaba", STUDENT_TABS, "home", { saqlangan: "jobs", yol: "tasks", tekshirish: "tasks" });
   const [unread, setUnread] = useState(0);
-  const [communityView, setCommunityView] = useState<"groups" | "peers" | "top">("groups");
+  const [chatUnread, setChatUnread] = useState(0);
   const refreshUnread = useCallback(() => api.groups.unread().then((r) => setUnread(r.unread), () => {}), []);
+  const refreshChats = useCallback(() => api.chatUnread().then((r) => setChatUnread(r.unread), () => {}), []);
 
   // a group invite (?join=) opens the community once
   useEffect(() => {
@@ -205,10 +207,10 @@ function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
 
   // unread group messages on the community tab, refreshed every 30 seconds
   useEffect(() => {
-    void refreshUnread();
-    const timer = setInterval(refreshUnread, 30000);
+    void refreshUnread(); void refreshChats();
+    const timer = setInterval(() => { void refreshUnread(); void refreshChats(); }, 30000);
     return () => clearInterval(timer);
-  }, [refreshUnread]);
+  }, [refreshUnread, refreshChats]);
 
   const seeker = me.role === "student";
   const main = t("st.nav.main"), mine = t("st.nav.mine");
@@ -218,6 +220,8 @@ function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
     { id: "jobs", icon: "briefcase", label: t("nav.student.jobs"), group: main },
     { id: "tasks", icon: "target", label: seeker ? t("st.nav.tasks") : t("nav.student.mentor"), group: main },
     { id: "applications", icon: "inbox", label: t("st.nav.applications"), group: main },
+    { id: "messages", icon: "chat", label: t("st.nav.messages"), badge: chatUnread, group: main },
+    { id: "events", icon: "calendar", label: t("st.nav.events"), group: main },
     { id: "university", icon: "school", label: t("nav.student.university"), group: mine },
     { id: "community", icon: "users", label: t("nav.student.community"), badge: unread, group: mine },
     { id: "profile", icon: "user", label: t("st.nav.profile"), group: mine },
@@ -231,24 +235,15 @@ function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
            user={{ name: me.full_name, photo: me.photo_url, subtitle: subtitle || undefined, verified: me.verification === "verified" }}>
       {tab === "home" && <StudentHome me={me} />}
       {tab === "tasks" && <TasksHub me={me} onChanged={refreshMe} initial={segment === "tekshirish" ? "review" : segment === "yol" ? "weekly" : undefined} />}
-      {tab === "university" && <div className="st-legacy"><MyUniversity me={me} /></div>}
+      {tab === "university" && <MyUniversity me={me} />}
+      {tab === "messages" && <DirectChat side="student" onUnread={refreshChats} />}
+      {tab === "events" && <Events />}
       {tab === "jobs" && <JobsScreen key={`jobs-${segment}`} me={me} views={["jobs", "saved"]}
                                      initialView={segment === "saqlangan" ? "saved" : "jobs"}
                                      onOpenProfile={() => setTab("profile")} />}
       {tab === "applications" && <JobsScreen key="applications" me={me} views={["mine", "tests"]} initialView="mine"
                                              onOpenProfile={() => setTab("profile")} />}
-      {tab === "community" && (
-        <div className="st-legacy">
-          <div className="segmented">
-            <button className={communityView === "groups" ? "on" : ""} onClick={() => setCommunityView("groups")}>{t("s.community.groups")}</button>
-            <button className={communityView === "peers" ? "on" : ""} onClick={() => setCommunityView("peers")}>{t("s.community.peers")}</button>
-            <button className={communityView === "top" ? "on" : ""} onClick={() => setCommunityView("top")}>{t("s.community.top")}</button>
-          </div>
-          {communityView === "groups" && <Groups joinCode={joinCode} onUnreadChange={refreshUnread} />}
-          {communityView === "peers" && <PeersScreen me={me} />}
-          {communityView === "top" && <LeaderboardScreen />}
-        </div>
-      )}
+      {tab === "community" && <Community me={me} joinCode={joinCode} onUnreadChange={refreshUnread} />}
       {tab === "profile" && (seeker ? <StudentProfile me={me} onSaved={setMe} />
         : <div className="st-legacy"><ProfileScreen me={me} onSaved={setMe} onChangeTrack={onChangeTrack} /></div>)}
       {tab === "settings" && <StudentSettings me={me} onSaved={setMe} onLogout={onLogout} />}

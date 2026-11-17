@@ -275,6 +275,11 @@ export function StudentSheet({ id, catalog, onClose, onTest }: {
             {s.phone ? <div>{t("p.sheet.phone", { phone: formatPhone(s.phone) })}</div>
               : <div className="hint">{t("p.sheet.phone_hidden")}</div>}
             <div className="row wrap" style={{ marginTop: 8 }}>
+              {(s.applied || s.contact_status === "accepted") && (
+                <button className="btn small" onClick={() => { onClose(); navigate(`/korxona/xabarlar?student=${s.id}`); }}>
+                  <Icon name="chat" size={16} />{t("co.msg.write")}
+                </button>
+              )}
               {s.username && <button className="btn small" onClick={() => openLink(`https://t.me/${s.username}`)}>{t("p.common.write_telegram")}</button>}
               <button className="btn small ghost" onClick={() => downloadCv(s.id)}>{t("p.common.cv_download")}</button>
               {s.github_url && <button className="btn small ghost" onClick={() => openLink(s.github_url)}>GitHub</button>}

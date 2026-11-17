@@ -779,6 +779,8 @@ class ChallengeEntry(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     proof_url: Mapped[str] = mapped_column(String(512))
     note: Mapped[str] = mapped_column(Text, default="")
+    # student panel v2, phase 3: files with the work (kept like profile files, opened with /media links)
+    file_ids: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, server_default="{}")
     status: Mapped[str] = mapped_column(String(16), default="submitted")
     score: Mapped[int | None] = mapped_column(Integer)
     place: Mapped[int | None] = mapped_column(Integer)
@@ -921,7 +923,9 @@ class UniversityEvent(Base):
                       _in("status", EVENT_STATES, "university_event_status_valid"))
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    university_id: Mapped[int] = mapped_column(ForeignKey("universities.id", ondelete="CASCADE"), index=True)
+    # one organiser: a university (its own students) or, since student panel v2, a company (open to all students)
+    university_id: Mapped[int | None] = mapped_column(ForeignKey("universities.id", ondelete="CASCADE"), index=True)
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     title: Mapped[str] = mapped_column(String(160))
     kind: Mapped[str] = mapped_column(String(16), default="career_day")
@@ -936,6 +940,9 @@ class UniversityEvent(Base):
     status: Mapped[str] = mapped_column(String(12), default="published")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    university: Mapped[University | None] = relationship(lazy="selectin")
+    company: Mapped[Company | None] = relationship(lazy="selectin")
+
 
 class EventRegistration(Base):
     __tablename__ = "event_registrations"
@@ -948,3 +955,38 @@ class EventRegistration(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped[User] = relationship(lazy="selectin")
+
+
+# --------------------------------------------------------------------------- company ↔ student messages (student panel v2)
+
+class Conversation(Base):
+    """One thread between a company and a student. Opened only after the student applied to the company or
+    accepted its contact request; the student can close it, after which the company cannot write."""
+    __tablename__ = "conversations"
+    __table_args__ = (UniqueConstraint("company_id", "student_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    student_unread: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    company_unread: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    closed_by_student: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    company: Mapped[Company] = relationship(lazy="selectin")
+    student: Mapped[User] = relationship(lazy="selectin")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    __table_args__ = (_in("side", ("company", "student"), "chat_message_side_valid"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), index=True)
+    sender_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    side: Mapped[str] = mapped_column(String(8))
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    sender: Mapped[User | None] = relationship(lazy="selectin")

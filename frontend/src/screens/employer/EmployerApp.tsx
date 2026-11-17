@@ -18,26 +18,31 @@ import CompanyTasks from "./CompanyTasks";
 import CompanyUniversities from "./CompanyUniversities";
 import CompanyProfile from "./CompanyProfile";
 import { fieldLabel } from "../student/StudentSignup";
+import DirectChat from "../student/DirectChat";
+import CompanyEvents from "./CompanyEvents";
 import { formatDateTime, t, useLang } from "../../i18n";
 import { statusLabel } from "../../pipeline";
 import { ApplicantCard, CardBody } from "./ApplicantCard";
 import { CompanyMark, daysLeft, EmptyState, PageHead, Tabs } from "./kit";
 
-type Tab = "home" | "candidates" | "jobs" | "students" | "tasks" | "universities" | "tests" | "groups" | "profile";
-const tabs = (n: EmployerCounters | null): ShellTab<Tab>[] => [
+type Tab = "home" | "candidates" | "jobs" | "students" | "messages" | "tasks" | "events" | "universities" | "tests" | "groups" | "profile";
+const tabs = (n: EmployerCounters | null, chats = 0): ShellTab<Tab>[] => [
   { id: "home", icon: "home", label: t("nav.company.home"), group: t("co.nav.main"), badge: n?.outcomes || undefined },
   { id: "candidates", icon: "inbox", label: t("nav.company.candidates"), group: t("co.nav.hiring"), badge: n?.new_applications || undefined },
   { id: "jobs", icon: "briefcase", label: t("nav.company.jobs"), group: t("co.nav.hiring"), badge: n?.rejected_jobs || undefined },
   { id: "students", icon: "users", label: t("nav.company.students"), group: t("co.nav.hiring") },
+  { id: "messages", icon: "chat", label: t("co.msg.nav"), group: t("co.nav.hiring"), badge: chats || undefined },
   { id: "tasks", icon: "flag", label: t("nav.company.tasks"), group: t("co.nav.talent"), badge: n?.to_review || undefined },
   { id: "tests", icon: "check", label: t("nav.company.tests"), group: t("co.nav.talent"), badge: n?.to_grade || undefined },
+  { id: "events", icon: "calendar", label: t("co.ev.nav"), group: t("co.nav.talent") },
   { id: "universities", icon: "school", label: t("nav.company.universities"), group: t("co.nav.network"), badge: n?.partnerships_in || undefined },
   { id: "groups", icon: "chat", label: t("nav.company.groups"), group: t("co.nav.network") },
   { id: "profile", icon: "building", label: t("nav.company.profile"), group: t("co.nav.company") },
 ];
 // /korxona/<segment>
 const ROUTES: Record<Tab, string> = {
-  home: "", candidates: "nomzodlar", jobs: "vakansiyalar", students: "talabalar", tasks: "vazifalar", universities: "universitetlar", tests: "testlar",
+  home: "", candidates: "nomzodlar", jobs: "vakansiyalar", students: "talabalar", messages: "xabarlar", tasks: "vazifalar", events: "tadbirlar",
+  universities: "universitetlar", tests: "testlar",
   groups: "guruhlar", profile: "profil",
 };
 const JOB_BADGE: Record<string, string> = { pending: "pending", approved: "peer_verified", rejected: "rejected", closed: "todo" };
@@ -48,20 +53,26 @@ export default function EmployerApp({ me, onChanged, onLogout }: { me: Me; onCha
   const search = useSearch();
   const [attempt, setAttempt] = useState<number | null>(null);
   const [counters, setCounters] = useState<EmployerCounters | null>(null);
+  const [chats, setChats] = useState(0);
   const openAttempt = (id: number) => { setAttempt(id); setTab("tests"); };
 
   // sidebar badges: refreshed on every section change and once a minute
-  const refresh = useCallback(() => api.employer.counters().then(setCounters, () => {}), []);
+  const refresh = useCallback(() => {
+    api.employer.chatUnread().then((r) => setChats(r.unread), () => {});
+    return api.employer.counters().then(setCounters, () => {});
+  }, []);
   useEffect(() => { void refresh(); }, [tab, refresh]);
   useEffect(() => { const timer = setInterval(refresh, 60000); return () => clearInterval(timer); }, [refresh]);
 
   const company = me.company!;
   return (
-    <Shell tabs={tabs(counters)} active={tab} onChange={(t) => { setAttempt(null); setTab(t); }} onLogout={onLogout} wide
+    <Shell tabs={tabs(counters, chats)} active={tab} onChange={(t) => { setAttempt(null); setTab(t); }} onLogout={onLogout} wide
            user={{ name: company.name, photo: company.logo_url, subtitle: me.full_name, verified: true, square: true }}>
         {tab === "home" && <CompanyHome me={me} counters={counters} onNewJob={() => navigate("/korxona/vakansiyalar?yangi=1")} />}
         {tab === "candidates" && <Candidates onChanged={refresh} />}
         {tab === "tasks" && <CompanyTasks />}
+        {tab === "messages" && <DirectChat side="company" onUnread={refresh} />}
+        {tab === "events" && <CompanyEvents />}
         {tab === "universities" && <CompanyUniversities />}
         {tab === "students" && (
           <div className="co-page">

@@ -1,127 +1,149 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type Job, type Me, type MyOutcome, type OutcomeKind, type PublicCompany, type UniversityProfile } from "../api";
+import { api, type EventItem, type Job, type Me, type MyOutcome, type UniversityProfile } from "../api";
+import { BarList } from "../charts";
 import { formatDateTime, t, useLang } from "../i18n";
+import { Icon } from "../icons";
 import { navigate } from "../router";
 import { PublicJobCard } from "../public/PublicJobs";
-import { UniversityFacts } from "../public/PublicUniversities";
-import { ErrorText, message, toast } from "../ui";
-import StudentUniFeed from "./university/StudentUniFeed";
+import { openLink } from "../tg";
+import { ErrorText, message } from "../ui";
+import { PageHead, StatTile } from "./employer/kit";
+import { EventCard } from "./student/Events";
 
-const KINDS: OutcomeKind[] = ["internship", "part_time", "full_time", "dual_education"];
+type Data = { university: UniversityProfile | null; verified?: boolean; recommended: (Job & { note: string })[]; outcomes: MyOutcome[] };
+type Feed = { announcements: { id: number; title: string; text: string; link: string; created_at: string }[]; events: EventItem[] };
 
-/** The student's university: its page, the vacancies it recommends, and where the student works. */
+/** "Universitetim" (student panel v2): the university's page for its own student — what it recommends, its news
+ *  and events, how its students get placed. The student's own jobs moved to the profile ("Tajriba"). */
 export default function MyUniversity({ me }: { me: Me }) {
   useLang();
-  const [data, setData] = useState<{ university: UniversityProfile | null; verified?: boolean; recommended: (Job & { note: string })[]; outcomes: MyOutcome[] } | null>(null);
+  const [data, setData] = useState<Data | null>(null);
+  const [feed, setFeed] = useState<Feed | null>(null);
   const [error, setError] = useState("");
-  const load = useCallback(() => api.myUniversity().then(setData, (e) => setError(message(e))), []);
-  useEffect(() => { void load(); }, [load]);
+  const load = useCallback(() => {
+    api.myUniversity().then(setData, (e) => setError(message(e)));
+    api.universityFeed().then(setFeed, () => setFeed({ announcements: [], events: [] }));
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
   if (error) return <ErrorText error={error} />;
-  if (!data) return <div className="hint">{t("common.loading")}</div>;
+  if (!data) return <div className="co-page"><div className="st-skeleton-grid"><span /><span /><span /></div></div>;
+  const u = data.university;
+  if (!u) {
+    return (
+      <div className="co-page st-page">
+        <PageHead title={t("nav.student.university")} />
+        <div className="st-empty"><Icon name="school" size={28} /><b>{t("my.no_university")}</b>
+          <button className="btn small" onClick={() => navigate("/talaba/profil")}>{t("job.open_profile")}</button></div>
+      </div>
+    );
+  }
+  const verified = me.verification === "verified";
   return (
-    <div>
-      <h1>{data.university?.name ?? t("nav.student.university")}</h1>
-      {!data.university && (
-        <div className="notice">{t("my.no_university")}{" "}
-          <a href="/talaba/profil" onClick={(e) => { e.preventDefault(); navigate("/talaba/profil"); }}>{t("job.open_profile")}</a>
+    <div className="co-page st-page">
+      <section className="st-uni-hero">
+        <span className="st-uni-logo">{u.short_name.slice(0, 4)}</span>
+        <div className="grow" style={{ minWidth: 0 }}>
+          <span className="st-hero-eyebrow"><Icon name="school" size={14} />{t("st.uni.eyebrow")}</span>
+          <h1>{u.name}</h1>
+          <p>{[u.city, u.region].filter(Boolean).join(" · ")}</p>
         </div>
-      )}
-      {data.university && me.verification !== "verified" && <div className="notice" style={{ marginBottom: 10 }}>{t("my.not_verified")}</div>}
-      {data.university && <StudentUniFeed />}
+        <div className="st-uni-actions">
+          <span className={`st-uni-verify ${verified ? "on" : ""}`}>
+            <Icon name={verified ? "verified" : "lock"} size={15} />{verified ? t("st.uni.verified") : me.verification === "pending" ? t("st.home.pending") : t("st.uni.not_verified")}
+          </span>
+          {u.website && <button className="st-glass" onClick={() => openLink(u.website)}><Icon name="globe" size={15} />{t("company.website")}</button>}
+        </div>
+      </section>
 
-      {data.university && (
-        <>
-          <h2 className="pub-h2">{t("my.recommended")}</h2>
-          {data.recommended.length === 0 && <div className="card hint">{t("my.no_recommended")}</div>}
-          <div className="job-grid">
-            {data.recommended.map((j) => (
-              <div key={j.id}>
-                <PublicJobCard job={j} />
-                {j.note && <p className="hint" style={{ margin: "4px 4px 0" }}>{j.note}</p>}
+      <div className="co-stats">
+        <StatTile icon="users" label={t("uni.students")} value={u.students} />
+        <StatTile icon="chart" tone="blue" label={t("uni.rate")} value={u.placement_rate == null ? "–" : `${u.placement_rate}%`}
+                  sub={u.placement_rate == null ? t("uni.no_data") : undefined} />
+        <StatTile icon="briefcase" tone="violet" label={t("emp.working")} value={u.employed ?? "–"} />
+        <StatTile icon="school" tone="amber" label={t("emp.interned")} value={u.interned ?? "–"} />
+      </div>
+
+      <div className="co-dash-grid">
+        <div className="co-col">
+          {!verified && (
+            <div className="co-card st-next">
+              <span className="st-next-icon"><Icon name="verified" size={22} /></span>
+              <div className="grow" style={{ minWidth: 0 }}>
+                <b>{t("st.uni.verify_title")}</b>
+                <p>{t("my.not_verified")}</p>
+              </div>
+              <button className="btn" onClick={() => navigate("/talaba/profil")}>{t("job.open_profile")}</button>
+            </div>
+          )}
+          <div className="co-card">
+            <div className="co-card-head">
+              <div><b>{t("my.recommended")}</b><div className="hint">{t("st.uni.recommended_hint")}</div></div>
+              <a href="/talaba/vakansiyalar" onClick={(e) => { e.preventDefault(); navigate("/talaba/vakansiyalar"); }}>{t("home.see_all")}</a>
+            </div>
+            {data.recommended.length === 0 && <div className="st-empty compact"><span className="hint">{t("my.no_recommended")}</span></div>}
+            <div className="st-card-grid">
+              {data.recommended.map((j) => (
+                <div key={j.id} className="st-job">
+                  <PublicJobCard job={j} />
+                  {j.note && <p className="hint" style={{ margin: "6px 4px 0" }}><Icon name="chat" size={13} /> {j.note}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="co-card">
+            <div className="co-card-head"><b>{t("st.uni.news")}</b></div>
+            {feed && feed.announcements.length === 0 && <div className="st-empty compact"><span className="hint">{t("st.uni.no_news")}</span></div>}
+            {feed?.announcements.map((a) => (
+              <div key={a.id} className="st-news">
+                <span className="co-stat-icon"><Icon name="megaphone" size={18} /></span>
+                <div className="grow" style={{ minWidth: 0 }}>
+                  <b>{a.title || u.short_name}</b>
+                  <p className="st-pre" style={{ margin: "2px 0 0" }}>{a.text}</p>
+                  <div className="hint">{formatDateTime(a.created_at)}{a.link && <> · <button className="link-btn" onClick={() => openLink(a.link)}>{t("s.common.open_link")}</button></>}</div>
+                </div>
               </div>
             ))}
           </div>
-        </>
-      )}
-
-      <MyWork outcomes={data.outcomes} onChanged={load} />
-
-      {data.university && (
-        <>
-          <h2 className="pub-h2">{data.university.short_name}</h2>
-          <UniversityFacts u={data.university} />
-        </>
-      )}
-    </div>
-  );
-}
-
-const OTHER = "other";
-
-function MyWork({ outcomes, onChanged }: { outcomes: MyOutcome[]; onChanged: () => void }) {
-  const [f, setF] = useState({ company: "", company_name: "", position: "", kind: "internship" as OutcomeKind, started_on: "" });
-  const [companies, setCompanies] = useState<PublicCompany[]>([]);
-  const [error, setError] = useState("");
-  useEffect(() => { api.public.companies({ limit: "60" }).then((r) => setCompanies(r.items), () => {}); }, []);
-  const other = f.company === OTHER;
-  const ready = other ? f.company_name.trim().length >= 2 : !!f.company;
-
-  async function add() {
-    setError("");
-    try {
-      await api.addOutcome({ company_id: other ? null : Number(f.company), company_name: other ? f.company_name.trim() : "",
-                             position: f.position.trim(), kind: f.kind, started_on: f.started_on || null });
-      setF({ company: "", company_name: "", position: "", kind: "internship", started_on: "" });
-      toast(t("my.added"));
-      onChanged();
-    } catch (e) { setError(message(e)); }
-  }
-  async function remove(id: number) {
-    try { await api.deleteOutcome(id); onChanged(); } catch (e) { setError(message(e)); }
-  }
-  return (
-    <>
-      <h2 className="pub-h2">{t("my.work")}</h2>
-      {outcomes.map((o) => (
-        <div key={o.id} className="card">
-          <div className="row between">
-            <b>{o.company}</b>
-            <span className={`badge ${o.confirmed ? (o.confirmed_by === "company" ? "peer_verified" : "todo") : "pending"}`}>
-              {o.confirmed ? t(o.confirmed_by === "company" ? "my.confirmed_company" : "my.confirmed_university") : t("my.pending")}
-            </span>
-          </div>
-          <div className="hint">{[o.position, t(`outcome.kind.${o.kind}`), o.started_on && formatDateTime(o.started_on, false)].filter(Boolean).join(" · ")}</div>
-          {o.source === "self" && <button className="btn small ghost" style={{ marginTop: 8 }} onClick={() => remove(o.id)}>{t("my.remove")}</button>}
+          {u.description && (
+            <div className="co-card">
+              <div className="co-card-head"><b>{t("st.uni.about")}</b></div>
+              <p className="st-pre" style={{ marginTop: 0 }}>{u.description}</p>
+            </div>
+          )}
         </div>
-      ))}
-      <div className="card">
-        <p className="hint" style={{ marginTop: 0 }}>{t("my.work_hint")}</p>
-        <label>{t("my.company_pick")}</label>
-        <select value={f.company} onChange={(e) => setF({ ...f, company: e.target.value })}>
-          <option value="">{t("task.f.choose")}</option>
-          {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          <option value={OTHER}>{t("my.company_other")}</option>
-        </select>
-        {other && (
-          <>
-            <label>{t("my.company")}</label>
-            <input value={f.company_name} maxLength={160} onChange={(e) => setF({ ...f, company_name: e.target.value })} />
-          </>
-        )}
-        <label>{t("my.position")}</label>
-        <input value={f.position} maxLength={160} onChange={(e) => setF({ ...f, position: e.target.value })} />
-        <div className="row">
-          <div className="grow"><label>{t("my.kind")}</label>
-            <select value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as OutcomeKind })}>
-              {KINDS.map((k) => <option key={k} value={k}>{t(`outcome.kind.${k}`)}</option>)}
-            </select>
+
+        <div className="co-col">
+          <div className="co-card">
+            <div className="co-card-head">
+              <b>{t("st.uni.events")}</b>
+              <a href="/talaba/tadbirlar" onClick={(e) => { e.preventDefault(); navigate("/talaba/tadbirlar"); }}>{t("home.see_all")}</a>
+            </div>
+            {feed && feed.events.length === 0 && <div className="st-empty compact"><span className="hint">{t("st.uni.no_events")}</span></div>}
+            <div className="co-col" style={{ gap: 10 }}>
+              {feed?.events.slice(0, 3).map((e) => <EventCard key={e.id} e={{ ...e, organiser: "university", organiser_name: u.short_name }} onChanged={load} />)}
+            </div>
           </div>
-          <div className="grow"><label>{t("my.started")}</label><input type="date" value={f.started_on} onChange={(e) => setF({ ...f, started_on: e.target.value })} /></div>
+          <div className="co-card st-uni-card">
+            <span className="co-stat-icon"><Icon name="briefcase" size={20} /></span>
+            <div className="grow" style={{ minWidth: 0 }}>
+              <b>{t("st.uni.my_work")}</b>
+              <div className="hint">{data.outcomes.length ? t("st.uni.my_work_n", { n: data.outcomes.length }) : t("st.uni.my_work_hint")}</div>
+            </div>
+            <a href="/talaba/profil" onClick={(e) => { e.preventDefault(); navigate("/talaba/profil"); }} aria-label={t("st.uni.my_work")}><Icon name="arrow" size={18} /></a>
+          </div>
+          <div className="co-card">
+            <div className="co-card-head"><b>{t("uni.top_employers")}</b></div>
+            {u.top_employers.length ? <BarList rows={u.top_employers} /> : <p className="hint" style={{ margin: 0 }}>{t("emp.no_employers")}</p>}
+          </div>
+          {u.partners.length > 0 && (
+            <div className="co-card">
+              <div className="co-card-head"><b>{t("uni.partners")}</b></div>
+              <div className="chips">{u.partners.map((p) => <span key={p.id} className="co-tag"><Icon name="building" size={14} />{p.name}</span>)}</div>
+            </div>
+          )}
         </div>
-        <ErrorText error={error} />
-        <button className="btn" style={{ marginTop: 10 }} disabled={!ready} onClick={add}>{t("my.add")}</button>
       </div>
-    </>
+    </div>
   );
 }

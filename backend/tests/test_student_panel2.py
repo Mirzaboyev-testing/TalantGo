@@ -124,3 +124,93 @@ async def test_projects_certificates_and_experience(client, make_user):
     other = await full_student(client, make_user, "Boshqa Talaba")
     cert = r.json()["certificates"][0]["id"]
     assert (await client.delete(f"{API}/me/portfolio/{cert}", headers=other["headers"])).status_code == 404
+
+
+# --------------------------------------------------------------------------- phase 3: messages, events, task files, filters
+
+async def test_chat_opens_only_after_an_application_and_the_student_can_close_it(client, make_user):
+    from tests.test_career import make_student
+    from tests.test_pipeline_and_inbox import applied_student, live_job
+    hr, job = await live_job(client, make_user)
+    stranger = await make_student(client, make_user, "Begona Talaba")
+    r = await client.post(f"{API}/employer/chats", json={"student_id": stranger["id"]}, headers=hr["headers"])
+    assert r.status_code == 403                                          # no application, no accepted request
+    student = await applied_student(client, make_user, job, "Dilnoza")
+    r = await client.post(f"{API}/employer/chats", json={"student_id": student["id"]}, headers=hr["headers"])
+    assert r.status_code == 201, r.text
+    tid = r.json()["thread"]["id"]
+    r = await client.post(f"{API}/employer/chats/{tid}/messages", json={"text": "Salom! Ertaga suhbatga kela olasizmi?"},
+                          headers=hr["headers"])
+    assert r.status_code == 201 and r.json()["side"] == "company"
+    assert (await client.get(f"{API}/me/chats/unread", headers=student["headers"])).json() == {"unread": 1}
+    notes = (await client.get(f"{API}/me/notifications", headers=student["headers"])).json()["items"]
+    assert notes[0]["kind"] == "chat_message" and notes[0]["link"] == f"/talaba/xabarlar?c={tid}"
+    mine = (await client.get(f"{API}/me/chats", headers=student["headers"])).json()
+    assert mine["threads"][0]["company"] == "Data Solutions MChJ" and mine["threads"][0]["unread"] == 1
+    thread = (await client.get(f"{API}/me/chats/{tid}", headers=student["headers"])).json()
+    assert [m["text"] for m in thread["messages"]] == ["Salom! Ertaga suhbatga kela olasizmi?"]
+    assert (await client.get(f"{API}/me/chats/unread", headers=student["headers"])).json() == {"unread": 0}
+    await client.post(f"{API}/me/chats/{tid}/messages", json={"text": "Ha, albatta"}, headers=student["headers"])
+    assert (await client.get(f"{API}/employer/chats/unread", headers=hr["headers"])).json() == {"unread": 1}
+    # closed by the student: the company cannot write until the student writes again
+    await client.post(f"{API}/me/chats/{tid}/close", json={"closed": True}, headers=student["headers"])
+    assert (await client.post(f"{API}/employer/chats/{tid}/messages", json={"text": "Yana bir savol"},
+                              headers=hr["headers"])).status_code == 409
+    other_hr, _ = await live_job(client, make_user, stir="309999999", name="HR Boshqa")
+    assert (await client.get(f"{API}/employer/chats/{tid}", headers=other_hr["headers"])).status_code == 404
+    assert (await client.get(f"{API}/me/chats/{tid}", headers=stranger["headers"])).status_code == 404
+
+
+async def test_company_events_reach_every_student_and_show_registrations(client, make_user):
+    from datetime import UTC, datetime, timedelta
+    from tests.test_career import make_student
+    from tests.test_pipeline_and_inbox import live_job
+    hr, _ = await live_job(client, make_user)
+    when = (datetime.now(UTC) + timedelta(days=5)).isoformat()
+    r = await client.post(f"{API}/employer/events", json={"title": "Ochiq eshiklar kuni", "kind": "open_day",
+                                                          "starts_at": when, "location": "Toshkent, Amir Temur 1", "capacity": 1},
+                          headers=hr["headers"])
+    assert r.status_code == 201, r.text
+    eid = r.json()["id"]
+    a = await make_student(client, make_user, "Aziza")
+    b = await make_student(client, make_user, "Bekzod")
+    events = (await client.get(f"{API}/me/events", headers=a["headers"])).json()
+    assert events[0]["organiser"] == "company" and events[0]["organiser_name"] == "Data Solutions MChJ"
+    assert (await client.post(f"{API}/me/events/{eid}/register", headers=a["headers"])).status_code == 201
+    assert (await client.post(f"{API}/me/events/{eid}/register", headers=b["headers"])).status_code == 409   # capacity 1
+    regs = (await client.get(f"{API}/employer/events/{eid}/registrations", headers=hr["headers"])).json()
+    assert [x["full_name"] for x in regs] == ["Aziza"]
+    mine = (await client.get(f"{API}/me/events?scope=mine", headers=a["headers"])).json()
+    assert [e["id"] for e in mine] == [eid] and mine[0]["me_registered"]
+    await client.post(f"{API}/employer/events/{eid}/cancel", headers=hr["headers"])
+    notes = (await client.get(f"{API}/me/notifications", headers=a["headers"])).json()["items"]
+    assert notes[0]["kind"] == "event_cancelled"
+    # the university panel's own list is not affected by company events
+    staff = await approved_staff(client, make_user, "TDIU")
+    assert (await client.get(f"{API}/university/events", headers=staff["headers"])).json() == []
+
+
+async def test_task_entry_with_files_and_job_filters(client, make_user):
+    from datetime import date, timedelta
+    from tests.test_career import make_student, upload_doc
+    from tests.test_pipeline_and_inbox import live_job
+    hr, job = await live_job(client, make_user)
+    task = (await client.post(f"{API}/employer/tasks", json={
+        "title": "Savdo tahlili", "description": "Ilova qilingan jadval bo'yicha oylik savdoni tahlil qiling va xulosa yozing.",
+        "points": 20, "ends_on": (date.today() + timedelta(days=7)).isoformat()}, headers=hr["headers"])).json()
+    s = await make_student(client, make_user, "Aziza")
+    assert (await client.post(f"{API}/challenges/{task['id']}/enter", json={"note": "Tayyor"},
+                              headers=s["headers"])).status_code == 422          # neither a link nor a file
+    xlsx = await upload_doc(client, s["headers"], "tahlil.xlsx", b"PK\x03\x04 fake xlsx")
+    r = await client.post(f"{API}/challenges/{task['id']}/enter", json={"file_ids": [xlsx], "note": "Tayyor"}, headers=s["headers"])
+    assert r.status_code == 201, r.text
+    url = r.json()["files"][0]["url"]
+    got = await client.get(url)
+    assert got.status_code == 200 and "attachment" in got.headers["content-disposition"]     # a spreadsheet downloads
+    entries = (await client.get(f"{API}/employer/tasks/{task['id']}/entries", headers=hr["headers"])).json()
+    assert entries[0]["files"][0]["url"] == url
+
+    await client.patch(f"{API}/me", json={"job_fields": ["data"], "skills": ["SQL", "Power BI", "Excel"]}, headers=s["headers"])
+    jobs = (await client.get(f"{API}/jobs?field=design", headers=s["headers"])).json()
+    assert jobs == []
+    assert len((await client.get(f"{API}/jobs?sort=new", headers=s["headers"])).json()) == 1

@@ -150,7 +150,9 @@ def challenge_out(c: Challenge, now: datetime, **extra) -> dict:
 
 def entry_out(e: ChallengeEntry, with_username: bool = True) -> dict:
     """`with_username` is off for company tasks: entering a task is not an application or a contact."""
+    from ..services.portfolio import media_url
     return {"id": e.id, "user_id": e.user_id, "student": e.user.full_name, "username": e.user.username if with_username else None,
+            "files": [{"id": i, "url": media_url(i)} for i in (e.file_ids or [])],
             "university": e.user.university_ref.short_name if e.user.university_ref else None,
             "proof_url": e.proof_url, "note": e.note, "status": e.status, "score": e.score, "place": e.place,
             "comment": e.comment, "points_awarded": e.points_awarded, "created_at": e.created_at}
@@ -188,7 +190,7 @@ async def create_challenge(body: ChallengeIn, user: Mentor, session: Session) ->
     prize = f" Sovrin: {c.prize}." if c.prize else ""
     await inbox.push(session, (await session.execute(audience)).scalars().all(), "challenge_new",
                      f"Yangi chellenj: «{c.title}». Muddat: {body.ends_on.strftime('%d.%m.%Y')}.{prize} "
-                     "«Yo'l» bo'limida qatnashing.", link="/talaba/yol", params={"challenge": c.title})
+                     "«Topshiriqlar» bo'limida qatnashing.", link="/talaba/topshiriqlar", params={"challenge": c.title})
     return challenge_out(c, now, entries=0, to_review=0)
 
 
@@ -273,7 +275,7 @@ async def apply_review(session: Session, c: Challenge, entry: ChallengeEntry, bo
     await inbox.push(session, [entry.user_id], "challenge_result",
                      f"{what} ishingiz qabul qilindi: +{entry.points_awarded} ball.{place}"
                      if body.accept else f"{what} ishingiz qabul qilinmadi. Izoh: {entry.comment or '-'}",
-                     link="/talaba/yol", params={"challenge": c.title, "accepted": body.accept})
+                     link="/talaba/topshiriqlar", params={"challenge": c.title, "accepted": body.accept})
 
 
 # --------------------------------------------------------------------------- students
@@ -323,8 +325,9 @@ async def challenge_detail(challenge_id: int, user: CurrentUser, session: Sessio
 
 
 class EntryIn(BaseModel):
-    proof_url: Annotated[Url, Field(min_length=10)]
+    proof_url: Url = ""
     note: str = Field(default="", max_length=1000)
+    file_ids: list[int] = Field(default_factory=list, max_length=5)     # student panel v2: files with the work
 
 
 @router.post("/challenges/{challenge_id}/enter", status_code=201)
@@ -341,11 +344,16 @@ async def enter(challenge_id: int, body: EntryIn, user: CurrentUser, session: Se
                                                                 ChallengeEntry.user_id == user.id))).scalar_one_or_none()
     if entry and entry.status != "submitted":
         raise HTTPException(409, "Ishingiz allaqachon baholangan")
+    from ..services import portfolio as pf
+    files = await pf.claim(session, user, body.file_ids, pf.ATTACH_TYPES | pf.WORK_TYPES, "Fayl", pf.WORK_EXTS)
+    if len(body.proof_url) < 10 and not files:
+        raise HTTPException(422, "Ish havolasini qo'shing yoki kamida bitta fayl yuklang")
     if entry is None:
-        entry = ChallengeEntry(challenge_id=c.id, user_id=user.id, proof_url=body.proof_url, note=body.note.strip())
+        entry = ChallengeEntry(challenge_id=c.id, user_id=user.id, proof_url=body.proof_url, note=body.note.strip(),
+                               file_ids=[f.id for f in files])
         session.add(entry)
-    else:
-        entry.proof_url, entry.note = body.proof_url, body.note.strip()      # can be improved until reviewed
+    else:                                                                 # can be improved until reviewed
+        entry.proof_url, entry.note, entry.file_ids = body.proof_url, body.note.strip(), [f.id for f in files]
     await session.commit()
     await session.refresh(entry)
     return entry_out(entry)

@@ -6,7 +6,7 @@ import { navigate, usePath } from "../router";
 import { ErrorText, Sheet, message } from "../ui";
 
 const PLACEHOLDERS = ["job", "company", "student", "university", "task", "test", "challenge", "note", "verifier",
-                      "points", "score", "max", "status"];
+                      "points", "score", "max", "status", "text", "title"];
 
 /** The message in the reader's language: Uzbek is stored as written; ru/en use a template by kind. */
 export function notificationText(n: AppNotification): string {

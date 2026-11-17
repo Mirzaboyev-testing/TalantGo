@@ -161,6 +161,11 @@ STATEMENTS = [
     "UPDATE users u SET portfolio_n = (SELECT count(*) FROM portfolio_items p WHERE p.user_id = u.id) "
     "+ (SELECT count(*) FROM employment_outcomes o WHERE o.student_id = u.id) "
     "WHERE u.account_type = 'student'",
+    # student panel v2, phase 3: files on company task entries, company events (create_all makes the chat tables)
+    "ALTER TABLE challenge_entries ADD COLUMN IF NOT EXISTS file_ids integer[] NOT NULL DEFAULT '{}'",
+    "ALTER TABLE university_events ALTER COLUMN university_id DROP NOT NULL",
+    "ALTER TABLE university_events ADD COLUMN IF NOT EXISTS company_id integer REFERENCES companies(id) ON DELETE CASCADE",
+    "CREATE INDEX IF NOT EXISTS ix_university_events_company_id ON university_events (company_id)",
 ]
 
 

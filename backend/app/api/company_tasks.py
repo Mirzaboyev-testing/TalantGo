@@ -122,7 +122,7 @@ async def create_task(body: TaskIn, user: ApprovedEmployer, session: Session) ->
     prize = f" Sovrin: {c.prize}." if c.prize else ""
     await inbox.push(session, (await session.execute(_audience_query(c))).scalars().all(), "company_task_new",
                      f"{user.company.name} sizga vazifa berdi: «{c.title}». Muddat: {body.ends_on.strftime('%d.%m.%Y')}.{prize}",
-                     link="/talaba/yol", params={"task": c.title, "company": user.company.name})
+                     link="/talaba/topshiriqlar", params={"task": c.title, "company": user.company.name})
     return challenge_out(c, now, entries=0, to_review=0)
 
 

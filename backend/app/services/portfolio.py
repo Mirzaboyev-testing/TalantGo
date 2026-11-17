@@ -19,6 +19,13 @@ from ..models import (ChallengeEntry, EmploymentOutcome, PortfolioItem, Status, 
 
 IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp"}
 ATTACH_TYPES = IMAGE_TYPES | {"application/pdf"}
+# work files with a company task: spreadsheets, documents, archives (opened by download, never inline)
+WORK_TYPES = {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel",
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword",
+              "application/vnd.openxmlformats-officedocument.presentationml.presentation", "application/zip",
+              "text/csv", "text/plain", "application/x-ipynb+json", "application/json"}
+WORK_EXTS = {".xlsx", ".xls", ".csv", ".docx", ".doc", ".pptx", ".ppt", ".zip", ".ipynb", ".txt", ".json", ".py", ".sql",
+             ".r", ".pbix", ".twbx", ".fig", ".pdf", ".png", ".jpg", ".jpeg", ".webp"}
 MAX_ITEMS = 30
 MAX_ITEM_FILES = 6
 VERIFIED = (Status.peer_verified, Status.mentor_verified)
@@ -32,8 +39,9 @@ def media_url(file_id: int | None) -> str | None:
     return f"/api/v1/media/{file_id}?s={media_sig(file_id)}" if file_id else None
 
 
-async def claim(session: AsyncSession, user: User, file_ids: list[int], kinds: set[str], what: str) -> list[SubmissionFile]:
-    """Files the person uploaded themselves, of an allowed type, kept on the profile from now on."""
+async def claim(session: AsyncSession, user: User, file_ids: list[int], kinds: set[str], what: str,
+                exts: set[str] | None = None) -> list[SubmissionFile]:
+    """Files the person uploaded themselves, of an allowed type (or extension), kept on the profile from now on."""
     ids = list(dict.fromkeys(i for i in file_ids if i))
     if not ids:
         return []
@@ -44,7 +52,8 @@ async def claim(session: AsyncSession, user: User, file_ids: list[int], kinds: s
         row = by_id.get(i)
         if row is None or row.user_id != user.id or row.submission_id is not None:
             raise HTTPException(422, f"{what}: fayl topilmadi, qayta yuklang")
-        if row.mime not in kinds:
+        ext = ("." + row.filename.rsplit(".", 1)[-1].lower()) if "." in row.filename else ""
+        if row.mime not in kinds and not (exts and ext in exts):
             raise HTTPException(422, f"{what}: faqat " + ("PNG, JPG yoki WEBP rasm" if kinds == IMAGE_TYPES else "rasm yoki PDF"))
         row.kept = True
         out.append(row)

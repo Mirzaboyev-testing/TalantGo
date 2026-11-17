@@ -434,6 +434,17 @@ export const api = {
   savedJobs: () => request<Job[]>("GET", "/me/saved-jobs"),
   studentDashboard: () => request<StudentDashboard>("GET", "/me/dashboard"),
   myUniversity: () => request<{ university: UniversityProfile | null; verified?: boolean; recommended: (Job & { note: string })[]; outcomes: MyOutcome[] }>("GET", "/me/university"),
+  universityFeed: () => request<{ announcements: { id: number; title: string; text: string; link: string; created_at: string }[];
+                                   events: EventItem[] }>("GET", "/me/university/feed"),
+  chats: () => request<{ threads: ChatThread[]; can_start: { id: number; name: string; logo: string | null }[] }>("GET", "/me/chats"),
+  chatUnread: () => request<{ unread: number }>("GET", "/me/chats/unread"),
+  startChat: (company_id: number) => request<DirectView>("POST", "/me/chats", { company_id }),
+  chat: (id: number) => request<DirectView>("GET", `/me/chats/${id}`),
+  sendChat: (id: number, text: string) => request<DirectMessage>("POST", `/me/chats/${id}/messages`, { text }),
+  closeChat: (id: number, closed: boolean) => request<{ closed: boolean }>("POST", `/me/chats/${id}/close`, { closed }),
+  events: (scope: "upcoming" | "mine" | "past" = "upcoming") => request<EventItem[]>("GET", `/me/events?scope=${scope}`),
+  registerEvent: (id: number) => request<{ registered: boolean }>("POST", `/me/events/${id}/register`),
+  unregisterEvent: (id: number) => request<{ registered: boolean }>("DELETE", `/me/events/${id}/register`),
   portfolio: () => request<Portfolio>("GET", "/me/portfolio"),
   addPortfolio: (item: PortfolioInput) => request<Portfolio>("POST", "/me/portfolio", item),
   editPortfolio: (id: number, item: PortfolioInput) => request<Portfolio>("PUT", `/me/portfolio/${id}`, item),
@@ -497,7 +508,8 @@ export const api = {
   challenges: {
     list: () => request<Challenge[]>("GET", "/challenges"),
     detail: (id: number) => request<Challenge>("GET", `/challenges/${id}`),
-    enter: (id: number, proof_url: string, note: string) => request<ChallengeEntry>("POST", `/challenges/${id}/enter`, { proof_url, note }),
+    enter: (id: number, proof_url: string, note: string, file_ids: number[] = []) =>
+      request<ChallengeEntry>("POST", `/challenges/${id}/enter`, { proof_url, note, file_ids }),
   },
 
   groups: {
@@ -519,6 +531,17 @@ export const api = {
   },
 
   employer: {
+    chats: () => request<ChatThread[]>("GET", "/employer/chats"),
+    chatUnread: () => request<{ unread: number }>("GET", "/employer/chats/unread"),
+    startChat: (student_id: number) => request<DirectView>("POST", "/employer/chats", { student_id }),
+    chat: (id: number) => request<DirectView>("GET", `/employer/chats/${id}`),
+    sendChat: (id: number, text: string) => request<DirectMessage>("POST", `/employer/chats/${id}/messages`, { text }),
+    events: () => request<EventItem[]>("GET", "/employer/events"),
+    createEvent: (e: EventInput) => request<EventItem>("POST", "/employer/events", e),
+    editEvent: (id: number, e: EventInput) => request<EventItem>("PUT", `/employer/events/${id}`, e),
+    cancelEvent: (id: number) => request<EventItem>("POST", `/employer/events/${id}/cancel`),
+    eventRegistrations: (id: number) => request<{ id: number; user_id: number; full_name: string; university: string; faculty: string;
+      course: number | null; registered_at: string }[]>("GET", `/employer/events/${id}/registrations`),
     company: () => request<Company>("GET", "/employer/company"),
     editCompany: (c: Partial<CompanyInput>) => request<Company>("PATCH", "/employer/company", c),
     documents: () => request<CompanyDocument[]>("GET", "/employer/company/documents"),
@@ -765,8 +788,22 @@ export interface MentorTask {
 export interface ChallengeEntry {
   id: number; user_id: number; student: string; username: string | null; university: string | null; proof_url: string;
   note: string; status: "submitted" | "accepted" | "rejected"; score: number | null; place: 1 | 2 | 3 | null;
-  comment: string; points_awarded: number; created_at: string;
+  comment: string; points_awarded: number; created_at: string; files?: { id: number; url: string }[];
 }
+// student panel v2, phase 3: company ↔ student messages and events
+export interface ChatThread {
+  id: number; company_id: number; company: string; company_logo: string | null; student_id: number; student: string;
+  student_photo: string | null; student_study: string; unread: number; closed: boolean; last_message_at: string | null;
+  last: { text: string; side: "company" | "student"; at: string } | null;
+}
+export interface DirectMessage { id: number; side: "company" | "student"; text: string; at: string; sender: string }
+export interface DirectView { thread: ChatThread; messages: DirectMessage[]; can_write: boolean }
+export interface EventItem {
+  id: number; title: string; kind: string; description: string; starts_at: string; ends_at: string | null; location: string;
+  online_url: string; capacity: number | null; companies: string; status: string; registered: number; attended?: number;
+  me_registered?: boolean; organiser?: "company" | "university"; organiser_name?: string; organiser_logo?: string | null;
+}
+export type EventInput = Pick<EventItem, "title" | "kind" | "description" | "starts_at" | "ends_at" | "location" | "online_url" | "capacity" | "companies">;
 export interface Challenge {
   id: number; title: string; description: string; track_id: number | null; track: string | null; prize: string;
   points: number; starts_at: string; ends_at: string; state: "upcoming" | "active" | "finished"; is_archived: boolean;

@@ -162,8 +162,10 @@ async def media(file_id: int, s: str, session: Session) -> FileResponse:
         raise HTTPException(403, "Havola noto'g'ri")
     row = await session.get(SubmissionFile, file_id)
     path = files.root() / row.stored_name if row else None
-    if row is None or not row.kept or row.mime not in pf.ATTACH_TYPES or not path.is_file():
+    if row is None or not row.kept or not path.is_file():           # only files checked when they were kept
         raise HTTPException(404, "Fayl topilmadi")
-    return FileResponse(path, media_type=row.mime, filename=row.filename, content_disposition_type="inline",
+    inline = row.mime in pf.ATTACH_TYPES                                  # images and PDF show, the rest downloads
+    return FileResponse(path, media_type=row.mime if inline else "application/octet-stream", filename=row.filename,
+                        content_disposition_type="inline" if inline else "attachment",
                         headers={"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox",
                                  "Cache-Control": "private, max-age=604800"})

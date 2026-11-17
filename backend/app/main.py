@@ -7,8 +7,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import (admin, admin_auth, assistant, auth, challenges, company_tasks, company_tests, employer, groups, jobs, learning,
-                  notifications, pages, people, portfolio, public, trust, uni_comms, university, work)
+from .api import (admin, admin_auth, assistant, auth, challenges, chat, company_tasks, company_tests, employer, groups, jobs, learning,
+                  events, notifications, pages, people, portfolio, public, trust, uni_comms, university, work)
 from .core.config import settings
 from .core.db import Base, SessionLocal, engine
 from .core.upgrades import upgrade
@@ -45,7 +45,7 @@ for router in (auth.router, admin_auth.router, public.router, people.router, not
                challenges.router, work.router, assistant.router, jobs.router, employer.router, company_tasks.router,
                university.router, university.public_router, uni_comms.router, uni_comms.student_router,
                admin.router, company_tests.employer_router, company_tests.student_router, company_tests.admin_router,
-               trust.router, trust.admin_router, portfolio.router):
+               trust.router, trust.admin_router, portfolio.router, chat.router, events.router):
     app.include_router(router, prefix="/api/v1")
 app.include_router(pages.router)
 
