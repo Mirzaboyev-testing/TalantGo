@@ -41,15 +41,25 @@ def _open_jobs_count():
         or_(Job.deadline.is_(None), Job.deadline >= date.today())).correlate(Company).scalar_subquery())
 
 
+def joined_universities():
+    """Universities that have joined: at least one staff member approved by the admin (or by their lead)."""
+    return select(User.staff_university_id).where(User.staff_status == "approved", User.is_blocked.is_(False),
+                                                  User.staff_university_id.isnot(None))
+
+
 @router.get("/stats")
 async def stats(session: Session) -> dict:
+    """The site's headline numbers count only who has joined and been approved, never the sign-up catalogue:
+    companies the admin approved, universities with an approved staff member (the catalogue of all 200+
+    universities is only for picking at sign-up) and students whose studies were verified."""
     jobs = await session.scalar(select(func.count()).select_from(visible_jobs().subquery()))
     return {
         "jobs": jobs,
         "companies": await session.scalar(select(func.count()).select_from(Company).where(Company.status == "approved")),
         "students": await session.scalar(select(func.count()).select_from(User).where(
-            User.account_type == "student", User.is_blocked.is_(False), User.consent_at.isnot(None))),
-        "universities": await session.scalar(select(func.count()).select_from(University).where(University.is_active.is_(True))),
+            User.account_type == "student", User.verification == "verified", User.is_blocked.is_(False))),
+        "universities": await session.scalar(select(func.count()).select_from(University).where(
+            University.is_active.is_(True), University.id.in_(joined_universities()))),
     }
 
 
@@ -180,7 +190,8 @@ async def universities(session: Session, q: str | None = Query(default=None, max
     partners = (select(func.count()).select_from(Partnership).where(
         Partnership.university_id == University.id, Partnership.status == "accepted")
         .correlate(University).scalar_subquery().label("partners"))
-    query = select(University, students, partners).where(University.is_active.is_(True))
+    # only universities that have joined the platform; the catalogue of all of them is for picking at sign-up
+    query = select(University, students, partners).where(University.is_active.is_(True), University.id.in_(joined_universities()))
     if q and q.strip():
         like = f"%{q.strip()}%"
         query = query.where(University.name.ilike(like) | University.short_name.ilike(like))

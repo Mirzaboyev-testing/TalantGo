@@ -4,6 +4,7 @@ import { university } from "./parts/university";
 import { partner } from "./parts/partner";
 import { student } from "./parts/student";
 import { student2 } from "./parts/student2";
+import { site } from "./parts/site";
 
 // Russian. Machine-assisted: a native speaker should review before a public launch.
 export const ru: Record<MsgKey, string> = {
@@ -12,6 +13,7 @@ export const ru: Record<MsgKey, string> = {
   ...partner.ru,
   ...company.ru,
   ...university.ru,
+  ...site.ru,
   "common.loading": "Загрузка…",
   "common.close": "Закрыть",
   "common.save": "Сохранить",
@@ -137,7 +139,7 @@ export const ru: Record<MsgKey, string> = {
   "pub.hero.search_btn": "Найти",
   "pub.panels.title": "Кем вы входите?",
   "pub.panel.student.title": "Кабинет студента",
-  "pub.panel.student.text": "Дорожная карта, подтверждённое портфолио, задания компаний, стажировки и работа",
+  "pub.panel.student.text": "Задания компаний, вакансии, подтверждённое портфолио и CV",
   "pub.panel.company.title": "Кабинет компании",
   "pub.panel.company.text": "Вакансии, кандидаты и отбор, задания для студентов",
   "pub.panel.university.title": "Кабинет университета",
@@ -158,7 +160,7 @@ export const ru: Record<MsgKey, string> = {
   "pub.hero.point2": "Приложение в Telegram и сайт",
   "pub.hero.point3": "На узбекском, русском и английском",
   "pub.art.cv": "Подтверждённое резюме",
-  "pub.art.path": "Карьерный путь",
+  "pub.art.path": "Задание компании",
   "pub.art.task_ok": "Задание подтверждено",
   "pub.art.task_ok_sub": "ИИ, сокурсники и ментор",
   "pub.art.offer": "Приглашение на стажировку",
@@ -168,7 +170,7 @@ export const ru: Record<MsgKey, string> = {
   "pub.how.1.title": "Компания описывает задачу",
   "pub.how.1.text": "Публикует вакансию и практическое задание",
   "pub.how.2.title": "Студент готовится",
-  "pub.how.2.text": "Выполняет еженедельные задания по карьерному пути",
+  "pub.how.2.text": "Выполняет задания компаний, по желанию проходит недельную программу",
   "pub.how.3.title": "Работа проверяется",
   "pub.how.3.text": "Сначала ИИ, затем её подтверждают сокурсники и ментор",
   "pub.how.4.title": "Лучшие получают работу",
@@ -238,7 +240,7 @@ export const ru: Record<MsgKey, string> = {
   "login.tab.talaba": "Студент",
   "login.tab.korxona": "Компания",
   "login.tab.universitet": "Университет",
-  "login.points.student.1": "Карьерный путь и еженедельные задания по вашей профессии",
+  "login.points.student.1": "Реальные задания и вакансии от компаний",
   "login.points.student.2": "Резюме, в котором только подтверждённая работа",
   "login.points.student.3": "Стажировки и предложения работы от компаний",
   "login.points.company.1": "Вакансии и практические задания",

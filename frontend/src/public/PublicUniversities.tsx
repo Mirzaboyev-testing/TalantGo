@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type PublicUniversity, type UniversityProfile } from "../api";
 import { BarList } from "../charts";
+import { BRAND } from "../brand";
 import { t, useLang } from "../i18n";
 import { Icon } from "../icons";
 import { navigate } from "../router";
@@ -61,6 +62,7 @@ export function UniversitiesPage() {
   return (
     <div>
       <h1>{t("pub.nav.universities")}</h1>
+      <p className="hint" style={{ margin: "-6px 0 14px" }}>{t("site.uni.sub", { brand: BRAND })}</p>
       <form className="pub-search" onSubmit={(e) => { e.preventDefault(); void load(); }}>
         <input value={q} maxLength={80} placeholder={t("uni.search")} onChange={(e) => setQ(e.target.value)} />
         <button className="btn" type="submit">{t("pub.hero.search_btn")}</button>
@@ -68,7 +70,16 @@ export function UniversitiesPage() {
       <ErrorText error={error} />
       {data && <div className="hint" style={{ margin: "12px 0 6px" }}>{t("uni.count", { n: data.total })}</div>}
       {!data && !error && <div className="hint">{t("common.loading")}</div>}
-      {data?.items.length === 0 && <div className="card hint">{t("uni.empty")}</div>}
+      {data?.items.length === 0 && (q.trim()
+        ? <div className="card hint">{t("uni.empty")}</div>
+        : (
+          <div className="card uni-none">
+            <span className="h-feat-ic"><Icon name="building" size={24} /></span>
+            <b>{t("site.uni.empty")}</b>
+            <p className="hint">{t("site.uni.empty_sub")}</p>
+            <a className="btn" href="/kirish/universitet" onClick={(e) => { e.preventDefault(); navigate("/kirish/universitet"); }}>{t("pub.uni.join")}</a>
+          </div>
+        ))}
       <div className="job-grid">
         {data?.items.map((u) => (
           <a key={u.id} className="card job-card tap" href={`/universitetlar/${u.id}`}

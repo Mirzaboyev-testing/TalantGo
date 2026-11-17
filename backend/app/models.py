@@ -990,3 +990,55 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     sender: Mapped[User | None] = relationship(lazy="selectin")
+
+
+# --------------------------------------------------------------------------- the public website (managed in admin)
+
+class SiteMedia(Base):
+    """An image an admin uploaded for the public website: a partner logo, a team photo or a page photo.
+    Public by design (served at /api/v1/public/site/media/{id}); PNG, JPG or WEBP only, never SVG."""
+    __tablename__ = "site_media"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    filename: Mapped[str] = mapped_column(String(200))
+    stored_name: Mapped[str] = mapped_column(String(64), unique=True)       # random name on disk
+    mime: Mapped[str] = mapped_column(String(40))
+    size: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SitePartner(Base):
+    """A company or university in the moving "they trust us" strip on the home page. It can point to a
+    company or university on the platform (its logo is used) or stand alone with an uploaded logo."""
+    __tablename__ = "site_partners"
+    __table_args__ = (_in("kind", ("company", "university"), "site_partner_kind_valid"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    name: Mapped[str] = mapped_column(String(160))
+    website: Mapped[str | None] = mapped_column(String(300))
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id", ondelete="SET NULL"))
+    university_id: Mapped[int | None] = mapped_column(ForeignKey("universities.id", ondelete="SET NULL"))
+    logo_media_id: Mapped[int | None] = mapped_column(ForeignKey("site_media.id", ondelete="SET NULL"))
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    is_visible: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    company: Mapped[Company | None] = relationship(lazy="selectin")
+    university: Mapped[University | None] = relationship(lazy="selectin")
+
+
+class TeamMember(Base):
+    """A person on the "About us" page. The role is written in each language (uz is required)."""
+    __tablename__ = "team_members"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    full_name: Mapped[str] = mapped_column(String(120))
+    role: Mapped[str] = mapped_column(String(120))
+    role_ru: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    role_en: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    link: Mapped[str | None] = mapped_column(String(300))
+    photo_media_id: Mapped[int | None] = mapped_column(ForeignKey("site_media.id", ondelete="SET NULL"))
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    is_visible: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

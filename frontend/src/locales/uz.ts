@@ -3,6 +3,7 @@ import { university } from "./parts/university";
 import { partner } from "./parts/partner";
 import { student } from "./parts/student";
 import { student2 } from "./parts/student2";
+import { site } from "./parts/site";
 // Uzbek (Latin): the source language. Every key here must exist in ru.ts and en.ts.
 export const uz = {
   ...student.uz,
@@ -10,6 +11,7 @@ export const uz = {
   ...partner.uz,
   ...company.uz,
   ...university.uz,
+  ...site.uz,
   "common.loading": "Yuklanmoqda…",
   "common.close": "Yopish",
   "common.save": "Saqlash",
@@ -135,7 +137,7 @@ export const uz = {
   "pub.hero.search_btn": "Qidirish",
   "pub.panels.title": "Kim sifatida kirasiz?",
   "pub.panel.student.title": "Talaba paneli",
-  "pub.panel.student.text": "Yo'l xaritasi, tasdiqlangan portfolio, korxona vazifalari, amaliyot va ish",
+  "pub.panel.student.text": "Korxona topshiriqlari, vakansiyalar, tasdiqlangan portfolio va CV",
   "pub.panel.company.title": "Korxona paneli",
   "pub.panel.company.text": "Vakansiyalar, nomzodlar va saralash, talabalarga vazifa berish",
   "pub.panel.university.title": "Universitet paneli",
@@ -156,7 +158,7 @@ export const uz = {
   "pub.hero.point2": "Telegram ilova va veb-sayt",
   "pub.hero.point3": "O'zbek, rus va ingliz tillarida",
   "pub.art.cv": "Tasdiqlangan CV",
-  "pub.art.path": "Yo'l xaritasi",
+  "pub.art.path": "Korxona topshirig'i",
   "pub.art.task_ok": "Topshiriq tasdiqlandi",
   "pub.art.task_ok_sub": "AI, tengdoshlar va mentor",
   "pub.art.offer": "Amaliyotga taklif",
@@ -166,7 +168,7 @@ export const uz = {
   "pub.how.1.title": "Korxona talabni aytadi",
   "pub.how.1.text": "Vakansiya va amaliy topshiriq joylaydi",
   "pub.how.2.title": "Talaba tayyorlanadi",
-  "pub.how.2.text": "Yo'l xaritasi bo'yicha haftalik topshiriqlarni bajaradi",
+  "pub.how.2.text": "Korxona topshiriqlarini bajaradi, xohlasa haftalik dasturdan o'tadi",
   "pub.how.3.title": "Ish tekshiriladi",
   "pub.how.3.text": "Avval sun'iy intellekt, keyin tengdoshlar va mentor tasdiqlaydi",
   "pub.how.4.title": "Eng yaxshisi ishga kiradi",
@@ -236,7 +238,7 @@ export const uz = {
   "login.tab.talaba": "Talaba",
   "login.tab.korxona": "Korxona",
   "login.tab.universitet": "Universitet",
-  "login.points.student.1": "Kasbingiz bo'yicha yo'l xaritasi va haftalik topshiriqlar",
+  "login.points.student.1": "Korxonalardan real topshiriqlar va vakansiyalar",
   "login.points.student.2": "Faqat tasdiqlangan ish tushadigan CV",
   "login.points.student.3": "Korxonalardan amaliyot va ish takliflari",
   "login.points.company.1": "Vakansiya va amaliy topshiriq joylash",

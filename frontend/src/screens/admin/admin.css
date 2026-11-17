@@ -109,3 +109,28 @@
   .admin-top .who .email { display: none; }
 }
 .admin-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 19; }
+
+/* site content (admin → Sayt kontenti) */
+.rot-up { transform: rotate(-90deg); }
+.rot-down { transform: rotate(90deg); }
+.site-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.site-row.picked { padding: 10px; border: 1px solid #b9e0c7; background: var(--brand-soft); border-radius: 14px; }
+.site-thumb { width: 56px; height: 56px; border-radius: 12px; border: 1px solid var(--line); background: #fff; display: grid; place-items: center; overflow: hidden; flex: none; }
+.site-thumb.round { border-radius: 50%; }
+.site-thumb img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
+.site-thumb.round img { object-fit: cover; padding: 0; }
+.site-thumb b { color: var(--brand-strong); font-size: 14px; }
+.site-editor { border-color: #b9e0c7; box-shadow: 0 0 0 3px var(--brand-soft); }
+.site-choices { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; max-height: 300px; overflow-y: auto; }
+.site-choice { display: flex; align-items: center; gap: 10px; padding: 6px 10px 6px 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); cursor: pointer; text-align: left; color: var(--text); font: inherit; }
+.site-choice:hover { border-color: #b9e0c7; background: var(--brand-soft); }
+.site-choice .site-thumb { width: 40px; height: 40px; border-radius: 10px; }
+.site-del { color: var(--bad); }
+.site-images { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.site-images .card { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.site-photo { border-radius: 14px; overflow: hidden; background: var(--bg2); aspect-ratio: 1; }
+.site-photo.hero { aspect-ratio: 515 / 705; max-height: 320px; }
+.site-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.site-contacts { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0 12px; }
+.site-thumb.wide { width: 104px; height: 52px; }
+.site-choice .site-thumb.wide { width: 72px; height: 40px; }

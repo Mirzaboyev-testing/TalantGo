@@ -14,6 +14,7 @@ import { AiCard, AiConversations, AuditCard, BotCard, ExportCard, PartnerLinks, 
 import Submissions from "./Submissions";
 import Tracks from "./Tracks";
 import Universities from "./Universities";
+import SiteContent from "./SiteContent";
 import Users from "./Users";
 import { Complaints, Outcomes, Partnerships, Ranking } from "./Trust";
 import { clearToken, loadToken, saveToken } from "./session";
@@ -52,6 +53,7 @@ const MENU: { group: string; pages: Page[] }[] = [
   ] },
   { group: "Aloqa", pages: [
     { id: "groups", label: "Guruhlar", icon: "chat", limited: [M] },
+    { id: "site", label: "Sayt kontenti", icon: "globe" },
     { id: "announcements", label: "E'lonlar (bot)", icon: "send" },
     { id: "bot", label: "Telegram bot", icon: "chat", ownerOnly: true },
     { id: "ai", label: "AI yordamchi", icon: "spark" },
@@ -157,6 +159,7 @@ export default function AdminSite() {
             {current.id === "groups" && <GroupsAdmin />}
             {current.id === "challenges" && <ChallengesAdmin />}
             {current.id === "announcements" && <div className="narrow"><Announcements /></div>}
+            {current.id === "site" && <div className="narrow"><SiteContent /></div>}
             {current.id === "bot" && <div className="narrow"><BotCard /></div>}
             {current.id === "ai" && <div className="narrow"><AiCard canEdit={me.is_owner} /><AiConversations /></div>}
             {current.id === "reports" && <div className="narrow"><ExportCard /></div>}

@@ -7,7 +7,8 @@ from tests.test_pipeline_and_inbox import API, applied_student, live_job, move
 async def test_public_pages_need_no_sign_in_and_hide_private_company_data(client, make_user):
     hr, job = await live_job(client, make_user)
     stats = (await client.get(f"{API}/public/stats")).json()
-    assert stats["jobs"] == 1 and stats["companies"] == 1 and stats["universities"] >= 25
+    # the sign-up catalogue of universities and unverified students are not "ours" yet
+    assert stats == {"jobs": 1, "companies": 1, "students": 0, "universities": 0}
 
     page = (await client.get(f"{API}/public/jobs", params={"q": "analitik"})).json()
     assert page["total"] == 1 and page["items"][0]["company_name"] == "Data Solutions MChJ"

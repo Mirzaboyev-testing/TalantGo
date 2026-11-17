@@ -159,6 +159,28 @@ export interface AdminCompany extends Company {
   contact: { full_name: string; job_title: string; phone: string; email: string | null; username: string | null } | null;
 }
 export interface PublicStats { jobs: number; companies: number; students: number; universities: number }
+
+// ---- the public website's own content (managed in admin → Sayt)
+export type SiteImageSlot = "hero" | "students" | "about";
+export const CONTACT_FIELDS = ["email", "phone", "address", "telegram", "instagram", "linkedin", "facebook", "youtube"] as const;
+export type SiteContacts = Partial<Record<(typeof CONTACT_FIELDS)[number], string>>;
+export interface SitePartner { id: number; kind: "company" | "university"; name: string; website: string | null; logo_url: string | null; short: string }
+export interface TeamMember { id: number; full_name: string; role: string; role_ru: string; role_en: string; link: string | null; photo_url: string | null }
+export interface PublicSiteContent { partners: SitePartner[]; team: TeamMember[]; images: Record<SiteImageSlot, string | null>; contacts: SiteContacts }
+export interface AdminSitePartner extends SitePartner {
+  company_id: number | null; university_id: number | null; logo_media_id: number | null; is_visible: boolean; position: number; linked_name: string | null;
+}
+export interface AdminTeamMember extends TeamMember { photo_media_id: number | null; is_visible: boolean; position: number }
+export interface AdminSiteContent {
+  partners: AdminSitePartner[]; team: AdminTeamMember[]; contacts: SiteContacts;
+  images: Record<SiteImageSlot, { media_id: number | null; url: string | null }>;
+}
+export interface PartnerInput {
+  kind: "company" | "university"; name: string; website: string | null; company_id: number | null; university_id: number | null;
+  logo_media_id: number | null; is_visible: boolean;
+}
+export interface TeamInput { full_name: string; role: string; role_ru: string; role_en: string; link: string | null; photo_media_id: number | null; is_visible: boolean }
+export interface SiteChoice { id: number; name: string; short?: string; logo_url: string | null }
 export interface StudentDashboard {
   applications: Record<string, number>; active_applications: number;
   interviews: { application_id: number; job: string; company: string; at: string | null; place: string }[];
@@ -374,6 +396,22 @@ async function uploadFile(file: File): Promise<SubmittedFile> {
   return data as SubmittedFile;
 }
 
+/** An image for the public website (partner logo, team photo, page photo), uploaded by an admin. */
+async function uploadSiteMedia(file: File): Promise<{ id: number; url: string }> {
+  const body = new FormData();
+  body.append("file", file);
+  let resp: Response;
+  try {
+    resp = await fetch("/api/v1/admin/site/media", { method: "POST", body, headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : {} });
+  } catch {
+    throw new ApiError(0, "Internet aloqasi yo'q");
+  }
+  const data = resp.headers.get("content-type")?.includes("json") ? await resp.json() : null;
+  if (resp.status === 401) onAdminUnauthorized();
+  if (!resp.ok) throw new ApiError(resp.status, resp.status === 413 ? "Rasm juda katta" : describe(data?.detail));
+  return data as { id: number; url: string };
+}
+
 export const absoluteUrl = (url: string) => new URL(url, window.location.origin).href;
 export function fileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -468,6 +506,7 @@ export const api = {
     universities: (q = "") => request<{ items: PublicUniversity[]; total: number }>("GET", `/public/universities${q ? `?q=${encodeURIComponent(q)}` : ""}`),
     ranking: () => request<{ published: RankingSnapshot | null; live: { method: RankingMethod; rows: RankingRow[]; computed_at: string } }>("GET", "/public/ranking"),
     university: (id: number) => request<UniversityProfile>("GET", `/public/universities/${id}`),
+    site: () => request<PublicSiteContent>("GET", "/public/site"),
   },
   apply: (id: number, note: string) => request<MyApplication>("POST", `/jobs/${id}/apply`, { note }),
   myApplications: () => request<MyApplication[]>("GET", "/me/applications"),
@@ -690,6 +729,22 @@ export const api = {
     universities: () => request<(University & { is_active: boolean; students: number })[]>("GET", "/admin/universities", undefined, true),
     addUniversity: (u: { name: string; short_name: string; city: string }) => request<University>("POST", "/admin/universities", u, true),
     editUniversity: (id: number, changes: Partial<University & { is_active: boolean }>) => request<University>("PATCH", `/admin/universities/${id}`, changes, true),
+    site: {
+      get: () => request<AdminSiteContent>("GET", "/admin/site", undefined, true),
+      choices: (kind: "company" | "university", q: string) =>
+        request<SiteChoice[]>("GET", `/admin/site/choices?${new URLSearchParams({ kind, q })}`, undefined, true),
+      upload: uploadSiteMedia,
+      addPartner: (p: PartnerInput) => request<AdminSitePartner>("POST", "/admin/site/partners", p, true),
+      editPartner: (id: number, p: PartnerInput) => request<AdminSitePartner>("PUT", `/admin/site/partners/${id}`, p, true),
+      deletePartner: (id: number) => request<unknown>("DELETE", `/admin/site/partners/${id}`, undefined, true),
+      orderPartners: (ids: number[]) => request<unknown>("PUT", "/admin/site/partners/order", { ids }, true),
+      addMember: (m: TeamInput) => request<AdminTeamMember>("POST", "/admin/site/team", m, true),
+      editMember: (id: number, m: TeamInput) => request<AdminTeamMember>("PUT", `/admin/site/team/${id}`, m, true),
+      deleteMember: (id: number) => request<unknown>("DELETE", `/admin/site/team/${id}`, undefined, true),
+      orderTeam: (ids: number[]) => request<unknown>("PUT", "/admin/site/team/order", { ids }, true),
+      saveSettings: (images: Partial<Record<SiteImageSlot, number | null>>, contacts: SiteContacts) =>
+        request<AdminSiteContent>("PUT", "/admin/site/settings", { images, contacts }, true),
+    },
   },
 };
 

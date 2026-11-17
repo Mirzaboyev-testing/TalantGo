@@ -4,6 +4,7 @@ import { university } from "./parts/university";
 import { partner } from "./parts/partner";
 import { student } from "./parts/student";
 import { student2 } from "./parts/student2";
+import { site } from "./parts/site";
 
 // English. Machine-assisted: review before a public launch.
 export const en: Record<MsgKey, string> = {
@@ -12,6 +13,7 @@ export const en: Record<MsgKey, string> = {
   ...partner.en,
   ...company.en,
   ...university.en,
+  ...site.en,
   "common.loading": "Loading…",
   "common.close": "Close",
   "common.save": "Save",
@@ -137,7 +139,7 @@ export const en: Record<MsgKey, string> = {
   "pub.hero.search_btn": "Search",
   "pub.panels.title": "Who are you?",
   "pub.panel.student.title": "Student panel",
-  "pub.panel.student.text": "A roadmap, a verified portfolio, company tasks, internships and jobs",
+  "pub.panel.student.text": "Company tasks, vacancies, a verified portfolio and CV",
   "pub.panel.company.title": "Company panel",
   "pub.panel.company.text": "Jobs, candidates and hiring stages, tasks for students",
   "pub.panel.university.title": "University panel",
@@ -158,7 +160,7 @@ export const en: Record<MsgKey, string> = {
   "pub.hero.point2": "Telegram app and website",
   "pub.hero.point3": "In Uzbek, Russian and English",
   "pub.art.cv": "Verified CV",
-  "pub.art.path": "Career path",
+  "pub.art.path": "Company task",
   "pub.art.task_ok": "Task confirmed",
   "pub.art.task_ok_sub": "AI, peers and a mentor",
   "pub.art.offer": "Internship offer",
@@ -168,7 +170,7 @@ export const en: Record<MsgKey, string> = {
   "pub.how.1.title": "A company states its needs",
   "pub.how.1.text": "It posts a vacancy and a practical task",
   "pub.how.2.title": "Students prepare",
-  "pub.how.2.text": "They complete weekly tasks on their career path",
+  "pub.how.2.text": "They complete company tasks and, if they like, a weekly programme",
   "pub.how.3.title": "Work gets checked",
   "pub.how.3.text": "First AI, then peers and a mentor confirm it",
   "pub.how.4.title": "The best get hired",
@@ -238,7 +240,7 @@ export const en: Record<MsgKey, string> = {
   "login.tab.talaba": "Student",
   "login.tab.korxona": "Company",
   "login.tab.universitet": "University",
-  "login.points.student.1": "A career path and weekly tasks for your field",
+  "login.points.student.1": "Real tasks and vacancies from companies",
   "login.points.student.2": "A CV that lists only confirmed work",
   "login.points.student.3": "Internships and job offers from companies",
   "login.points.company.1": "Post vacancies and practical tasks",
