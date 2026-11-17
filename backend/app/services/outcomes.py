@@ -32,6 +32,7 @@ def record_hire(session: AsyncSession, app: Application) -> None:
         student_id=app.user_id, university_id=app.user.university_id, company_id=app.job.company_id,
         company_name=app.job.company.name, position=app.job.title, kind=JOB_KIND_TO_OUTCOME.get(app.job.kind, "full_time"),
         started_on=date.today(), source="application", application_id=app.id, confirmed=True, confirmed_by="company"))
+    app.user.portfolio_n = (app.user.portfolio_n or 0) + 1          # recomputed on start (core/upgrades.py)
 
 
 def counts(o: EmploymentOutcome) -> bool:

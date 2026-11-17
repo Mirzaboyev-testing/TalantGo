@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { t, tMaybe, useLang } from "../../i18n";
+import { formatDateTime, t, tMaybe, useLang } from "../../i18n";
 import { attemptStatusLabel, courseText, verificationLabel } from "../../labels";
 import { kindLabel } from "../../format";
 import { navigate, useSearch } from "../../router";
@@ -9,6 +9,7 @@ import { haptic, openAfter, openLink } from "../../tg";
 import { Avatar, ErrorText, Sheet, message, toast } from "../../ui";
 import { Icon } from "../../icons";
 import { EmptyState, PageHead } from "./kit";
+import { TrustBadge } from "../student/StudentProfile";
 
 /** Opens the signed PDF link; in Telegram it opens in the phone's browser, which saves the file. */
 export async function downloadCv(studentId: number): Promise<void> {
@@ -216,6 +217,35 @@ export function StudentSheet({ id, catalog, onClose, onTest }: {
             {s.languages.length > 0 && <div className="hint" style={{ marginTop: 6 }}>{t("p.sheet.languages", { list: s.languages.join(", ") })}</div>}
             {s.bio && <p style={{ whiteSpace: "pre-line" }}>{s.bio}</p>}
           </div>
+          {(s.cv.experience?.length ?? 0) > 0 && (
+            <div className="card">
+              <b>{t("st.pf.tab.experience")}</b>
+              {s.cv.experience!.map((o) => (
+                <div key={o.id} style={{ marginTop: 8 }}>
+                  <div className="row between" style={{ gap: 8 }}><span>{o.position || o.company}</span><TrustBadge trust={o.trust ?? "self"} /></div>
+                  <div className="hint">{[o.company, o.started_on && `${formatDateTime(o.started_on, false)} — ${o.ended_on ? formatDateTime(o.ended_on, false) : t("st.pf.now")}`].filter(Boolean).join(" · ")}</div>
+                  {o.description && <div className="hint" style={{ whiteSpace: "pre-line" }}>{o.description}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+          {((s.cv.projects?.length ?? 0) > 0 || (s.cv.certificates?.length ?? 0) > 0) && (
+            <div className="card">
+              <b>{t("st.pf.tab.portfolio")}</b>
+              {[...(s.cv.projects ?? []), ...(s.cv.certificates ?? [])].map((p) => (
+                <div key={p.id} className="row" style={{ marginTop: 10, gap: 10, alignItems: "flex-start" }}>
+                  {p.cover_url ? <img src={p.cover_url} alt="" style={{ width: 72, height: 54, objectFit: "cover", borderRadius: 8, flex: "none" }} />
+                    : <span className="st-cert-icon" style={{ width: 40, height: 40 }}><Icon name={p.kind === "certificate" ? "award" : "grid"} size={18} /></span>}
+                  <div className="grow" style={{ minWidth: 0 }}>
+                    <div className="row between" style={{ gap: 8 }}><span>{p.title}</span><TrustBadge trust="self" /></div>
+                    <div className="hint">{[p.org, p.date_from && formatDateTime(p.date_from, false)].filter(Boolean).join(" · ")}</div>
+                    {p.description && <div className="hint co-clamp">{p.description}</div>}
+                    {p.link && <a href={p.link} target="_blank" rel="noreferrer" onClick={(e) => { e.preventDefault(); openLink(p.link); }}>{t("p.sheet.view_work")}</a>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {s.cv.achievements.length > 0 && (
             <div className="card">
               <b>{t("p.sheet.verified_works")}</b>

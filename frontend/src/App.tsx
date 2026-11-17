@@ -5,6 +5,8 @@ import { message } from "./ui";
 import Onboarding from "./screens/Onboarding";
 import StudentSignup from "./screens/student/StudentSignup";
 import TasksHub from "./screens/student/TasksHub";
+import StudentProfile from "./screens/student/StudentProfile";
+import StudentSettings from "./screens/student/StudentSettings";
 import "./screens/student/student.css";
 import PeersScreen from "./screens/Peers";
 import LeaderboardScreen from "./screens/Leaderboard";
@@ -38,12 +40,12 @@ const storeToken = (t: string) => { try { localStorage.setItem(TOKEN_KEY, t); } 
 const storedToken = () => { try { return localStorage.getItem(TOKEN_KEY) ?? ""; } catch { return ""; } };
 const forgetToken = () => { try { localStorage.removeItem(TOKEN_KEY); } catch { /* storage blocked */ } };
 
-type Tab = "home" | "jobs" | "applications" | "tasks" | "university" | "community" | "profile";
+type Tab = "home" | "jobs" | "applications" | "tasks" | "university" | "community" | "profile" | "settings";
 // /talaba/<segment>. Student panel v2 (2026-11-17): applications and tasks have their own sections;
 // the older /talaba/yol and /talaba/tekshirish open "Topshiriqlar", /talaba/saqlangan the saved jobs
 const STUDENT_TABS: Record<Tab, string> = {
   home: "", jobs: "vakansiyalar", applications: "arizalar", tasks: "topshiriqlar", university: "universitetim",
-  community: "hamjamiyat", profile: "profil",
+  community: "hamjamiyat", profile: "profil", settings: "sozlamalar",
 };
 let joinHandled = false;
 type AuthState = { kind: "loading" } | { kind: "login"; dev: boolean } | { kind: "error"; text: string } | { kind: "ok" };
@@ -219,6 +221,7 @@ function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
     { id: "university", icon: "school", label: t("nav.student.university"), group: mine },
     { id: "community", icon: "users", label: t("nav.student.community"), badge: unread, group: mine },
     { id: "profile", icon: "user", label: t("st.nav.profile"), group: mine },
+    { id: "settings", icon: "settings", label: t("st.nav.settings"), bottom: true },
   ];
   const subtitle = seeker ? me.headline || [me.university_ref?.short_name, me.course ? courseText(me.course) : ""].filter(Boolean).join(" · ")
     : t("nav.student.mentor");
@@ -246,8 +249,9 @@ function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
           {communityView === "top" && <LeaderboardScreen />}
         </div>
       )}
-      {tab === "profile" && <div className="st-legacy"><ProfileScreen me={me} onSaved={setMe}
-                                                                     onChangeTrack={seeker ? () => navigate("/talaba/yol") : onChangeTrack} /></div>}
+      {tab === "profile" && (seeker ? <StudentProfile me={me} onSaved={setMe} />
+        : <div className="st-legacy"><ProfileScreen me={me} onSaved={setMe} onChangeTrack={onChangeTrack} /></div>)}
+      {tab === "settings" && <StudentSettings me={me} onSaved={setMe} onLogout={onLogout} />}
     </Shell>
   );
 }

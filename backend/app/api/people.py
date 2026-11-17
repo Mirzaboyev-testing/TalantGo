@@ -12,6 +12,7 @@ from ..schemas import (CompanyOut, EmployerSignupIn, LeaderboardOut, LeaderRow, 
 from ..core import ratelimit
 from ..services import files, inbox, notify
 from ..services.career import completeness, signup_missing
+from ..services.portfolio import media_url
 from ..services.catalog import CONSENT_VERSION, as_dict as catalog_dict
 from ..core.security import read_token
 from ..services import cv_pdf
@@ -44,6 +45,8 @@ async def me_out(session: Session, user: User) -> MeOut:
         invited_count=await session.scalar(select(func.count()).select_from(User).where(User.referred_by_id == user.id)),
         completeness=completeness(user), consent_current=user.consent_version >= CONSENT_VERSION,
         work_industries=user.work_industries, job_fields=user.job_fields, job_title=user.job_title,
+        cover_url=media_url(user.cover_file_id), has_photo_upload=user.avatar_file_id is not None,
+        portfolio_n=user.portfolio_n or 0,
         signup_missing=signup_missing(user),
         email=user.email, has_password=bool(user.password_hash), has_telegram=user.telegram_id is not None,
         language=user.language, visible_to_employers=user.visible_to_employers,

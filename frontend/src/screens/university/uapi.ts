@@ -76,7 +76,7 @@ export interface UniProfile {
   id: number; name: string; short_name: string; city: string; region: string; description: string; website: string;
   telegram: string; social: string; email: string; phone: string; address: string; founded_year: number | null;
   students_total: number | null; cooperation: string[]; show_as_partner: boolean; logo_url: string | null;
-  mou: SubmittedFile | null; missing: string[];
+  mou: SubmittedFile | null; missing: string[]; faculties: string[];
 }
 
 export interface PartnerRow extends PartnershipRow { city: string; open_jobs: number; our_applicants: number; our_hires: number }

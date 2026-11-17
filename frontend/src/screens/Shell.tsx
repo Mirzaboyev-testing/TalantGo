@@ -7,7 +7,9 @@ import { Avatar, Sheet } from "../ui";
 import LangSwitch from "./LangSwitch";
 import NotificationBell from "./Notifications";
 
-export interface ShellTab<T extends string> { id: T; label: string; icon: IconName; badge?: number; group?: string }
+export interface ShellTab<T extends string> { id: T; label: string; icon: IconName; badge?: number; group?: string;
+  /** shown at the bottom of the sidebar, above the name card (e.g. settings) */
+  bottom?: boolean }
 
 const saveLanguage = (language: "uz" | "ru" | "en") => { api.updateMe({ language }).catch(() => {}); };
 
@@ -39,14 +41,23 @@ export default function Shell<T extends string>({ tabs, active, onChange, user, 
           <span className="brand-mark">T</span><span className="grow">TalantGo</span>
           {isWide && <NotificationBell />}
         </div>
-        {tabs.map((tab, i) => (
+        {tabs.filter((tab) => !tab.bottom).map((tab, i, list) => (
           <div key={tab.id} style={{ display: "contents" }}>
-            {tab.group && tab.group !== tabs[i - 1]?.group && <div className="side-group">{tab.group}</div>}
+            {tab.group && tab.group !== list[i - 1]?.group && <div className="side-group">{tab.group}</div>}
             <button className={`side-link ${active === tab.id ? "on" : ""}`} onClick={() => onChange(tab.id)}>
               <Icon name={tab.icon} />{tab.label}{tab.badge ? <span className="dot">{tab.badge}</span> : null}
             </button>
           </div>
         ))}
+        {tabs.some((tab) => tab.bottom) && (
+          <div className="side-bottom">
+            {tabs.filter((tab) => tab.bottom).map((tab) => (
+              <button key={tab.id} className={`side-link ${active === tab.id ? "on" : ""}`} onClick={() => onChange(tab.id)}>
+                <Icon name={tab.icon} />{tab.label}{tab.badge ? <span className="dot">{tab.badge}</span> : null}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="side-user">
           {user.square
             ? (user.photo ? <img className="avatar square" src={user.photo} alt="" /> : <div className="avatar square">{user.name.slice(0, 1).toUpperCase()}</div>)

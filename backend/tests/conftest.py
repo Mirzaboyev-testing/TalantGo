@@ -41,7 +41,10 @@ async def _ensure_database() -> None:
 async def fresh_db():
     await _ensure_database()
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        # a fresh schema instead of drop_all: drop_all fails on a database made by an older model version
+        # ("constraint fk_... does not exist" for use_alter foreign keys added since)
+        await conn.exec_driver_sql("DROP SCHEMA public CASCADE")
+        await conn.exec_driver_sql("CREATE SCHEMA public")
         await conn.run_sync(Base.metadata.create_all)
     async with SessionLocal() as session:
         await seed(session)

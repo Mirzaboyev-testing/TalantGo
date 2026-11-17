@@ -32,7 +32,9 @@ async def _upsert(session: Session, telegram_id: int, full_name: str, username: 
         session.add(user)
     else:
         # Telegram is the source of truth for username and photo, and for the name until the person edits it
-        user.username, user.photo_url = username, photo_url
+        user.username = username
+        if user.avatar_file_id is None:           # a photo uploaded on the profile wins
+            user.photo_url = photo_url
         if not user.name_set_by_user:
             user.full_name = full_name
     user.last_seen_at = datetime.now(UTC)

@@ -13,6 +13,7 @@ from ..core import ratelimit
 from ..services import applications, inbox
 from ..services.applications import company_staff_ids
 from ..services.career import JOB_KIND_LABEL, verified_work_count
+from ..services.portfolio import refresh_count
 from .deps import CurrentUser, Session
 
 router = APIRouter(tags=["jobs"])
@@ -253,11 +254,13 @@ class OutcomeIn(BaseModel):
     position: str = Field(default="", max_length=160)
     kind: Literal["full_time", "part_time", "internship", "dual_education"]
     started_on: date | None = None
+    ended_on: date | None = None
+    description: str = Field(default="", max_length=2000)
 
 
 def my_outcome_out(o: EmploymentOutcome) -> dict:
-    return {"id": o.id, "company": o.company_name, "company_id": o.company_id, "position": o.position, "kind": o.kind,
-            "started_on": o.started_on, "source": o.source, "confirmed": o.confirmed, "confirmed_by": o.confirmed_by}
+    from ..services.portfolio import experience_out
+    return experience_out(o)
 
 
 @router.get("/me/university")
@@ -295,8 +298,12 @@ async def add_outcome(body: OutcomeIn, user: CurrentUser, session: Session) -> d
         raise HTTPException(422, "Korxona nomini yozing yoki ro'yxatdan tanlang")
     o = EmploymentOutcome(student_id=user.id, university_id=user.university_id, company_id=company.id if company else None,
                           company_name=name, position=body.position.strip(), kind=body.kind, started_on=body.started_on,
-                          source="self")
+                          ended_on=body.ended_on, description=body.description.strip(), source="self")
+    if body.started_on and body.ended_on and body.ended_on < body.started_on:
+        raise HTTPException(422, "Tugash sanasi boshlanishidan oldin bo'lmasin")
     session.add(o)
+    await session.flush()
+    await refresh_count(session, user)
     await session.commit()
     await session.refresh(o)
     if company:
@@ -314,4 +321,6 @@ async def delete_outcome(outcome_id: int, user: CurrentUser, session: Session) -
     if o.source == "application":
         raise HTTPException(409, "Platformadagi ishga olish yozuvini o'chirib bo'lmaydi")
     await session.delete(o)
+    await session.flush()
+    await refresh_count(session, user)
     await session.commit()

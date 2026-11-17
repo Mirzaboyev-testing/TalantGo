@@ -37,6 +37,7 @@ export interface Me {
   phone: string; phone_verified: boolean; show_phone: boolean; invite_code: string; invited_count: number; headline: string;
   completeness: { percent: number; missing: string[] };
   consent_current: boolean; work_industries: string[]; job_fields: string[]; job_title: string; signup_missing: string[];
+  cover_url?: string | null; has_photo_upload?: boolean; portfolio_n?: number;
   email: string | null; has_password: boolean; has_telegram: boolean;
   language: "uz" | "ru" | "en"; visible_to_employers: boolean;
 }
@@ -85,6 +86,7 @@ export interface CvData {
   achievements: { task: string; track: string; level_label: string; points: number; proof_url: string; mentor_comment: string | null;
                   verified_by: { name: string; kind: string }[] }[];
   challenges: { title: string; place: number | null; score: number | null }[];
+  experience?: MyOutcome[]; projects?: PortfolioItem[]; certificates?: PortfolioItem[]; cover_url?: string | null;
 }
 export interface StudentDetail extends StudentRow {
   cv: CvData; phone: string | null; contact_status: string | null; applied: boolean;
@@ -199,7 +201,22 @@ export interface UniversityProfile {
 }
 export interface PublicUniversity { id: number; name: string; short_name: string; city: string; region: string; students: number; partners: number }
 export interface OutcomeRequest { id: number; student: string; university: string | null; position: string; kind: OutcomeKind; started_on: string | null; created_at: string }
-export interface MyOutcome { id: number; company: string; company_id: number | null; position: string; kind: OutcomeKind; started_on: string | null; source: string; confirmed: boolean; confirmed_by: string }
+export interface MyOutcome { id: number; company: string; company_id: number | null; position: string; kind: OutcomeKind; started_on: string | null; source: string; confirmed: boolean; confirmed_by: string;
+  ended_on?: string | null; description?: string; trust?: Trust }
+/** Student panel v2: who stands behind a profile entry. */
+export type Trust = "platform" | "company" | "university" | "self";
+export interface PortfolioFile { id: number; name: string; mime: string; size: number; url: string }
+export interface PortfolioItem {
+  id: number; kind: "project" | "certificate"; title: string; org: string; date_from: string | null; date_to: string | null;
+  description: string; link: string; credential_id: string; skills: string[]; trust: Trust; cover_id: number | null;
+  cover_url: string | null; files: PortfolioFile[];
+}
+export type PortfolioInput = Omit<PortfolioItem, "id" | "trust" | "cover_url" | "files"> & { file_ids: number[] };
+export interface VerifiedWork {
+  key: string; kind: "task" | "company_task" | "challenge"; title: string; by: string; level: string; date: string | null;
+  link: string; points: number; place: number | null; score?: number | null; trust: Trust;
+}
+export interface Portfolio { projects: PortfolioItem[]; certificates: PortfolioItem[]; experience: MyOutcome[]; verified: VerifiedWork[] }
 export interface Opportunity extends Job { partner: boolean; recommended: boolean; our_applicants: number }
 export type AdminRole = "owner" | "admin" | "moderator" | "analyst";
 export interface RankingRow {
@@ -417,7 +434,16 @@ export const api = {
   savedJobs: () => request<Job[]>("GET", "/me/saved-jobs"),
   studentDashboard: () => request<StudentDashboard>("GET", "/me/dashboard"),
   myUniversity: () => request<{ university: UniversityProfile | null; verified?: boolean; recommended: (Job & { note: string })[]; outcomes: MyOutcome[] }>("GET", "/me/university"),
-  addOutcome: (o: { company_id?: number | null; company_name: string; position: string; kind: OutcomeKind; started_on?: string | null }) =>
+  portfolio: () => request<Portfolio>("GET", "/me/portfolio"),
+  addPortfolio: (item: PortfolioInput) => request<Portfolio>("POST", "/me/portfolio", item),
+  editPortfolio: (id: number, item: PortfolioInput) => request<Portfolio>("PUT", `/me/portfolio/${id}`, item),
+  deletePortfolio: (id: number) => request<Portfolio>("DELETE", `/me/portfolio/${id}`),
+  setPhoto: (file_id: number | null) => request<Me>("PUT", "/me/photo", { file_id }),
+  setCover: (file_id: number | null) => request<Me>("PUT", "/me/cover", { file_id }),
+  editOutcome: (id: number, changes: { position?: string; started_on?: string | null; ended_on?: string | null; description?: string }) =>
+    request<MyOutcome>("PATCH", `/me/outcomes/${id}`, changes),
+  addOutcome: (o: { company_id?: number | null; company_name: string; position: string; kind: OutcomeKind; started_on?: string | null;
+                    ended_on?: string | null; description?: string }) =>
     request<MyOutcome>("POST", "/me/outcomes", o),
   deleteOutcome: (id: number) => request<null>("DELETE", `/me/outcomes/${id}`),
   complain: (c: { target_kind: "job" | "company" | "task" | "user"; target_id: number; reason: string; text: string }) =>

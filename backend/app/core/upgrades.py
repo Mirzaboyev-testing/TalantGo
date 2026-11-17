@@ -150,6 +150,17 @@ STATEMENTS = [
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS job_fields varchar(24)[] NOT NULL DEFAULT '{}'",
     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS job_fields varchar(24)[] NOT NULL DEFAULT '{}'",
     "ALTER TABLE universities ADD COLUMN IF NOT EXISTS faculties varchar(120)[] NOT NULL DEFAULT '{}'",
+    # student panel v2, phase 2: photo, cover, experience details, files kept on the profile, portfolio count
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_file_id integer REFERENCES submission_files(id) ON DELETE SET NULL",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS cover_file_id integer REFERENCES submission_files(id) ON DELETE SET NULL",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS portfolio_n integer NOT NULL DEFAULT 0",
+    "ALTER TABLE employment_outcomes ADD COLUMN IF NOT EXISTS ended_on date",
+    "ALTER TABLE employment_outcomes ADD COLUMN IF NOT EXISTS description text NOT NULL DEFAULT ''",
+    "ALTER TABLE submission_files ADD COLUMN IF NOT EXISTS kept boolean NOT NULL DEFAULT false",
+    # the count is recomputed on every start, so it heals if a write path ever missed it
+    "UPDATE users u SET portfolio_n = (SELECT count(*) FROM portfolio_items p WHERE p.user_id = u.id) "
+    "+ (SELECT count(*) FROM employment_outcomes o WHERE o.student_id = u.id) "
+    "WHERE u.account_type = 'student'",
 ]
 
 

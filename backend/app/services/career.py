@@ -16,17 +16,23 @@ WORK_MODE_LABEL = {"office": "Ofisda", "remote": "Masofaviy", "hybrid": "Aralash
 
 
 def completeness(user: User) -> dict:
-    """What is still missing before employers can find the student. Drives the profile checklist."""
+    """What is still missing before employers can find the student. Drives the profile checklist.
+    Student panel v2 (phase 2): photo, headline, about, portfolio added. The sign-up fields count too, so a new
+    profile starts near half (a started bar is finished more often than an empty one)."""
     checks = {
         "university": user.university_id is not None,
         "faculty": bool(user.faculty),
         "course": user.course is not None,
+        "phone": bool(user.phone),
         "job_fields": bool(user.job_fields),
+        "job_types": bool(user.job_types),
+        "photo": bool(user.photo_url),
+        "headline": len(user.headline.strip()) >= 5,
+        "bio": len(user.bio.strip()) >= 30,
         "skills": len(user.skills) >= 3,
         "languages": bool(user.languages),
-        "job_types": bool(user.job_types),
+        "portfolio": (user.portfolio_n or 0) > 0,
         "verification": user.verification in ("pending", "verified"),
-        "phone": bool(user.phone),
     }
     return {"percent": round(100 * sum(checks.values()) / len(checks)), "missing": [k for k, ok in checks.items() if not ok]}
 

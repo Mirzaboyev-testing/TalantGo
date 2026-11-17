@@ -56,6 +56,7 @@ function ProfileForm() {
         description: p.description, website: p.website || undefined, city: p.city, region: p.region, telegram: p.telegram,
         social: p.social, email: p.email, phone: p.phone, address: p.address, founded_year: p.founded_year,
         students_total: p.students_total, cooperation: p.cooperation, show_as_partner: p.show_as_partner,
+        faculties: p.faculties,
         ...(logo ? { logo_id: logo.id } : {}), ...(mou ? { mou_id: mou.id } : {}),
       });
       setP(saved); setLogo(null); setMou(null);
@@ -114,6 +115,9 @@ function ProfileForm() {
           <FileDrop file={mou} hint={t("u.su.mou_hint")} onFile={setMou} />
           <label className="u-check-line"><input type="checkbox" checked={p.show_as_partner} onChange={(e) => setP({ ...p, show_as_partner: e.target.checked })} />
             <span>{t("u.su.show_partner")}</span></label>
+        </Panel>
+        <Panel title={t("u.pr.fac")} icon="school" sub={t("u.pr.fac_sub")}>
+          <FacultyEditor value={p.faculties ?? []} onChange={(faculties) => setP({ ...p, faculties })} />
         </Panel>
         <ErrorText error={error} />
         <div className="save-bar"><button className="btn" disabled={busy} onClick={save}>{busy ? t("p.common.saving") : t("common.save")}</button></div>
@@ -270,5 +274,36 @@ function Invite({ me }: { me: Me }) {
         </ol>
       </Panel>
     </div>
+  );
+}
+
+/** The faculty list students pick from at sign-up (student panel v2): add, remove; saved with the profile. */
+function FacultyEditor({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  useLang();
+  const [name, setName] = useState("");
+  const clean = name.trim().replace(/\s+/g, " ");
+  const add = () => {
+    if (clean.length < 2 || value.some((x) => x.toLowerCase() === clean.toLowerCase())) return;
+    onChange([...value, clean]);
+    setName("");
+  };
+  return (
+    <>
+      {value.length === 0 ? <p className="hint" style={{ marginTop: 0 }}>{t("u.pr.fac_empty")}</p>
+        : <div className="hint" style={{ marginBottom: 8 }}>{t("u.pr.fac_n", { n: value.length })}</div>}
+      <div className="chips">
+        {value.map((x) => (
+          <span key={x} className="chip on" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {x}
+            <button type="button" className="link-btn" aria-label={t("u.pr.fac_remove")} title={t("u.pr.fac_remove")}
+                    style={{ padding: 0, lineHeight: 1 }} onClick={() => onChange(value.filter((y) => y !== x))}>×</button>
+          </span>
+        ))}
+      </div>
+      <form className="row" style={{ marginTop: 10, gap: 8 }} onSubmit={(e) => { e.preventDefault(); add(); }}>
+        <input className="grow" value={name} maxLength={120} placeholder={t("u.pr.fac_add")} onChange={(e) => setName(e.target.value)} />
+        <button className="btn small" type="submit" style={{ width: "auto" }} disabled={clean.length < 2 || value.length >= 60}>{t("u.pr.fac_add_btn")}</button>
+      </form>
+    </>
   );
 }

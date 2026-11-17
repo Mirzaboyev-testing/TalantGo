@@ -32,6 +32,11 @@
   .badge.mentor_verified { background:#fff3dc; color:var(--gold); }
   .meta { color:var(--muted); font-size:13px; margin-top:4px; }
   .meta a { color:var(--accent); }
+  .badge.self { background:#f1f3f2; color:var(--muted); }
+  .badge.company { background:#e8f5ee; color:var(--ok); }
+  .cover { height:150px; border-radius:14px; background:#dcefe3 center/cover no-repeat; margin-bottom:-40px; }
+  .shots { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .shots img { width:120px; height:90px; object-fit:cover; border-radius:8px; border:1px solid var(--line); }
   blockquote { margin:8px 0 0; padding:6px 12px; border-left:3px solid var(--gold); color:var(--muted); font-size:14px; }
   .empty { color:var(--muted); }
   footer { margin-top:32px; color:var(--muted); font-size:13px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
@@ -42,6 +47,7 @@
 </head>
 <body>
 <main>
+  {% if cv.cover_url %}<div class="cover" style="background-image:url('{{ cv.cover_url }}')"></div>{% endif %}
   <header>
     {% if cv.photo_url %}<img class="avatar" src="{{ cv.photo_url }}" alt="">
     {% else %}<div class="avatar">{{ cv.full_name[:1] }}</div>{% endif %}
@@ -70,6 +76,44 @@
   {% if cv.bio %}<h2>O'zim haqimda</h2><p class="bio">{{ cv.bio }}</p>{% endif %}
   {% if cv.skills %}<h2>Ko'nikmalar</h2><div class="tags">{% for g in cv.skills %}<span>{{ g }}</span>{% endfor %}</div>{% endif %}
   {% if cv.languages %}<h2>Tillar</h2><div class="tags">{% for g in cv.languages %}<span>{{ g }}</span>{% endfor %}</div>{% endif %}
+
+  {% if cv.experience %}
+  <h2>Tajriba</h2>
+  {% for e in cv.experience %}
+  <article class="item">
+    <div class="item-head">
+      <h3>{{ e.position or e.company }}</h3>
+      <span class="badge {{ 'company' if e.trust == 'company' else 'self' }}">{% if e.trust == 'company' %}✓ Korxona tasdiqlagan{% elif e.trust == 'university' %}Universitet tasdiqlagan{% else %}O'zi kiritgan{% endif %}</span>
+    </div>
+    <div class="meta">{{ e.company }}{% if e.started_on %} · {{ e.started_on }} — {{ e.ended_on or "hozir" }}{% endif %}</div>
+    {% if e.description %}<p class="bio" style="margin:6px 0 0">{{ e.description }}</p>{% endif %}
+  </article>
+  {% endfor %}
+  {% endif %}
+
+  {% if cv.projects %}
+  <h2>Loyihalar</h2>
+  {% for p in cv.projects %}
+  <article class="item">
+    <div class="item-head"><h3>{{ p.title }}</h3><span class="badge self">O'zi kiritgan</span></div>
+    <div class="meta">{% if p.org %}{{ p.org }}{% endif %}{% if p.date_from %} · {{ p.date_from }}{% if p.date_to %} — {{ p.date_to }}{% endif %}{% endif %}{% if p.link %} · <a href="{{ p.link }}" rel="nofollow noopener" target="_blank">Havola</a>{% endif %}</div>
+    {% if p.description %}<p class="bio" style="margin:6px 0 0">{{ p.description }}</p>{% endif %}
+    {% if p.skills %}<div class="tags" style="margin-top:6px">{% for g in p.skills %}<span>{{ g }}</span>{% endfor %}</div>{% endif %}
+    {% set shots = [p.cover_url] if p.cover_url else [] %}
+    {% if shots %}<div class="shots">{% for u in shots %}<img src="{{ u }}" alt="">{% endfor %}</div>{% endif %}
+  </article>
+  {% endfor %}
+  {% endif %}
+
+  {% if cv.certificates %}
+  <h2>Sertifikatlar</h2>
+  {% for c in cv.certificates %}
+  <article class="item">
+    <div class="item-head"><h3>{{ c.title }}</h3><span class="badge self">O'zi kiritgan</span></div>
+    <div class="meta">{{ c.org }}{% if c.date_from %} · {{ c.date_from }}{% endif %}{% if c.credential_id %} · ID: {{ c.credential_id }}{% endif %}{% if c.link %} · <a href="{{ c.link }}" rel="nofollow noopener" target="_blank">Tekshirish</a>{% endif %}</div>
+  </article>
+  {% endfor %}
+  {% endif %}
 
   {% if cv.challenges %}
   <h2>Chellenjlar</h2>
@@ -104,7 +148,7 @@
   {% endfor %}
 
   <footer>
-    <span>TalantGo: har bir yozuv tengdoshlar yoki mentor tomonidan tasdiqlangan.</span>
+    <span>TalantGo: tasdiqlangan yozuvlar kim tasdiqlagani bilan ko'rsatilgan; «o'zi kiritgan» yozuvlarni talaba o'zi qo'shgan.</span>
     <button onclick="window.print()">PDF sifatida saqlash</button>
   </footer>
 </main>

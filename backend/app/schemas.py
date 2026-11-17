@@ -216,6 +216,9 @@ class MeOut(ORM):
     consent_current: bool = False
     work_industries: list[str] = []
     job_fields: list[str] = []
+    cover_url: str | None = None
+    has_photo_upload: bool = False
+    portfolio_n: int = 0
     job_title: str = ""
     signup_missing: list[str] = []
     email: str | None = None

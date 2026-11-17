@@ -44,11 +44,35 @@ export default function Universities() {
         <button className="btn small" style={{ marginTop: 8 }} disabled={f.name.trim().length < 3 || f.short_name.trim().length < 2} onClick={add}>Qo'shish</button>
       </div>
       {rows?.map((u) => (
-        <div key={u.id} className="card row between" style={u.is_active ? undefined : { opacity: 0.5 }}>
-          <div className="grow"><b>{u.short_name}</b> <span className="hint">{u.city}</span><div className="hint">{u.name} · {u.students} talaba</div></div>
-          <button className="btn small ghost" onClick={() => toggle(u)}>{u.is_active ? "Yashirish" : "Ko'rsatish"}</button>
+        <div key={u.id} className="card" style={u.is_active ? undefined : { opacity: 0.5 }}>
+          <div className="row between">
+            <div className="grow"><b>{u.short_name}</b> <span className="hint">{u.city}</span><div className="hint">{u.name} · {u.students} talaba</div></div>
+            <button className="btn small ghost" style={{ width: "auto" }} onClick={() => toggle(u)}>{u.is_active ? "Yashirish" : "Ko'rsatish"}</button>
+          </div>
+          <Faculties uni={u} onSaved={load} onError={setError} />
         </div>
       ))}
     </div>
+  );
+}
+
+/** The faculty list students pick from at sign-up: one per line (the university's staff can edit it too). */
+function Faculties({ uni, onSaved, onError }: { uni: Row; onSaved: () => void; onError: (e: string) => void }) {
+  const [text, setText] = useState((uni.faculties ?? []).join("\n"));
+  const [busy, setBusy] = useState(false);
+  const list = text.split("\n").map((x) => x.trim()).filter((x) => x.length >= 2);
+  async function save() {
+    setBusy(true);
+    try { await api.admin.editUniversity(uni.id, { faculties: list }); onSaved(); }
+    catch (e) { onError(message(e)); }
+    finally { setBusy(false); }
+  }
+  return (
+    <details style={{ marginTop: 8 }}>
+      <summary className="hint" style={{ cursor: "pointer" }}>Fakultetlar: {(uni.faculties ?? []).length} ta</summary>
+      <textarea value={text} rows={Math.min(14, Math.max(4, list.length + 1))} placeholder="Har qatorda bitta fakultet"
+                onChange={(e) => setText(e.target.value)} style={{ marginTop: 6 }} />
+      <button className="btn small" style={{ marginTop: 6, width: "auto" }} disabled={busy} onClick={save}>{busy ? "Saqlanmoqda…" : "Saqlash"}</button>
+    </details>
   );
 }

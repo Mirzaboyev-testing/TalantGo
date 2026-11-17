@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import false, func, select
 
 from ..models import (Application, ApplicationEvent, Challenge, ChallengeEntry, Company, ContactRequest, EmploymentOutcome,
                       Job, Partnership, Role, Status, Submission, SubmissionFile, Track, University, User)
@@ -614,9 +614,11 @@ async def universities_for_company(user: ApprovedEmployer, session: Session,
     if q and q.strip():
         like = f"%{q.strip()}%"
         query = query.where(University.name.ilike(like) | University.short_name.ilike(like))
-    rows = (await session.execute(query.order_by(students.desc(), University.name).limit(100))).all()
     mine = {p.university_id: p for p in (await session.execute(select(Partnership).where(
         Partnership.company_id == user.company_id))).scalars()}
+    # ~200 universities since 2026-11-17: the company's own partners always come first, then by verified students
+    partner_first = University.id.in_(list(mine)) if mine else false()
+    rows = (await session.execute(query.order_by(partner_first.desc(), students.desc(), University.name).limit(100))).all()
     return [{"id": u.id, "name": u.name, "short_name": u.short_name, "city": u.city, "students": n,
              "partnership": partnerships.out(mine[u.id]) if u.id in mine else None} for u, n in rows]
 

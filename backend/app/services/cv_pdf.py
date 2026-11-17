@@ -113,6 +113,29 @@ def render(cv: dict, extra: dict) -> bytes:
         doc.section("O'zi haqida")
         doc.para(cv["bio"], 10)
 
+    trust = {"company": "korxona tasdiqlagan", "university": "universitet tasdiqlagan", "self": "o'zi kiritgan"}
+    if cv.get("experience"):
+        doc.section("Tajriba")
+        for e in cv["experience"]:
+            doc.para(e.get("position") or e["company"], 10.5, True, gap=0.3)
+            when = f" · {e['started_on']} — {e.get('ended_on') or 'hozir'}" if e.get("started_on") else ""
+            doc.para(f"{e['company']}{when} · {trust.get(e.get('trust'), '')}", 9, color=GREY, gap=0.3)
+            if e.get("description"):
+                doc.para(e["description"], 9.5, gap=1.2)
+    if cv.get("projects"):
+        doc.section("Loyihalar (o'zi kiritgan)")
+        for p in cv["projects"]:
+            doc.para(p["title"] + (f" — {p['org']}" if p.get("org") else ""), 10.5, True, gap=0.3)
+            if p.get("description"):
+                doc.para(p["description"], 9.5, gap=0.3)
+            if p.get("link"):
+                doc.para(p["link"], 8.5, color=GREEN, gap=1.2)
+    if cv.get("certificates"):
+        doc.section("Sertifikatlar (o'zi kiritgan)")
+        for c in cv["certificates"]:
+            doc.para(f"{c['title']}" + (f", {c['org']}" if c.get("org") else "") + (f", {c['date_from']}" if c.get("date_from") else ""),
+                     10, gap=0.8)
+
     if cv.get("achievements"):
         doc.section("Tasdiqlangan ishlar")
         for a in cv["achievements"]:
@@ -133,8 +156,8 @@ def render(cv: dict, extra: dict) -> bytes:
 
     doc.ln(4)
     now = datetime.now(ZoneInfo("Asia/Tashkent")).strftime("%d.%m.%Y")
-    doc.para(f"TalantGo tomonidan {now} da yaratildi. Barcha ishlar tengdoshlar yoki mentor tomonidan tasdiqlangan.",
-             8, color=GREY)
+    doc.para(f"TalantGo tomonidan {now} da yaratildi. Tasdiqlangan yozuvlarda kim tasdiqlagani ko'rsatilgan; "
+             "«o'zi kiritgan» yozuvlarni talaba o'zi qo'shgan.", 8, color=GREY)
     return bytes(doc.output())
 
 

@@ -197,7 +197,6 @@ export default function StudentSignup({ me, onMe, onDone, onBack, onLogout }: {
                 <label style={{ marginTop: 0 }}>{t("s.onb.phone")}<Req /></label>
                 <PhoneField me={me} onChanged={(m) => { onMe(m); if (m.phone) clear("s-phone"); }} />
                 {errors["s-phone"] && <div className="field-error">{t("s.onb.phone_error")}</div>}
-                <div className="hint" style={{ marginTop: 6 }}>{t("st.su.phone_hint")}</div>
               </div>
             </>
           )}

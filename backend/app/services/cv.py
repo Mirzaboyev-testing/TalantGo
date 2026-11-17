@@ -42,7 +42,15 @@ async def build_cv(session: AsyncSession, user: User) -> dict:
                    "proof_url": e.proof_url, "date": e.reviewed_at.isoformat() if e.reviewed_at else None}
                   for e in wins]
 
+    # student panel v2: experience (companies confirm it), projects and certificates (self-declared, labelled so)
+    from .portfolio import media_url, portfolio
+    pf = await portfolio(session, user)
+
     return {
+        "experience": pf["experience"],
+        "projects": pf["projects"],
+        "certificates": pf["certificates"],
+        "cover_url": media_url(user.cover_file_id),
         "challenges": challenges,
         "full_name": user.full_name,
         "headline": user.headline,

@@ -248,6 +248,13 @@ class User(Base):
     language: Mapped[str] = mapped_column(String(5), default="uz", server_default="uz")         # uz / ru / en
     # the student can hide from the companies' named list; applications still share the profile
     visible_to_employers: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    # student panel v2, phase 2 (2026-11-17): an uploaded photo (photo_url then points to it and Telegram no longer
+    # overwrites it), a LinkedIn-style cover, and how many portfolio entries the profile has (for completeness)
+    avatar_file_id: Mapped[int | None] = mapped_column(ForeignKey("submission_files.id", ondelete="SET NULL",
+                                                                  use_alter=True, name="fk_users_avatar_file"))
+    cover_file_id: Mapped[int | None] = mapped_column(ForeignKey("submission_files.id", ondelete="SET NULL",
+                                                                 use_alter=True, name="fk_users_cover_file"))
+    portfolio_n: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -330,6 +337,8 @@ class SubmissionFile(Base):
     stored_name: Mapped[str] = mapped_column(String(64), unique=True)       # random name on disk
     mime: Mapped[str] = mapped_column(String(120))
     size: Mapped[int] = mapped_column(Integer)
+    # kept on the profile (photo, cover, portfolio): not a pending upload waiting for a submission
+    kept: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     submission: Mapped[Submission | None] = relationship(back_populates="files", lazy="raise")
@@ -516,6 +525,8 @@ class EmploymentOutcome(Base):
     position: Mapped[str] = mapped_column(String(160), default="")
     kind: Mapped[str] = mapped_column(String(16))
     started_on: Mapped[date | None] = mapped_column(Date)
+    ended_on: Mapped[date | None] = mapped_column(Date)                 # empty: still there (profile "Tajriba")
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
     source: Mapped[str] = mapped_column(String(12))
     application_id: Mapped[int | None] = mapped_column(ForeignKey("applications.id", ondelete="SET NULL"))
     confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -523,6 +534,31 @@ class EmploymentOutcome(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     student: Mapped[User] = relationship(lazy="selectin")
+
+
+PORTFOLIO_KINDS = ("project", "certificate")
+
+
+class PortfolioItem(Base):
+    """A project or a certificate the student adds to the profile (student panel v2). Self-declared: shown with an
+    "o'zi kiritgan" label, unlike work verified on the platform, which the portfolio adds on its own."""
+    __tablename__ = "portfolio_items"
+    __table_args__ = (_in("kind", PORTFOLIO_KINDS, "portfolio_kind_valid"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(12))
+    title: Mapped[str] = mapped_column(String(160))
+    org: Mapped[str] = mapped_column(String(160), default="")              # project: where / for whom; certificate: issuer
+    date_from: Mapped[date | None] = mapped_column(Date)                    # project start / certificate issue date
+    date_to: Mapped[date | None] = mapped_column(Date)                      # project end / certificate expiry
+    description: Mapped[str] = mapped_column(Text, default="")
+    link: Mapped[str] = mapped_column(String(512), default="")
+    credential_id: Mapped[str] = mapped_column(String(120), default="")
+    skills: Mapped[list[str]] = mapped_column(ARRAY(String(40)), default=list, server_default="{}")
+    cover_file_id: Mapped[int | None] = mapped_column(ForeignKey("submission_files.id", ondelete="SET NULL"))
+    file_ids: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Partnership(Base):

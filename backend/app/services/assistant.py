@@ -190,7 +190,7 @@ async def system_prompt(session: AsyncSession, user: User, ai_review_on: bool) -
 FIELD_LABEL = {
     "full_name": "ism va familiya", "phone": "telefon", "university": "universitet", "faculty": "fakultet / mutaxassislik",
     "course": "kurs", "group": "guruh", "track": "TalantGo yo'nalishi", "work_industries": "qaysi sohada ishlamoqchi",
-    "job_types": "ish turi", "consent": "rozilik", "job_title": "lavozim", "company": "kompaniya ma'lumotlari",
+    "job_types": "ish turi", "job_fields": "qaysi kasb yo'nalishlarida ishlay oladi", "consent": "rozilik", "job_title": "lavozim", "company": "kompaniya ma'lumotlari",
     "name": "kompaniya nomi", "legal_form": "kompaniya turi", "industry": "soha", "size": "xodimlar soni",
     "city": "viloyat / shahar", "stir": "STIR", "description": "kompaniya haqida",
 }

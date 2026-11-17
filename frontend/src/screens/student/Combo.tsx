@@ -46,7 +46,9 @@ const UNI_ALIASES: Record<string, string> = {
   QDU: "karakalpak каракалпак nukus",
 };
 
-export const uniItems = (unis: University[]): ComboItem[] => unis.map((u) => ({
+// with an empty search the best-known universities (those with a faculty list) come first, then the rest A–Z
+export const uniItems = (unis: University[]): ComboItem[] => [...unis].sort((a, b) =>
+  Number(Boolean(b.faculties?.length)) - Number(Boolean(a.faculties?.length)) || a.name.localeCompare(b.name)).map((u) => ({
   value: String(u.id),
   // a real abbreviation goes first ("TATU · ..."); universities without one carry a cut name there
   label: u.short_name && u.short_name !== u.name && u.short_name.length <= 16 ? `${u.short_name} · ${u.name}` : u.name,
