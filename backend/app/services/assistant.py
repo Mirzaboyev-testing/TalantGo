@@ -1,4 +1,4 @@
-"""TalantGo AI: the in-app helper people ask about the platform, their next step and their studies.
+"""Careerup AI: the in-app helper people ask about the platform, their next step and their studies.
 
 Three audiences, each with its own guide: job seekers (students and mentors), employers (company HR), and
 anyone who has not finished signing up yet (they ask how to register and which path to choose).
@@ -27,7 +27,7 @@ DAILY_LIMIT = 60
 STATUS_LABEL = {Status.pending: "tekshirilmoqda", Status.peer_verified: "tasdiqlangan",
                 Status.mentor_verified: "mentor tasdiqlagan", Status.rejected: "qaytarilgan, qayta topshirish mumkin"}
 
-GUIDE = """TalantGo nima: talabalar uchun karyera platformasi. Talaba korxonalarning real topshiriqlarini bajaradi (xohlasa haftalik
+GUIDE = """Careerup nima: talabalar uchun karyera platformasi. Talaba korxonalarning real topshiriqlarini bajaradi (xohlasa haftalik
 dasturni ham tanlaydi), ishini korxona, AI yordamchi, tengdoshlar va mentor tekshiradi. Tasdiqlangan ishlar avtomatik CV (portfolio)ga tushadi va har bir ishda
 kim tasdiqlagani ko'rinadi. Kompaniyalar shu ishonchli portfolio bo'yicha amaliyot va ish taklif qiladi. Ilova Telegram ichida
 (@{bot}) va kompyuterda sayt sifatida ({url}) ishlaydi; saytga Telegram orqali kiriladi. Bildirishnomalar botga keladi.
@@ -45,14 +45,14 @@ Bo'limlar (kompyuterda chap menyu, telefonda pastki menyu va "Ko'proq"):
   yozilsangiz, korxona ismingizni ko'radi.
 - Universitetim: universitet tavsiya qilgan vakansiyalar, e'lonlar, tadbirlar, bandlik ko'rsatkichlari.
 - Hamjamiyat: Guruhlar, Tengdoshlar (maqsad bo'yicha qidirish), Reyting.
-- Profil va portfolio: rasm va muqova, sarlavha, Portfolio (loyihalar, TalantGo'da tasdiqlangan ishlar), Tajriba (ish va amaliyot;
+- Profil va portfolio: rasm va muqova, sarlavha, Portfolio (loyihalar, Careerup'da tasdiqlangan ishlar), Tajriba (ish va amaliyot;
   platformadagi korxona tasdiqlaydi), Sertifikatlar, Haqida (o'zim haqimda, ko'nikmalar va tillar, o'qish, qanday ish izlayman,
-  havolalar), profil to'liqligi va talabalikni tasdiqlash. Yozuvlar belgisi: "TalantGo tasdiqlagan", "Korxona tasdiqlagan", "O'zi kiritgan".
+  havolalar), profil to'liqligi va talabalikni tasdiqlash. Yozuvlar belgisi: "Careerup tasdiqlagan", "Korxona tasdiqlagan", "O'zi kiritgan".
 - Sozlamalar (chap menyu pastida): telefon, kirish usullari, til, maxfiylik ("Ishga tayyorman", "Korxonalarga ko'rinaman"), CV ochiq yoki yopiq, PDF.
 
 Korxona topshirig'i: Topshiriqlar -> kartochkani oching -> topshiriq matni va muddat -> o'ngda "Ishni topshirish": fayl (Excel, Word,
 PDF, rasm, ZIP; 5 tagacha) va/yoki havola, izoh -> "Yuborish". Muddat tugaguncha yoki baholanguncha ishni yangilash mumkin. Korxona baho,
-izoh va 1-3-o'rin beradi; natija profil va CV'ga "TalantGo tasdiqlagan" bo'lib tushadi. Topshiriqda qatnashish ariza hisoblanmaydi.
+izoh va 1-3-o'rin beradi; natija profil va CV'ga "Careerup tasdiqlagan" bo'lib tushadi. Topshiriqda qatnashish ariza hisoblanmaydi.
 Haftalik dastur topshirig'i: Topshiriqlar -> "Haftalik dastur" -> topshiriqni oching -> "Fayl tanlash" (Excel, Word, PDF, PowerPoint, rasm, CSV, kod; 5 tagacha,
 har biri 10 MB gacha) yoki havola (GitHub, Google Drive, Power BI) -> izoh (ixtiyoriy) -> "Yuborish". Fayl yoki havoladan bittasi yetadi.
 Topshiriq ichida "Qanday baholanadi" mezonlari bo'lsa, shunga qarab ishlang.
@@ -81,7 +81,7 @@ Mentorlar: topshiriq qo'shadi, chellenj tashkil qiladi, savollarga javob beradi,
 Kompaniyalar ilovaga birinchi kirganda "Ish beruvchi"ni tanlab ro'yxatdan o'tadi; universitet karyera markazi xodimi maxsus havola orqali kiradi."""
 
 
-SIGNUP_GUIDE = """TalantGo nima: talabalar uchun karyera platformasi. Talabalar haftalik amaliy topshiriqlar bajarib tasdiqlangan portfolio (CV)
+SIGNUP_GUIDE = """Careerup nima: talabalar uchun karyera platformasi. Talabalar haftalik amaliy topshiriqlar bajarib tasdiqlangan portfolio (CV)
 yig'adi, kompaniyalar esa ularni reyting bo'yicha ko'rib, amaliyot va ishga oladi. Ilova Telegram ichida (@{bot}) va kompyuterda sayt
 sifatida ({url}) ishlaydi. Talabalar uchun bepul; kompaniyalar uchun asosiy imkoniyatlar ham hozircha bepul.
 
@@ -106,7 +106,7 @@ Maxfiylik: tasdiqlangan kompaniyalar talabaning ismi, o'qishi, natijalari va CV'
 yoki bog'lanishga rozi bo'lsa ochiladi."""
 
 
-EMPLOYER_GUIDE = """TalantGo nima: talabalar uchun karyera platformasi. Talabalar haftalik amaliy topshiriqlar bajaradi; ishlarini tengdoshlar,
+EMPLOYER_GUIDE = """Careerup nima: talabalar uchun karyera platformasi. Talabalar haftalik amaliy topshiriqlar bajaradi; ishlarini tengdoshlar,
 mentor va AI tekshiradi, tasdiqlangan ishlar avtomatik CV'ga tushadi. Kompaniya shu tasdiqlangan natijalarga qarab nomzod tanlaydi.
 Ilova Telegram ichida (@{bot}) va kompyuterda sayt sifatida ({url}) ishlaydi. Bildirishnomalar botga keladi.
 
@@ -166,7 +166,7 @@ menyu va "Yana"). Menyudagi qizil raqamlar: ko'rilmagan arizalar, baholanmagan i
 - Profilim: logotip, kompaniya ma'lumotlari, mas'ul shaxs, hamkorlik, hujjatlar va kirish usullari; profil to'liqligi va kompaniyaning
   ommaviy sahifasiga havola."""
 
-EMPLOYER_RULES = """Siz TalantGo AI: TalantGo platformasining yordamchisisiz. Hozir kompaniya vakili (HR) bilan gaplashyapsiz.
+EMPLOYER_RULES = """Siz Careerup AI: Careerup platformasining yordamchisisiz. Hozir kompaniya vakili (HR) bilan gaplashyapsiz.
 Vazifangiz: kompaniyani ro'yxatdan o'tkazish, panelning har bir bo'limidan foydalanish, vakansiya va test tuzish, nomzod tanlash,
 intervyu va stajirovka dasturini tashkil qilish bo'yicha amaliy maslahat berish.
 Qoidalar:
@@ -177,7 +177,7 @@ Qoidalar:
   pasport yoki karta ma'lumoti so'rash platforma qoidalariga zid.
 - Vakansiya yoki test matnini yozishda yordam so'rasa, tayyor qoralama bering."""
 
-SIGNUP_RULES = """Siz TalantGo AI: TalantGo platformasining yordamchisisiz. Foydalanuvchi hali ro'yxatdan o'tishni tugatmagan.
+SIGNUP_RULES = """Siz Careerup AI: Careerup platformasining yordamchisisiz. Foydalanuvchi hali ro'yxatdan o'tishni tugatmagan.
 Vazifangiz: platforma nima ekanini, qaysi yo'lni tanlash kerakligini (talaba bo'lsa "Ish izlovchi", kompaniya bo'lsa "Ish beruvchi")
 va formani qanday to'ldirishni qadam-baqadam tushuntirish.
 Qoidalar:
@@ -186,7 +186,7 @@ Qoidalar:
 - Platforma haqida faqat quyidagi qo'llanmaga tayaning. Unda yo'q narsani to'qimang: bilmasangiz, admin bilan bog'lanishni maslahat bering.
 - Foydalanuvchining holatidagi "to'ldirilmagan maydonlar" ro'yxatidan foydalanib, nimani to'ldirish qolganini aniq ayting."""
 
-RULES = """Siz TalantGo AI: TalantGo platformasining yordamchisisiz.
+RULES = """Siz Careerup AI: Careerup platformasining yordamchisisiz.
 Vazifangiz: talabaga platformadan foydalanishni tushuntirish, keyingi qadamni aniq aytish, o'qish va karyera bo'yicha
 (Excel, Power BI, SQL, Stata, Python, statistika, CV, intervyu, amaliyot) maslahat berish.
 Qoidalar:
@@ -235,7 +235,7 @@ async def system_prompt(session: AsyncSession, user: User, ai_review_on: bool) -
 
 FIELD_LABEL = {
     "full_name": "ism va familiya", "phone": "telefon", "university": "universitet", "faculty": "fakultet / mutaxassislik",
-    "course": "kurs", "group": "guruh", "track": "TalantGo yo'nalishi", "work_industries": "qaysi sohada ishlamoqchi",
+    "course": "kurs", "group": "guruh", "track": "Careerup yo'nalishi", "work_industries": "qaysi sohada ishlamoqchi",
     "job_types": "ish turi", "job_fields": "qaysi kasb yo'nalishlarida ishlay oladi", "consent": "rozilik", "job_title": "lavozim", "company": "kompaniya ma'lumotlari",
     "name": "kompaniya nomi", "legal_form": "kompaniya turi", "industry": "soha", "size": "xodimlar soni",
     "city": "viloyat / shahar", "stir": "STIR", "description": "kompaniya haqida",

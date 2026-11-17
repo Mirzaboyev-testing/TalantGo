@@ -5,7 +5,7 @@ maqsad, foydalanuvchi qarorlari, tadqiqot xulosalari, 3 bosqichli reja va qabul 
 
 ## 1. Prompt (o'zimga)
 
-> TalantGo talaba panelini noutbukda (1280–1536 px) to'liq ekranni ishlatadigan, telefonda to'liq moslashadigan,
+> Careerup talaba panelini noutbukda (1280–1536 px) to'liq ekranni ishlatadigan, telefonda to'liq moslashadigan,
 > zamonaviy karyera platformasiga aylantir. Ro'yxatdan o'tishdan boshla: faqat korxona va universitetga kerakli
 > 8–10 maydonni 3 qadamda so'ra, qolganini profilda progressiv to'ldirt. Universitetni qidiruv + ro'yxat bilan
 > tanlat, tanlangan universitetning fakultetlarini avtomatik chiqar. Trek ixtiyoriy bo'lsin, uning o'rniga
@@ -106,7 +106,7 @@ Dastlabki reja:
 - Backend: `profile_items` jadvali (turi: experience / project / certificate; sarlavha, tashkilot, sana oralig'i,
   tavsif, havola, fayllar, rasmlar, `source`: self / company / platform, `confirmed_by`). Tajriba `EmploymentOutcome`
   bilan birlashtiriladi (bir ish ikki marta kiritilmaydi; bandlik statistikasi faqat 4 turni sanaydi).
-  Profil rasmi va muqova yuklash (`files`, rasm turlari, o'lcham chegarasi). TalantGo'da tasdiqlangan ishlar va
+  Profil rasmi va muqova yuklash (`files`, rasm turlari, o'lcham chegarasi). Careerup'da tasdiqlangan ishlar va
   korxona topshiriqlari natijalari avtomatik "platforma tasdiqlagan" portfolio elementi bo'lib chiqadi.
 - Frontend: LinkedIn uslubidagi sarlavha (muqova 4:1, avatar, ism ✓, sarlavha, "Ishga tayyor"), hisoblagichlar,
   tablar: Portfolio (setka) / Tajriba / Sertifikatlar / Haqida (bio, ko'nikmalar dalil bilan, tillar darajasi,

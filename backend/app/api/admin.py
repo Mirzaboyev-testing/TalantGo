@@ -31,6 +31,7 @@ from ..services.rules import Rules, get_rules, save_rules
 from .deps import AdminActor, OwnerActor, Session, audit
 from ..seed import add_official_groups
 from .jobs import job_out
+from ..core.brand import BRAND
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 VERIFIED = (Status.peer_verified, Status.mentor_verified)
@@ -519,7 +520,7 @@ async def export_users(actor: AdminActor, session: Session) -> StreamingResponse
     audit(session, actor, "export.users", f"{len(rows)} qator")
     await session.commit()
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv; charset=utf-8",
-                             headers={"Content-Disposition": 'attachment; filename="talantgo-talabalar.csv"'})
+                             headers={"Content-Disposition": 'attachment; filename="careerup-talabalar.csv"'})
 
 
 # --------------------------------------------------------------------------- moderation queues
@@ -554,7 +555,7 @@ async def decide(user_id: int, body: ReviewDecisionIn, actor: AdminActor, sessio
         raise HTTPException(404, "Foydalanuvchi topilmadi")
     audit(session, actor, "verification.decide", f"{student.full_name} (#{student.id})",
           ("tasdiqlandi" if body.approve else "rad etildi") + (f": {body.note}" if body.note else ""))
-    await decide_verification(session, student, body.approve, "TalantGo", body.note.strip())
+    await decide_verification(session, student, body.approve, BRAND, body.note.strip())
     return {"verification": student.verification}
 
 
@@ -653,7 +654,7 @@ async def review_staff(user_id: int, body: StaffDecisionIn, actor: OwnerActor, s
     audit(session, actor, "staff.review", f"{user.full_name} ({uni})", f"{decision} {body.note}".strip())
     # the older call (approve: false) had no reason; a "needs_info" or "reject" decision must give one
     note = body.note or ("Tasdiqlanmadi" if body.decision is None and decision == "reject" else "")
-    await staff_service.decide(session, user, decision, note, "TalantGo")
+    await staff_service.decide(session, user, decision, note, BRAND)
     return {"status": user.staff_status, "role": user.staff_role}
 
 
@@ -664,7 +665,7 @@ async def revoke_staff(user_id: int, body: StaffDecisionIn, actor: OwnerActor, s
     if user is None or user.account_type != "university":
         raise HTTPException(404, "Xodim topilmadi")
     audit(session, actor, "staff.revoke", user.full_name, body.note)
-    await staff_service.revoke(session, user, body.note, "TalantGo")
+    await staff_service.revoke(session, user, body.note, BRAND)
     return {"status": user.staff_status}
 
 
@@ -875,7 +876,7 @@ async def export_applications(actor: AdminActor, session: Session) -> StreamingR
     audit(session, actor, "export.applications", f"{len(rows)} qator")
     await session.commit()
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv; charset=utf-8",
-                             headers={"Content-Disposition": 'attachment; filename="talantgo-arizalar.csv"'})
+                             headers={"Content-Disposition": 'attachment; filename="careerup-arizalar.csv"'})
 
 
 # --------------------------------------------------------------------------- groups

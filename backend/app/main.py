@@ -14,6 +14,7 @@ from .core.db import Base, SessionLocal, engine
 from .core.upgrades import upgrade
 from .seed import seed
 from .services import ai_review, reminders
+from .core.brand import BRAND
 
 logging.basicConfig(level=logging.INFO)
 # httpx logs every request URL at INFO, and a Bot API URL contains the bot token
@@ -38,7 +39,7 @@ async def lifespan(_: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title="TalantGo API", version="0.1.0", lifespan=lifespan,
+app = FastAPI(title=f"{BRAND} API", version="0.1.0", lifespan=lifespan,
               docs_url="/api/docs" if settings.app_env == "dev" else None, openapi_url="/api/openapi.json")
 
 for router in (auth.router, admin_auth.router, public.router, people.router, notifications.router, learning.router, groups.router,

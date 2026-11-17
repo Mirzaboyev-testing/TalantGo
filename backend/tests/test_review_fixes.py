@@ -84,7 +84,7 @@ async def test_universities_see_only_current_students_and_public_pages_hide_smal
 
 async def test_role_check_uses_the_route_template(client, make_user):
     from tests.test_ranking_and_admin import staff_account
-    analyst = await staff_account(client, "analyst", "data@talantgo.uz")
+    analyst = await staff_account(client, "analyst", "data@careerup.test")
     # a trailing slash or a different spelling of the path does not open a write for a read-only role
     assert (await client.post(f"{API}/admin/ranking/publish/", json={"period": "x davr"}, headers=analyst)).status_code in (403, 404, 405, 307)
     assert (await client.post(f"{API}/admin/ranking/publish", json={"period": "x davr"}, headers=analyst)).status_code == 403

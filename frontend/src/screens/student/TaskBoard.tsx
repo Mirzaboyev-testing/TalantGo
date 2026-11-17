@@ -7,6 +7,7 @@ import { formatDateTime, t, useLang, type MsgKey } from "../../i18n";
 import { Icon } from "../../icons";
 import { haptic, openLink } from "../../tg";
 import { ErrorText, message, toast } from "../../ui";
+import { BRAND } from "../../brand";
 
 type Filter = "open" | "mine" | "upcoming" | "finished";
 const MAX_FILES = 5;
@@ -59,7 +60,7 @@ export default function TaskBoard() {
         {pick(filter).map((c) => (
           <button key={c.id} className="st-task-card" onClick={() => setOpenId(c.id)}>
             <div className="row between" style={{ gap: 8 }}>
-              <span className="st-task-from"><Icon name={c.company ? "building" : "user"} size={14} />{c.company ?? c.mentor ?? "TalantGo"}</span>
+              <span className="st-task-from"><Icon name={c.company ? "building" : "user"} size={14} />{c.company ?? c.mentor ?? BRAND}</span>
               <Deadline c={c} />
             </div>
             <b>{c.title}</b>
@@ -101,7 +102,7 @@ function TaskDetail({ id, onBack }: { id: number; onBack: () => void }) {
         <div className="co-col">
           <div className="co-card st-task-hero">
             <div className="row between wrap" style={{ gap: 8 }}>
-              <span className="st-task-from"><Icon name={c.company ? "building" : "user"} size={15} />{c.company ?? c.mentor ?? "TalantGo"}</span>
+              <span className="st-task-from"><Icon name={c.company ? "building" : "user"} size={15} />{c.company ?? c.mentor ?? BRAND}</span>
               <Deadline c={c} />
             </div>
             <h1>{c.title}</h1>

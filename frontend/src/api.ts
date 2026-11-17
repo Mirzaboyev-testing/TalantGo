@@ -645,7 +645,7 @@ export const api = {
     archiveGroup: (id: number) => request<{ is_archived: boolean }>("POST", `/admin/groups/${id}/archive`, undefined, true),
     challenges: () => request<AdminChallenge[]>("GET", "/admin/challenges", undefined, true),
     archiveChallenge: (id: number) => request<{ is_archived: boolean }>("POST", `/admin/challenges/${id}/archive`, undefined, true),
-    exportApplications: () => download("/admin/export/applications.csv", "talantgo-arizalar.csv"),
+    exportApplications: () => download("/admin/export/applications.csv", "careerup-arizalar.csv"),
     stats: () => request<AdminStats>("GET", "/admin/stats", undefined, true),
     users: (params: Record<string, string>) => request<AdminUser[]>("GET", `/admin/users?${new URLSearchParams(params)}`, undefined, true),
     updateUser: (id: number, changes: Partial<Pick<AdminUser, "role" | "is_blocked" | "group_name" | "university">>) =>
@@ -675,7 +675,7 @@ export const api = {
     aiConversations: () => request<AiConversation[]>("GET", "/admin/assistant/users", undefined, true),
     aiConversation: (userId: number) => request<AiMessage[]>("GET", `/admin/assistant/users/${userId}/messages`, undefined, true),
     testAi: () => request<{ model: string; reply: string }>("POST", "/admin/ai/test", undefined, true),
-    exportUsers: () => download("/admin/export/users.csv", "talantgo-talabalar.csv"),
+    exportUsers: () => download("/admin/export/users.csv", "careerup-talabalar.csv"),
     inbox: () => request<{ verifications: number; companies: number; jobs: number; staff: number; tests: number }>("GET", "/admin/inbox", undefined, true),
     tests: (status: string) => request<CompanyTestFull[]>("GET", `/admin/tests${status ? `?status=${status}` : ""}`, undefined, true),
     reviewTest: (id: number, approve: boolean, note: string) => request<CompanyTestFull>("POST", `/admin/tests/${id}/review`, { approve, note }, true),

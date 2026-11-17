@@ -6,6 +6,7 @@ import { insideTelegram } from "../tg";
 import { Avatar, Sheet } from "../ui";
 import LangSwitch from "./LangSwitch";
 import NotificationBell from "./Notifications";
+import { BrandLogo } from "../brand";
 
 export interface ShellTab<T extends string> { id: T; label: string; icon: IconName; badge?: number; group?: string;
   /** shown at the bottom of the sidebar, above the name card (e.g. settings) */
@@ -38,7 +39,7 @@ export default function Shell<T extends string>({ tabs, active, onChange, user, 
     <div className="shell">
       <aside className="side-nav">
         <div className="side-brand">
-          <span className="brand-mark">T</span><span className="grow">TalantGo</span>
+          <span className="grow"><BrandLogo size={40} /></span>
           {isWide && <NotificationBell />}
         </div>
         {tabs.filter((tab) => !tab.bottom).map((tab, i, list) => (
@@ -80,7 +81,7 @@ export default function Shell<T extends string>({ tabs, active, onChange, user, 
         <div className="side-lang"><LangSwitch onChange={saveLanguage} /></div>
       </aside>
       <header className="topbar">
-        <span className="brand-mark small">T</span><b className="grow">TalantGo</b>
+        <span className="grow"><BrandLogo size={34} /></span>
         <LangSwitch onChange={saveLanguage} />
         {!isWide && <NotificationBell />}
       </header>

@@ -72,6 +72,9 @@ STATEMENTS = [
     # the product was renamed from CareerFlow to TalantGo (2026-10-09)
     "UPDATE groups SET name = 'TalantGo hamjamiyati' WHERE auto_join_all AND name = 'CareerFlow hamjamiyati'",
     "UPDATE users SET verified_by = 'TalantGo' WHERE verified_by = 'CareerFlow'",
+    # TalantGo became Careerup (2026-11-17): the names stored in the data follow
+    "UPDATE groups SET name = 'Careerup hamjamiyati' WHERE auto_join_all AND name = 'TalantGo hamjamiyati'",
+    "UPDATE users SET verified_by = 'Careerup' WHERE verified_by IN ('TalantGo', 'CareerFlow')",
     # two-way sign-up (job seeker / employer) and company tests (2026-10-13)
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_version integer NOT NULL DEFAULT 0",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS work_industries varchar(24)[] NOT NULL DEFAULT '{}'",
@@ -166,6 +169,8 @@ STATEMENTS = [
     "ALTER TABLE university_events ALTER COLUMN university_id DROP NOT NULL",
     "ALTER TABLE university_events ADD COLUMN IF NOT EXISTS company_id integer REFERENCES companies(id) ON DELETE CASCADE",
     "CREATE INDEX IF NOT EXISTS ix_university_events_company_id ON university_events (company_id)",
+    # TalantGo became Careerup (2026-11-17): university staff decided by the platform admin
+    "UPDATE users SET staff_reviewed_by = 'Careerup' WHERE staff_reviewed_by = 'TalantGo'",
 ]
 
 

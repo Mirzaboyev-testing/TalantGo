@@ -8,6 +8,7 @@ import { ErrorText, LogoutLink, isFullName, message, toast } from "../../ui";
 import PhoneField from "../PhoneField";
 import { COOPERATION, POSITIONS, staffOf, uapi } from "./uapi";
 import { FileDrop, Pill, UIcon } from "./ukit";
+import { BrandLogo } from "../../brand";
 
 const OTHER = "other";
 
@@ -17,7 +18,7 @@ export function SignupSide({ step, compact }: { step: 1 | 2 | 3; compact?: boole
   const steps = [[t("u.su.step1"), t("u.su.step1_sub")], [t("u.su.step2"), t("u.su.step2_sub")], [t("u.su.step3"), t("u.su.step3_sub")]];
   return (
     <aside className="u-signup-side">
-      <div className="row" style={{ gap: 10, fontWeight: 700, color: "var(--uni-ink)" }}><span className="brand-mark small">T</span>TalantGo</div>
+      <div className="row" style={{ gap: 10, fontWeight: 700, color: "var(--uni-ink)" }}><BrandLogo size={36} /></div>
       {!compact && <h1>{t("u.su.side_title")}</h1>}
       {!compact && <p>{t("u.su.side_text")}</p>}
       <ol className="u-steps">

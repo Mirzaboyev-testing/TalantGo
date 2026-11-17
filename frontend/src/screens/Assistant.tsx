@@ -3,6 +3,7 @@ import { api, type AiMessage } from "../api";
 import { t, useLang, type MsgKey } from "../i18n";
 import { Icon } from "../icons";
 import { autoGrow, message, sendsOnEnter } from "../ui";
+import { AI_NAME } from "../brand";
 
 export type AiAudience = "student" | "employer" | "signup";
 
@@ -17,7 +18,7 @@ const INTRO: Record<AiAudience, MsgKey> = {
   signup: "s.ai.intro.signup",
 };
 
-/** A small "TalantGo AI" button in the corner; the chat opens over the app and keeps its history until reload. */
+/** A small "Careerup AI" button in the corner; the chat opens over the app and keeps its history until reload. */
 export default function Assistant({ audience = "student" }: { audience?: AiAudience }) {
   useLang();
   const [available, setAvailable] = useState(false);
@@ -81,17 +82,17 @@ export default function Assistant({ audience = "student" }: { audience?: AiAudie
     if (typing) return null;
     return (
       <button className="ai-fab" onClick={() => setOpen(true)} aria-label={t("s.ai.open")}>
-        <Icon name="spark" size={18} />TalantGo AI
+        <Icon name="spark" size={18} />{AI_NAME}
       </button>
     );
   }
 
   return (
-    <div className="ai-panel" role="dialog" aria-label="TalantGo AI">
+    <div className="ai-panel" role="dialog" aria-label={AI_NAME}>
       <div className="ai-head">
         <span className="ai-mark"><Icon name="spark" size={18} /></span>
         <div className="grow">
-          <b>TalantGo AI</b>
+          <b>{AI_NAME}</b>
           <div className="hint">{t("s.ai.privacy")}</div>
         </div>
         <button className="icon-btn" aria-label={t("common.close")} onClick={() => setOpen(false)}><Icon name="close" size={20} /></button>

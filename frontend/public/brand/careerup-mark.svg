@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Careerup">
+  <defs>
+    <linearGradient id="cma" x1="0.1" y1="0.95" x2="0.8" y2="0.05"><stop offset="0" stop-color="#05502A"/><stop offset="0.5" stop-color="#0B8A40"/><stop offset="1" stop-color="#27D468"/></linearGradient>
+    <linearGradient id="cmb" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#0E9F47"/><stop offset="1" stop-color="#36E777"/></linearGradient>
+    <mask id="cmm" maskUnits="userSpaceOnUse" x="0" y="0" width="120" height="120"><rect width="120" height="120" fill="#fff"/><path d="M38.2 67.1L82.3 29.9L74.6 20.7L108 20L101.6 52.9L93.9 43.7L49.8 80.9Z" fill="#000" stroke="#000" stroke-width="7" stroke-linejoin="round"/></mask>
+  </defs>
+  <path fill="url(#cma)" mask="url(#cmm)" d="M92.2 33.7A46 46 0 1 0 67.9 106.4L78.7 85.9A26 26 0 1 1 84.5 53Z"/>
+  <path fill="url(#cmb)" d="M38.2 67.1L82.3 29.9L74.6 20.7L108 20L101.6 52.9L93.9 43.7L49.8 80.9Z"/>
+</svg>

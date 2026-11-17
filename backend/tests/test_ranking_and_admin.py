@@ -68,7 +68,7 @@ async def test_complaints_reach_the_admins(client, make_user):
     assert (await client.post(f"{API}/complaints", json={"target_kind": "user", "target_id": student["id"], "reason": "spam"},
                               headers=student["headers"])).status_code == 422
 
-    moderator = await staff_account(client, "moderator", "mod@talantgo.uz")
+    moderator = await staff_account(client, "moderator", "mod@careerup.test")
     listed = (await client.get(f"{API}/admin/complaints", headers=moderator)).json()
     assert listed[0]["target"].startswith("Data analitik stajyor") and listed[0]["reporter"] == "Aziza"
     r = await client.post(f"{API}/admin/complaints/{listed[0]['id']}", json={"status": "resolved", "note": "HR bilan gaplashildi"},
@@ -79,8 +79,8 @@ async def test_complaints_reach_the_admins(client, make_user):
 
 async def test_moderator_and_analyst_have_limited_rights(client, make_user):
     hr = (await live_job(client, make_user))[0]
-    moderator = await staff_account(client, "moderator", "mod@talantgo.uz")
-    analyst = await staff_account(client, "analyst", "data@talantgo.uz")
+    moderator = await staff_account(client, "moderator", "mod@careerup.test")
+    analyst = await staff_account(client, "analyst", "data@careerup.test")
 
     # moderators moderate
     assert (await client.post(f"{API}/admin/companies/{hr['company_id']}/review", json={"approve": True},

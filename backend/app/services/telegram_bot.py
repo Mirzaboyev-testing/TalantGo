@@ -3,16 +3,17 @@ descriptions, and greet /start with the welcome banner."""
 import hashlib
 
 import httpx
+from ..core.brand import BRAND
 
 API = "https://api.telegram.org/bot{token}/{method}"
 
-BOT_NAME = "TalantGo"                     # the name shown at the top of the chat
-OLD_BOT_NAME = "TalantGo (eski bot)"
+BOT_NAME = BRAND                          # the name shown at the top of the chat
+OLD_BOT_NAME = f"{BRAND} (eski bot)"
 
 # Shown in an empty chat before the user presses Start ("What can this bot do?"), max 512 characters.
 DESCRIPTION = (
     "🚀 Kelajagingni biz bilan qur!\n\n"
-    "TalantGo: o'qish davomida haqiqiy tajriba to'playdigan joy.\n\n"
+    "Careerup: o'qish davomida haqiqiy tajriba to'playdigan joy.\n\n"
     "🧭 Yo'nalishingni tanla va har hafta topshiriq bajar\n"
     "✅ Ishlaring tengdosh va mentor tomonidan tasdiqlanadi\n"
     "💼 Amaliyot va birinchi ishni top\n\n"
@@ -23,7 +24,7 @@ SHORT_DESCRIPTION = "Kelajagingni biz bilan qur: tajriba, amaliyot va birinchi i
 
 WELCOME_CAPTION = (
     "<b>🚀 Kelajagingni biz bilan qur!</b>\n\n"
-    "TalantGo: o'qish davomida haqiqiy tajriba to'plab, diplom bilan birga isbotlangan portfolio "
+    "Careerup: o'qish davomida haqiqiy tajriba to'plab, diplom bilan birga isbotlangan portfolio "
     "olib chiqadigan joy.\n\n"
     "🧭 Yo'nalishingni tanla va har hafta topshiriq bajar\n"
     "✅ Ishlaring tengdosh va mentor tomonidan tasdiqlanadi\n"
@@ -80,7 +81,7 @@ def start_link(username: str, payload: str = "") -> str:
 async def send_moved(token: str, chat_id: int, new_username: str, payload: str = "") -> None:
     """The old bot's answer to anything: where the new bot is. An invite code travels along."""
     text = ("Botimiz yangilandi.\n\n"
-            f"TalantGo endi @{new_username} botida ishlaydi. Akkauntingiz, ballaringiz va CV'ingiz joyida: "
+            f"{BRAND} endi @{new_username} botida ishlaydi. Akkauntingiz, ballaringiz va CV'ingiz joyida: "
             "yangi botni ochib «Start» ni bosing, hammasi o'sha yerda.")
     markup = {"inline_keyboard": [[{"text": "Yangi botni ochish", "url": start_link(new_username, payload)}]]}
     await call(token, "sendMessage", chat_id=chat_id, text=text, reply_markup=markup)
@@ -93,7 +94,7 @@ async def retire(token: str, public_url: str, new_username: str) -> None:
     await call(token, "setMyName", name=OLD_BOT_NAME)
     await call(token, "setMyShortDescription", short_description=f"Bot yangilandi: @{new_username}")
     await call(token, "setMyDescription", description=(
-        f"Bot yangilandi. TalantGo endi @{new_username} botida.\n\n"
+        f"Bot yangilandi. {BRAND} endi @{new_username} botida.\n\n"
         "Akkauntingiz, ballaringiz va CV'ingiz saqlangan: yangi botni ochib «Start» ni bosing."))
 
 
@@ -106,7 +107,7 @@ async def connect(token: str, public_url: str) -> dict:
     await call(token, "setMyName", name=BOT_NAME)
     me = await call(token, "getMe")
     await call(token, "setChatMenuButton",
-               menu_button={"type": "web_app", "text": "TalantGo", "web_app": {"url": public_url}})
+               menu_button={"type": "web_app", "text": BRAND, "web_app": {"url": public_url}})
     await call(token, "setWebhook", url=f"{public_url}/telegram/webhook",
                secret_token=webhook_secret(token), allowed_updates=["message"], drop_pending_updates=True)
     await call(token, "setMyDescription", description=DESCRIPTION)
@@ -121,7 +122,7 @@ async def send_welcome(token: str, chat_id: int, public_url: str, role: str | No
     url = f"{public_url}/?{query}" if query else public_url
     markup = {"inline_keyboard": [[{"text": "🚀 Ilovani ochish", "web_app": {"url": url}}]]}
     try:
-        await call(token, "sendPhoto", chat_id=chat_id, photo=f"{public_url}/media/welcome.png?v=talantgo",   # a new URL: Telegram caches by URL
+        await call(token, "sendPhoto", chat_id=chat_id, photo=f"{public_url}/media/welcome.jpg?v=careerup",   # a new URL: Telegram caches by URL
                    caption=WELCOME_CAPTION, parse_mode="HTML", reply_markup=markup)
     except BotError:
         # Telegram could not fetch the picture (e.g. a local address): the text alone still greets

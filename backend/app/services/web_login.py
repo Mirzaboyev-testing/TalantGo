@@ -54,11 +54,11 @@ async def on_start(session: AsyncSession, token: str, chat_id: int, sender: dict
     warning = "Agar bu havolani sizga boshqa odam yuborgan bo'lsa, «Yo'q» ni bosing."
     if req.purpose == "link":
         target = await session.get(User, req.link_user_id)
-        text = (f"TalantGo profilini ({target.email if target else 'sayt akkaunti'}) shu Telegram akkauntga ulash so'rovi. "
+        text = (f"Careerup profilini ({target.email if target else 'sayt akkaunti'}) shu Telegram akkauntga ulash so'rovi. "
                 f"Ulangach bot va sayt bitta akkaunt bilan ishlaydi.\n\n{warning}")
     else:
         exists = await session.scalar(select(User.id).where(User.telegram_id == int(sender["id"])))
-        text = "Kompyuterdagi TalantGo saytiga shu Telegram akkaunt bilan kirish so'rovi."
+        text = "Kompyuterdagi Careerup saytiga shu Telegram akkaunt bilan kirish so'rovi."
         if not exists:
             text += ("\n\nBu Telegram'ga bog'langan profil yo'q: tasdiqlasangiz, yangi akkaunt ochiladi. Agar saytda "
                      "email bilan ro'yxatdan o'tgan bo'lsangiz, «Yo'q» ni bosing, email bilan kiring va «Profil» "
@@ -83,7 +83,7 @@ async def on_answer(session: AsyncSession, token: str, chat_id: int, sender: dic
     req.note = " ".join(filter(None, [sender.get("first_name"), sender.get("last_name")]))[:128]
     await session.commit()
     await _reply(token, chat_id, f"Saytga shu kodni kiriting: {req.pin}\n\n"
-                                 "Kodni hech kimga bermang: TalantGo xodimlari ham uni hech qachon so'ramaydi.")
+                                 "Kodni hech kimga bermang: Careerup xodimlari ham uni hech qachon so'ramaydi.")
 
 
 async def poll(session: AsyncSession, code: str) -> tuple[str, str]:
@@ -140,7 +140,7 @@ async def verify_link(session: AsyncSession, code: str, pin: str, user: User) ->
     other = (await session.execute(select(User).where(User.telegram_id == tg_id))).scalar_one_or_none()
     if other is not None and other.id != user.id:
         if not await _bare(session, other):
-            req.status, req.note = "conflict", "Bu Telegram akkaunt boshqa TalantGo profiliga ulangan va unda ma'lumotlar bor."
+            req.status, req.note = "conflict", "Bu Telegram akkaunt boshqa Careerup profiliga ulangan va unda ma'lumotlar bor."
             await session.commit()
             raise HTTPException(409, req.note + " O'sha profilga Telegram orqali kirib, «Profil» bo'limida email va parol qo'shing.")
         other.telegram_id, other.is_blocked = None, True          # the empty bot-only account steps aside

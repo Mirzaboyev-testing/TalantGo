@@ -1,4 +1,4 @@
-# TalantGo: 3 panelli platforma (Talaba, Korxona, Universitet). Ish prompti
+# Careerup: 3 panelli platforma (Talaba, Korxona, Universitet). Ish prompti
 
 > Bu prompt Claude uchun. Holat: **QORALAMA**. Foydalanuvchi qo'shimcha ma'lumot beradi va "boshla" deydi.
 > Ungacha kodga tegilmaydi. Foydalanuvchi bergan ma'lumot 8-bo'limga yoziladi, keyin reja yangilanadi.
@@ -10,7 +10,7 @@
 
 ## 0. Rol va asosiy qoidalar
 
-Sen TalantGo'ning bosh project manageri va yetakchi dasturchisisan. Ishni fazalarga bo'lib, har bir fazani
+Sen Careerup'ning bosh project manageri va yetakchi dasturchisisan. Ishni fazalarga bo'lib, har bir fazani
 tugallangan, tekshirilgan va ko'rsatsa bo'ladigan holatda topshirasan.
 
 - **Loyiha:** `D:/learning/students_coursmate` (FastAPI + async SQLAlchemy + Postgres, React/Vite).
@@ -201,7 +201,7 @@ Serverga deploy faqat foydalanuvchi "deploy qil" deganidan keyin.
 2. "Boshla" buyrug'idan keyin fazalar ketma-ket bajariladi; har faza oxirida qisqa hisobot: nima qilindi,
    qanday tekshirildi, skrinshot, keyingi qadam.
 3. Reja tashqarisidagi g'oya chiqsa, so'raladi, o'zboshimchalik bilan qo'shilmaydi.
-4. Sotuv taqdimoti yoki boshqa loyihaga tegilmaydi; faqat TalantGo platformasi.
+4. Sotuv taqdimoti yoki boshqa loyihaga tegilmaydi; faqat Careerup platformasi.
 
 ## 10. Foydalanuvchi ma'lumotlari (2026-10-25): dizayn namunalari va arxitektura taklifi
 
@@ -212,14 +212,14 @@ matni). Foydalanuvchi qoidalari:
   Talabalar va mentorlar, Topshirilgan ishlar, Yo'nalishlar, Chellenjlar, Kompaniyalar, Vakansiyalar, Testlar,
   Arizalar, Universitetlar, Guruhlar, E'lonlar, Telegram bot, AI yordamchi, Hisobotlar, Sozlamalar, Adminlar,
   Audit, Profilim). Yangilari faqat qo'shiladi.
-- Rang namunadagidek binafsha yoki ko'k emas: TalantGo yashil-oq uslubi saqlanadi.
+- Rang namunadagidek binafsha yoki ko'k emas: Careerup yashil-oq uslubi saqlanadi.
 
 ### 10.1. Namunalardan nima olinadi
 
 | Panel | Namuna | Olinadigan g'oyalar | Olinmaydigan narsalar |
 |---|---|---|---|
 | Talaba | InternHub | Salomlashish kartasi + o'sish ko'rsatkichi (ball, daraja, streak, keyingi darajagacha progress); tezkor amallar (yo'l xaritasi, amaliyotlar, CV); "Arizalarim" status belgisi bilan; ko'nikmalar progressi (tasdiqlangan ishlar bo'yicha); vakansiya kartalari: "Tasdiqlangan" belgisi, muddat, format, ko'nikma teglari, "Ariza berish" | Yuqoridagi Student/Industry/Admin almashtirgichi (bitta hisob = bitta rol); multfilm avatar; "92% match" kabi asossiz raqam |
-| Korxona | Hiring Flow | Voronka KPI kartalari (Arizalar → Saralash → Suhbat → Ishga olindi); nomzodlar jadvali: belgilash katakchasi, ism, lavozim, bosqich (rangli belgi), moslik %, baho, sana, shahar; qidiruv, filtr, sahifalash; o'ng ustunda TalantGo AI tavsiyalari ("Suhbatga taklif qilish") | "AI Score" ni tushuntirishsiz ko'rsatish: moslik ochiq formuladan (yo'nalish, tasdiqlangan ishlar, test natijasi, ko'nikmalar) hisoblanadi va "Qanday hisoblanadi?" izohi bo'ladi |
+| Korxona | Hiring Flow | Voronka KPI kartalari (Arizalar → Saralash → Suhbat → Ishga olindi); nomzodlar jadvali: belgilash katakchasi, ism, lavozim, bosqich (rangli belgi), moslik %, baho, sana, shahar; qidiruv, filtr, sahifalash; o'ng ustunda Careerup AI tavsiyalari ("Suhbatga taklif qilish") | "AI Score" ni tushuntirishsiz ko'rsatish: moslik ochiq formuladan (yo'nalish, tasdiqlangan ishlar, test natijasi, ko'nikmalar) hisoblanadi va "Qanday hisoblanadi?" izohi bo'ladi |
 | Universitet | Cornell "First Destination" | Filtrlar qatori (yil, fakultet, yo'nalish, soha, ta'lim darajasi); halqa diagramma "Bitiruvchilar qayerda" (to'liq ish, yarim stavka, amaliyot, magistratura, ish izlayapti, harbiy xizmat, boshqa); top ish beruvchilar ro'yxati; boshlang'ich maosh o'rtacha va mediana (o'zi aytgan, javoblar 10 tadan kam bo'lsa ko'rsatilmaydi); "Chop etish / PDF" | Ko'p rangli diagramma: yashil palitrada, dataviz qoidalari bo'yicha |
 | Admin | VeriApp | Yashil sidebar (bizda bor); KPI kartalari 30 kunlik o'zgarish strelkasi bilan; halqa "Tasdiqlangan / Rad etilgan" nisbati; oylik ustunli grafik; har bir kartada davr tanlash | Hamyon balansi (to'lov hali yo'q); mavjud sahifalarni almashtirish |
 

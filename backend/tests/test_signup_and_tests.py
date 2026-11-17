@@ -229,7 +229,7 @@ async def test_track_tests_reach_only_that_track(client, make_user):
     assert done["status"] == "graded" and done["max_score"] == 0
 
 
-# --------------------------------------------------------------------------- TalantGo AI for every audience
+# --------------------------------------------------------------------------- Careerup AI for every audience
 
 async def test_assistant_picks_the_guide_for_who_is_asking(client, make_user):
     from app.core.db import SessionLocal

@@ -1,4 +1,6 @@
-# TalantGo
+# Careerup
+
+Earlier names: TalantGo (until 2026-11-17), CareerFlow. Brand files: `docs/brand/`, `frontend/public/brand/`.
 
 A platform that connects students, companies and universities in Uzbekistan. Students build verified
 experience while they study, companies hire people whose work they have already seen, and universities see

@@ -135,3 +135,13 @@ async def test_company_sees_student_telegram_only_after_application(client, make
     assert d["username"] == "vali_tg" and d["cv"]["username"] == "vali_tg"
     link = (await client.get(f"{API}/employer/students/{student['id']}/cv-link", headers=hr["headers"])).json()["url"]
     assert scope_ok(link, "cvpdf")
+
+
+async def test_platform_name_is_careerup_in_the_data_and_the_bot(client, make_user):
+    """After the rename the community group, the platform's own verifications and the bot use the new name."""
+    from app.core.brand import BRAND
+    from app.services import telegram_bot
+    from app.seed import COMMUNITY_GROUP
+    assert BRAND == "Careerup" and COMMUNITY_GROUP == "Careerup hamjamiyati"
+    assert telegram_bot.BOT_NAME == "Careerup" and "Careerup" in telegram_bot.WELCOME_CAPTION
+    assert "TalantGo" not in telegram_bot.DESCRIPTION + telegram_bot.SHORT_DESCRIPTION + telegram_bot.WELCOME_CAPTION

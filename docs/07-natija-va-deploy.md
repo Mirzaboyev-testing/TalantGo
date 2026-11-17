@@ -1,4 +1,4 @@
-# TalantGo: 3 panelli platforma. Natija va deploy (2026-10-26)
+# Careerup: 3 panelli platforma. Natija va deploy (2026-10-26)
 
 Ish `uch-panel` branchida, `main` jonli saytdagi holat. Har faza alohida commit.
 

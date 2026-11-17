@@ -1,6 +1,7 @@
 // Building blocks of the university panel: page header, tabs, KPI tiles, panels, empty states, a drawer,
 // a file drop box, pills and a few extra line icons. Styles: uni.css ("u-" classes).
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { api, fileSize, type SubmittedFile } from "../../api";
 import { formatDateTime, getLang, t, useLang } from "../../i18n";
 import { Icon, type IconName } from "../../icons";
@@ -145,7 +146,8 @@ export function Drawer({ onClose, head, children, foot }: { onClose: () => void;
     document.body.style.overflow = "hidden";
     return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
   }, [onClose]);
-  return (
+  // drawn into <body>, so no sticky or transformed parent can trap it under the page
+  return createPortal(
     <div className="u-drawer-back" onClick={onClose}>
       <aside className="u-drawer" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <div className="u-drawer-head">
@@ -155,7 +157,8 @@ export function Drawer({ onClose, head, children, foot }: { onClose: () => void;
         <div className="u-drawer-body">{children}</div>
         {foot && <div className="u-drawer-foot">{foot}</div>}
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

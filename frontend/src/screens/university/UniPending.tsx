@@ -7,6 +7,7 @@ import { ErrorText, LogoutLink, message } from "../../ui";
 import { staffOf } from "./uapi";
 import UniSignup from "./UniSignup";
 import { CopyField, Panel, UIcon, type UIconName } from "./ukit";
+import { BRAND, BrandLogo } from "../../brand";
 
 const TIPS = 6;
 const LOCKS: [string, UIconName, string][] = [
@@ -107,7 +108,7 @@ export default function UniPending({ me, onChanged, onLogout }: { me: Me; onChan
     <div className="uni-page">
       <div className="row between" style={{ marginBottom: 14 }}>
         <div className="row" style={{ gap: 10, fontWeight: 700, color: "var(--uni-ink)" }}>
-          <span className="brand-mark small">T</span>TalantGo<span className="hint" style={{ fontWeight: 500 }}>· {t("u.wait.crumb")}</span>
+          <BrandLogo size={34} /><span className="hint" style={{ fontWeight: 500 }}>· {t("u.wait.crumb")}</span>
         </div>
         <LogoutLink onLogout={onLogout} />
       </div>
@@ -137,7 +138,7 @@ export default function UniPending({ me, onChanged, onLogout }: { me: Me; onChan
 
             {s?.review_note && status !== "pending" && (
               <div className={`u-note ${status === "rejected" ? "red" : ""}`}>
-                <b>{t("u.wait.note_from", { who: s.reviewed_by || "TalantGo" })}</b>{s.review_note}
+                <b>{t("u.wait.note_from", { who: s.reviewed_by || BRAND })}</b>{s.review_note}
               </div>
             )}
             <ErrorText error={error} />

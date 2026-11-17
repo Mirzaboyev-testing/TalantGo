@@ -9,6 +9,7 @@ import { Consent } from "../Consent";
 import LangSwitch from "../LangSwitch";
 import PhoneField from "../PhoneField";
 import { FileDrop } from "./kit";
+import { BrandLogo } from "../../brand";
 
 /** Older companies typed the field and city by hand: match them to the lists where possible. */
 function guessIndustry(value: string, catalog: Catalog): string {
@@ -197,7 +198,7 @@ export default function CompanySignup({ me, onSaved, onBack, onLogout }: {
     <div className="co-signup">
       <aside className="co-signup-side">
         <div className="co-signup-brand">
-          <span className="brand-mark">T</span><b className="grow">TalantGo</b>
+          <span className="grow"><BrandLogo size={40} /></span>
           <LangSwitch />
         </div>
         <div className="co-signup-intro">

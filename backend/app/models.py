@@ -345,7 +345,7 @@ class SubmissionFile(Base):
 
 
 class AssistantMessage(Base):
-    """One turn of a person's TalantGo AI conversation. Readable by that person and admins only."""
+    """One turn of a person's Careerup AI conversation. Readable by that person and admins only."""
     __tablename__ = "assistant_messages"
     __table_args__ = (CheckConstraint("role IN ('user', 'model')", name="assistant_role_valid"),
                       Index("ix_assistant_messages_user_id_id", "user_id", "id"))

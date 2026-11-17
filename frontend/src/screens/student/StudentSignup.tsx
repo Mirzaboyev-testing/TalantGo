@@ -11,6 +11,7 @@ import { Consent } from "../Consent";
 import LangSwitch from "../LangSwitch";
 import PhoneField from "../PhoneField";
 import Combo, { uniItems } from "./Combo";
+import { BrandLogo } from "../../brand";
 
 export const FIELD_ICONS: Record<string, IconName> = {
   software: "code", data: "trend", it_support: "monitor", design: "palette", marketing: "megaphone", content: "play",
@@ -139,7 +140,7 @@ export default function StudentSignup({ me, onMe, onDone, onBack, onLogout }: {
     <div className="co-signup st-signup">
       <aside className="co-signup-side">
         <div className="co-signup-brand">
-          <span className="brand-mark">T</span><b className="grow">TalantGo</b>
+          <span className="grow"><BrandLogo size={40} /></span>
           <LangSwitch />
         </div>
         <div className="co-signup-intro">

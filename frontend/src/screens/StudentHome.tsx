@@ -7,6 +7,7 @@ import { navigate } from "../router";
 import { PublicJobCard } from "../public/PublicJobs";
 import { Avatar, ErrorText, message } from "../ui";
 import { StatTile } from "./employer/kit";
+import { BRAND } from "../brand";
 
 const go = (path: string) => (e?: React.MouseEvent) => { e?.preventDefault(); navigate(path); };
 export const missingLabel = (m: string) => tMaybe(`st.missing.${m}`) ?? tMaybe(`s.career.missing.${m}`) ?? m;
@@ -139,7 +140,7 @@ export default function StudentHome({ me }: { me: Me }) {
                 return (
                   <button key={c.id} type="button" className="st-task-card" onClick={go("/talaba/topshiriqlar")}>
                     <div className="row between">
-                      <span className="st-task-from"><Icon name={c.company ? "building" : "user"} size={14} />{c.company ?? c.mentor ?? "TalantGo"}</span>
+                      <span className="st-task-from"><Icon name={c.company ? "building" : "user"} size={14} />{c.company ?? c.mentor ?? BRAND}</span>
                       <span className={`st-deadline ${left <= 2 ? "soon" : ""}`}><Icon name="clock" size={13} />{t("s.ch.days_left", { n: left })}</span>
                     </div>
                     <b>{c.title}</b>

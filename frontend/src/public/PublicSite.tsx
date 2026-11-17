@@ -11,6 +11,7 @@ import { JobPage, JobsPage } from "./PublicJobs";
 import { RankingPage } from "./PublicRanking";
 import { UniversitiesPage, UniversityPage } from "./PublicUniversities";
 import { PanelChooser, panelBase, type Panel } from "./panels";
+import { BRAND, BrandLogo } from "../brand";
 
 type GetToken = () => Promise<{ token: string; moved_to?: string | null }>;
 
@@ -43,7 +44,7 @@ export default function PublicSite({ me, dev, onSignIn, onDev }: {
       <header className="pub-header">
         <div className="pub-wrap pub-header-inner">
           <a className="pub-brand" href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }}>
-            <span className="brand-mark small">T</span>TalantGo
+            <BrandLogo size={40} />
           </a>
           <nav className="pub-nav">
             <NavLink to="/vakansiyalar" active={section === "vakansiyalar"}>{t("pub.nav.jobs")}</NavLink>
@@ -63,7 +64,7 @@ export default function PublicSite({ me, dev, onSignIn, onDev }: {
         <footer className="pub-footer">
           <div className="pub-wrap pub-footer-inner">
             <div className="pub-footer-about">
-              <span className="pub-brand"><span className="brand-mark small">T</span>TalantGo</span>
+              <span className="pub-brand"><BrandLogo size={34} /></span>
               <p>{t("pub.footer")}</p>
             </div>
             <nav className="pub-footer-nav">
@@ -72,7 +73,7 @@ export default function PublicSite({ me, dev, onSignIn, onDev }: {
               <NavLink to="/universitetlar" active={false}>{t("pub.nav.universities")}</NavLink>
               <NavLink to="/reyting" active={false}>{t("pub.nav.ranking")}</NavLink>
             </nav>
-            <small>© {new Date().getFullYear()} TalantGo</small>
+            <small>© {new Date().getFullYear()} {BRAND}</small>
           </div>
         </footer>
       )}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { ErrorText, message } from "../../ui";
 import { saveToken } from "./session";
+import { BrandLogo } from "../../brand";
 
 /** Email + password sign-in and sign-up for the admin website. */
 export default function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
@@ -48,7 +49,7 @@ export default function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
   return (
     <div className="auth-wrap">
       <div className="auth-card">
-        <div className="admin-brand" style={{ justifyContent: "center" }}><i>T</i>TalantGo admin</div>
+        <div className="admin-brand" style={{ justifyContent: "center" }}><BrandLogo size={44} suffix="admin" /></div>
         {pending ? (
           <div className="panel">
             <h3 style={{ marginTop: 0 }}>So'rov yuborildi</h3>

@@ -24,7 +24,7 @@ def fake_telegram(monkeypatch) -> list:
         if token not in NAMES:
             raise telegram_bot.BotError("Unauthorized")
         if method == "getMe":
-            return {"username": NAMES[token], "first_name": "TalantGo"}
+            return {"username": NAMES[token], "first_name": "Careerup"}
         if method == "sendMessage" and token == NEW and params["chat_id"] == NEVER_STARTED_NEW_BOT:
             raise telegram_bot.BotError("Forbidden: bot can't initiate conversation with a user")
         return {"ok": True}
@@ -68,11 +68,11 @@ async def test_new_bot_keeps_every_account(client, monkeypatch):
     assert (await client.get("/api/v1/auth/mode")).json()["bot_username"] == "talantgo_bot"
 
     from app.core.config import settings
-    monkeypatch.setattr(settings, "public_url", "https://talantgo.test")   # Telegram needs https
+    monkeypatch.setattr(settings, "public_url", "https://careerup.test")   # Telegram needs https
     r = await client.post("/api/v1/admin/bot/connect", headers=admin)
     assert r.status_code == 200 and r.json()["previous_username"] == "create_carieer_bot"
     renamed = {(t, p.get("name")) for t, m, p in calls if m == "setMyName"}
-    assert (NEW, "TalantGo") in renamed and (OLD, telegram_bot.OLD_BOT_NAME) in renamed
+    assert (NEW, "Careerup") in renamed and (OLD, telegram_bot.OLD_BOT_NAME) in renamed
     hooks = {t: p["secret_token"] for t, m, p in calls if m == "setWebhook"}
     assert hooks == {NEW: telegram_bot.webhook_secret(NEW), OLD: telegram_bot.webhook_secret(OLD)}
 
@@ -124,7 +124,7 @@ async def test_the_old_bot_can_be_retired_later(client, monkeypatch):
 async def test_an_old_bot_replaced_without_being_kept_can_be_brought_back(client, monkeypatch):
     calls = fake_telegram(monkeypatch)
     from app.core.config import settings
-    monkeypatch.setattr(settings, "public_url", "https://talantgo.test")
+    monkeypatch.setattr(settings, "public_url", "https://careerup.test")
     admin = await owner_headers(client)
     await client.put("/api/v1/admin/bot", json={"token": NEW}, headers=admin)      # the old token was simply overwritten
     assert (await _login(client, OLD)).status_code == 401

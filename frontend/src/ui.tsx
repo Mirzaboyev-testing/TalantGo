@@ -1,4 +1,5 @@
-import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { absoluteUrl, fileSize, type Review, type Status, type SubmittedFile } from "./api";
 import { t, useLang } from "./i18n";
 import { workStatusLabel } from "./labels";
@@ -13,11 +14,34 @@ export function StatusBadge({ status }: { status: Status | null }) {
   return <span className={`badge ${status ?? "todo"}`}>{workStatusLabel(status)}</span>;
 }
 
+let openSheets = 0;
+
+/**
+ * A modal panel: a bottom sheet on a phone, a centred card on a computer. Drawn straight into <body> (a portal),
+ * so a sticky sidebar or top bar it was opened from cannot trap it under the page. Escape closes the top one,
+ * and the page behind does not scroll while it is open.
+ */
 export function Sheet({ onClose, children }: { onClose: () => void; children: ReactNode }) {
-  return (
-    <div className="sheet-back" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>{children}</div>
-    </div>
+  const back = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      const sheets = document.querySelectorAll(".sheet-back");
+      if (e.key === "Escape" && sheets[sheets.length - 1] === back.current) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    openSheets += 1;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      openSheets -= 1;
+      if (openSheets === 0) document.body.style.overflow = "";
+    };
+  }, [onClose]);
+  return createPortal(
+    <div ref={back} className="sheet-back" onClick={onClose}>
+      <div className="sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>{children}</div>
+    </div>,
+    document.body,
   );
 }
 

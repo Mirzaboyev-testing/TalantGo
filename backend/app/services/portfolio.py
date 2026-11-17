@@ -1,6 +1,6 @@
 """The student's portfolio (student panel v2, phase 2): projects and certificates the student adds, experience
 (employment outcomes, which companies confirm) and work verified on the platform, with three trust levels:
-- "platform": verified on TalantGo (peer/mentor-checked tasks, accepted company tasks) — generated, not editable;
+- "platform": verified on Careerup (peer/mentor-checked tasks, accepted company tasks) — generated, not editable;
 - "company": an experience entry a company confirmed (or a hire on the platform);
 - "self": what the student declared — shown with an "o'zi kiritgan" label.
 
@@ -117,7 +117,7 @@ async def verified_work(session: AsyncSession, user_id: int) -> list[dict]:
         ChallengeEntry.user_id == user_id, ChallengeEntry.status == "accepted")
         .order_by(ChallengeEntry.reviewed_at.desc()))).scalars().all()
     out += [{"key": f"c{e.id}", "kind": "company_task" if e.challenge.company_id else "challenge", "title": e.challenge.title,
-             "by": e.challenge.company.name if e.challenge.company else (e.challenge.created_by.full_name if e.challenge.created_by else "TalantGo"),
+             "by": e.challenge.company.name if e.challenge.company else (e.challenge.created_by.full_name if e.challenge.created_by else "Careerup"),
              "level": "company" if e.challenge.company_id else "mentor", "date": e.reviewed_at, "link": e.proof_url,
              "points": e.points_awarded, "place": e.place, "score": e.score, "trust": "platform"} for e in entries]
     return sorted(out, key=lambda x: (x["date"] is None, -(x["date"].timestamp() if x["date"] else 0)))

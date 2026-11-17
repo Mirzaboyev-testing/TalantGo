@@ -1,4 +1,4 @@
-# TalantGo: Faza 0 audit hisoboti (faqat o'qish)
+# Careerup: Faza 0 audit hisoboti (faqat o'qish)
 
 Sana: 2026-10-25. Asos: Master Prompt (21-bo'lim, "First Action"), `docs/04-uch-panel-prompt.md`,
 foydalanuvchining MVP ustuvorliklari (1: talaba → vakansiya → ariza → korxona nomzodlar paneli → ariza holati;
@@ -58,7 +58,7 @@ Xulosa: **texnologiyani almashtirishga sabab yo'q.** Master promptdagi Next.js, 
 | Tomon | Ishlaydi |
 |---|---|
 | Kirish | Telegram Mini App (initData), sayt: bot havolasi + 6 xonali PIN, email + parol, bitta hisobga ikkala usulni ulash |
-| Talaba | 5 ta yo'nalish × haftalik vazifalar, fayl topshirish, peer va mentor tekshiruvi, AI birinchi tekshiruv, ball va streak, reyting, guruhlar va chat, vakansiyalar, ariza berish va qaytarib olish, korxona testlari, CV (ochiq havola + PDF), talabalikni tasdiqlash so'rovi, TalantGo AI |
+| Talaba | 5 ta yo'nalish × haftalik vazifalar, fayl topshirish, peer va mentor tekshiruvi, AI birinchi tekshiruv, ball va streak, reyting, guruhlar va chat, vakansiyalar, ariza berish va qaytarib olish, korxona testlari, CV (ochiq havola + PDF), talabalikni tasdiqlash so'rovi, Careerup AI |
 | Korxona | STIR bilan ro'yxatdan o'tish → admin tasdig'i, vakansiya yaratish (admin moderatsiyasi), arizachilar va status (viewed, shortlisted, rejected, hired), talabalar ro'yxati (ism, CV, PDF), anonim talent qidiruvi + kontakt so'rovi, testlar (yaratish, natija, baholash), statistika |
 | Universitet | Xodim so'rovi → owner tasdig'i, Ko'rsatkichlar (talabalar soni, tasdiqlangan, faol, ariza statuslari, `hired` soni, top korxonalar, kurs va fakultet kesimi), talabalikni tasdiqlash, talabalar ro'yxati, CSV eksport |
 | Mentor | Vazifa qo'shish, chellenjlar (1-3 o'rin, ball), savollarga javob |

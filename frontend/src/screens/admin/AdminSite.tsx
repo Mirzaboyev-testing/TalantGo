@@ -17,6 +17,7 @@ import Universities from "./Universities";
 import Users from "./Users";
 import { Complaints, Outcomes, Partnerships, Ranking } from "./Trust";
 import { clearToken, loadToken, saveToken } from "./session";
+import { BrandLogo } from "../../brand";
 
 export interface AdminCtx { isOwner: boolean; name: string }
 type Me = { id: number; name: string; email: string; role: string; is_owner: boolean };
@@ -114,7 +115,7 @@ export default function AdminSite() {
       <div className="admin-shell">
         {menuOpen && <div className="admin-backdrop" onClick={() => setMenuOpen(false)} />}
         <aside className={`admin-side ${menuOpen ? "open" : ""}`}>
-          <div className="admin-brand"><i>T</i>TalantGo</div>
+          <div className="admin-brand"><BrandLogo size={36} suffix="admin" /></div>
           {MENU.map((g) => {
             const pages = g.pages.filter(visible);
             if (pages.length === 0) return null;

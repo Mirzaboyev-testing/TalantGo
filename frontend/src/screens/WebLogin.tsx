@@ -9,6 +9,7 @@ import { Field, useRequired } from "../form";
 import { BOT_URL, offerTelegram } from "../tg";
 import { ErrorText, isFullName, message } from "../ui";
 import { BotWaiting, useBotLink } from "./BotLink";
+import { BRAND, BrandLogo } from "../brand";
 
 type GetToken = () => Promise<{ token: string; moved_to?: string | null }>;
 
@@ -84,8 +85,8 @@ export default function WebLogin({ dev, panel, onSignIn, onDev }: {
     <div className="login">
       <div className={`login-grid ${panel ?? "talaba"}`}>
         <aside className="login-side">
-          <span className="pub-brand"><span className="brand-mark small">T</span>TalantGo</span>
-          <h1>{panelInfo ? t(panelInfo.title) : "TalantGo"}</h1>
+          <span className="pub-brand"><BrandLogo size={48} /></span>
+          <h1>{panelInfo ? t(panelInfo.title) : BRAND}</h1>
           <p>{panel ? t(PANEL_HINT[panel]) : t("s.web.tagline")}</p>
           <PanelArt panel={panel ?? "talaba"} />
           {panel && (

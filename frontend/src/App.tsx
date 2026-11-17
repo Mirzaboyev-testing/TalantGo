@@ -141,7 +141,7 @@ export default function App() {
     return <PublicSite me={me} dev={false} onSignIn={signIn} onDev={devLogin} />;
   }
 
-  // TalantGo AI is there from the first screen: people ask how to sign up, then how to use their part of the app
+  // Careerup AI is there from the first screen: people ask how to sign up, then how to use their part of the app
   const audience: AiAudience = me.account_type === "employer" ? "employer"
     : me.account_type === "university" || me.signup_missing.length > 0 ? "signup" : "student";
   const ai = <Assistant key={`${me.id}-${audience}`} audience={audience} />;

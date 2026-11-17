@@ -75,7 +75,7 @@ def render(cv: dict, extra: dict) -> bytes:
                 cv.get("github_url", ""), cv.get("linkedin_url", "")]
     doc.para("   ".join(c for c in contacts if c), 9.5, color=GREY, gap=1)
     if cv.get("verification") == "verified":
-        doc.para(f"Talabaligi tasdiqlangan: {cv.get('verified_by') or 'TalantGo'}", 9.5, True, GREEN)
+        doc.para(f"Talabaligi tasdiqlangan: {cv.get('verified_by') or 'Careerup'}", 9.5, True, GREEN)
 
     doc.section("Ta'lim")
     study = ", ".join(x for x in [cv.get("faculty"), _course(cv.get("course")),
@@ -90,7 +90,7 @@ def render(cv: dict, extra: dict) -> bytes:
     doc.para("   ".join(more), 10)
 
     stats = cv.get("stats", {})
-    doc.section("TalantGo natijalari")
+    doc.section("Careerup natijalari")
     lines = [f"Yo'nalish: {cv['track']}" if cv.get("track") else "",
              f"Ball: {stats.get('points', 0)}   Umumiy reyting: {stats.get('rank_overall', '-')}-o'rin"
              + (f"   Yo'nalishda: {stats['rank_in_track']}-o'rin" if stats.get("rank_in_track") else ""),
@@ -156,7 +156,7 @@ def render(cv: dict, extra: dict) -> bytes:
 
     doc.ln(4)
     now = datetime.now(ZoneInfo("Asia/Tashkent")).strftime("%d.%m.%Y")
-    doc.para(f"TalantGo tomonidan {now} da yaratildi. Tasdiqlangan yozuvlarda kim tasdiqlagani ko'rsatilgan; "
+    doc.para(f"Careerup tomonidan {now} da yaratildi. Tasdiqlangan yozuvlarda kim tasdiqlagani ko'rsatilgan; "
              "«o'zi kiritgan» yozuvlarni talaba o'zi qo'shgan.", 8, color=GREY)
     return bytes(doc.output())
 

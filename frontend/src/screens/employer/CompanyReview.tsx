@@ -8,6 +8,7 @@ import { ErrorText, message } from "../../ui";
 import LangSwitch from "../LangSwitch";
 import CompanySignup, { industryLabel } from "./CompanySignup";
 import { CompanyMark } from "./kit";
+import { BrandLogo } from "../../brand";
 
 const TIPS = [1, 2, 3, 4, 5] as const;
 const PREP: { key: "job" | "task" | "profile" | "ai"; icon: IconName }[] = [
@@ -77,7 +78,7 @@ export default function CompanyReview({ me, onChanged, onLogout }: { me: Me; onC
   return (
     <div className="co-review">
       <header className="co-review-top">
-        <span className="brand-mark small">T</span><b className="grow">TalantGo</b>
+        <span className="grow"><BrandLogo size={36} /></span>
         <LangSwitch />
         {onLogout && !insideTelegram && <button className="btn small ghost" onClick={onLogout}><Icon name="logout" size={16} />{t("shell.logout")}</button>}
       </header>
