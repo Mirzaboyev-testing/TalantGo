@@ -10,7 +10,9 @@ VERIFIED = (Status.peer_verified, Status.mentor_verified)
 LEVEL_LABEL = {Status.peer_verified: "Tengdoshlar tasdiqlagan", Status.mentor_verified: "Mentor tasdiqlagan"}
 
 
-async def build_cv(session: AsyncSession, user: User) -> dict:
+async def build_cv(session: AsyncSession, user: User, contacts: bool = True) -> dict:
+    """`contacts=False` for a company the student has not applied to and whose contact request was not accepted:
+    the Telegram username stays out (trust rule: contacts open only after an application or an accepted request)."""
     subs = (await session.execute(
         select(Submission).join(Task)
         .where(Submission.user_id == user.id, Submission.status.in_(VERIFIED))
@@ -54,7 +56,7 @@ async def build_cv(session: AsyncSession, user: User) -> dict:
         "challenges": challenges,
         "full_name": user.full_name,
         "headline": user.headline,
-        "username": user.username,
+        "username": user.username if contacts else None,
         "photo_url": user.photo_url,
         "university": user.university_ref.name if user.university_ref else user.university,
         "faculty": user.faculty,
@@ -82,3 +84,12 @@ async def build_cv(session: AsyncSession, user: User) -> dict:
         "public_url": f"{settings.public_url}/cv/{user.cv_slug}",
         "is_public": user.cv_public,
     }
+
+
+def public_view(cv: dict) -> dict:
+    """The CV for anyone with the public link: portfolio files (a certificate scan, attachments) stay out; the page
+    shows only project covers. Companies that may see the student get the full build_cv() output."""
+    out = dict(cv)
+    for key in ("projects", "certificates"):
+        out[key] = [{k: v for k, v in item.items() if k not in ("files", "cover_id")} for item in cv.get(key, [])]
+    return out

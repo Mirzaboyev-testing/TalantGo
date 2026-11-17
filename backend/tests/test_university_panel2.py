@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 
 from app.core.db import SessionLocal
-from app.models import University, User
+from app.models import University, UniversityEvent, User
 from tests.conftest import owner_headers as owner
 from tests.test_career import make_student, uni_id, upload_doc
 from tests.test_pipeline_and_inbox import API, live_job
@@ -233,3 +233,85 @@ async def test_companies_directory_and_targeted_recommendation(client, make_user
     assert rows[0]["name"] == "Data Solutions MChJ" and rows[0]["open_jobs"] == 1 and rows[0]["partnership"] is None
     r = await client.post(f"{API}/university/jobs/{job['id']}/recommend", json={"note": "", "faculty": "Moliya"}, headers=h)
     assert r.json()["students"] == 1
+
+
+# --------------------------------------------------------------------------- review round before the push (2026-11-17)
+
+async def test_university_never_sees_student_contacts_and_csv_cannot_run_formulas(client, make_user):
+    staff = await approved_staff(client, make_user)
+    a = await make_student(client, make_user, "Ali Valiyev")
+    async with SessionLocal() as s:
+        u = await s.get(User, a["id"])
+        u.phone, u.email, u.username, u.group_name = "+998901110000", "ali@mail.uz", "ali_tg", "=HYPERLINK(\"http://x\")"
+        await s.commit()
+    h = staff["headers"]
+    row = (await client.get(f"{API}/university/roster", headers=h)).json()["items"][0]
+    assert not {"phone", "email", "username"} & row.keys()
+    card = (await client.get(f"{API}/university/students/{a['id']}", headers=h)).json()
+    assert not {"phone", "email", "username"} & card.keys()
+    # the Telegram handle is not a search key either
+    assert (await client.get(f"{API}/university/roster", params={"q": "ali_tg"}, headers=h)).json()["total"] == 0
+    csv = (await client.get(f"{API}/university/export.csv", headers=h)).text
+    assert "+998901110000" not in csv and "ali@mail.uz" not in csv and "Telefon" not in csv
+    assert "'=HYPERLINK" in csv
+
+    start = (datetime.now(UTC) + timedelta(days=2)).isoformat()
+    event = (await client.post(f"{API}/university/events", json={"title": "Karyera kuni", "starts_at": start}, headers=h)).json()
+    await client.post(f"{API}/me/university/events/{event['id']}/register", headers=a["headers"])
+    regs = (await client.get(f"{API}/university/events/{event['id']}/registrations", headers=h)).json()
+    assert len(regs) == 1 and "phone" not in regs[0]
+    regs_csv = (await client.get(f"{API}/university/events/{event['id']}/registrations.csv", headers=h)).text
+    assert "+998901110000" not in regs_csv and "'=HYPERLINK" in regs_csv
+
+
+async def test_message_links_stay_inside_the_app(client, make_user):
+    staff = await approved_staff(client, make_user)
+    await make_student(client, make_user, "Ali Valiyev")
+    h = staff["headers"]
+    for bad in ("/\\evil.example", "/\t/evil.example", "//evil.example", "/ok page"):
+        r = await client.post(f"{API}/university/announcements", json={"title": "Havola", "text": "Havola tekshiruvi",
+                                                                       "link": bad}, headers=h)
+        assert r.status_code == 422, bad
+    r = await client.post(f"{API}/university/announcements", json={"title": "Havola", "text": "Havola tekshiruvi",
+                                                                   "link": "/vakansiyalar/12"}, headers=h)
+    assert r.status_code == 201
+
+
+async def test_members_do_not_get_colleagues_documents_and_contacts(client, make_user):
+    lead = await staff_form(client, make_user, name="Rahbar Xodim")
+    await client.post(f"{API}/admin/staff/{lead['id']}/review", json={"decision": "approve"}, headers=await owner(client))
+    member = await staff_form(client, make_user, name="Oddiy Xodim")
+    await client.post(f"{API}/university/team/{member['id']}/decide", json={"decision": "approve"}, headers=lead["headers"])
+    waiting = await staff_form(client, make_user, name="Navbatdagi Xodim")
+    seen_by_lead = {r["full_name"]: r for r in (await client.get(f"{API}/university/team", headers=lead["headers"])).json()["rows"]}
+    assert seen_by_lead["Navbatdagi Xodim"]["doc"] and seen_by_lead["Navbatdagi Xodim"]["phone"]
+    seen_by_member = {r["full_name"]: r for r in (await client.get(f"{API}/university/team", headers=member["headers"])).json()["rows"]}
+    assert seen_by_member["Navbatdagi Xodim"]["doc"] is None and seen_by_member["Navbatdagi Xodim"]["phone"] == ""
+    assert seen_by_member["Rahbar Xodim"]["phone"] == "" and seen_by_member["Rahbar Xodim"]["work_email"] == ""
+    assert seen_by_member["Oddiy Xodim"]["phone"]                      # their own row stays whole
+    assert waiting["response"].status_code == 201
+
+
+async def test_switched_off_university_closes_the_panel_and_requests_are_limited(client, make_user):
+    staff = await approved_staff(client, make_user)
+    async with SessionLocal() as s:
+        (await s.get(University, await uni_id("TDIU"))).is_active = False
+        await s.commit()
+    assert (await client.get(f"{API}/university/dashboard", headers=staff["headers"])).status_code == 403
+
+    u = await make_user("Takror Yuboruvchi")
+    body = {"university_id": await uni_id("TATU"), "position": "Karyera markazi"}
+    codes = [(await client.post(f"{API}/me/staff-request", json=body, headers=u["headers"])).status_code for _ in range(7)]
+    assert codes[:6] == [201] * 6 and codes[6] == 429
+
+
+async def test_company_event_is_not_reachable_through_the_university_signup(client, make_user):
+    loner = await make_user("Universitetsiz")
+    async with SessionLocal() as s:
+        (await s.get(User, loner["id"])).account_type = "student"
+        e = UniversityEvent(university_id=None, title="Korxona ochiq kuni", starts_at=datetime.now(UTC) + timedelta(days=1))
+        s.add(e)
+        await s.commit()
+        event_id = e.id
+    r = await client.post(f"{API}/me/university/events/{event_id}/register", headers=loner["headers"])
+    assert r.status_code == 404

@@ -214,3 +214,105 @@ async def test_task_entry_with_files_and_job_filters(client, make_user):
     jobs = (await client.get(f"{API}/jobs?field=design", headers=s["headers"])).json()
     assert jobs == []
     assert len((await client.get(f"{API}/jobs?sort=new", headers=s["headers"])).json()) == 1
+
+
+# --------------------------------------------------------------------------- review fixes (2026-11-17)
+
+async def test_catalog_seed_runs_once_so_staff_can_clear_faculties(client, make_user):
+    from app.core.db import SessionLocal
+    from app.seed import seed
+    staff = await approved_staff(client, make_user, "TATU")
+    r = await client.patch(f"{API}/university/profile", json={"faculties": []}, headers=staff["headers"])
+    assert r.json()["faculties"] == []
+    async with SessionLocal() as s:                              # a restart runs the seed again
+        await seed(s)
+    tatu = next(u for u in (await client.get(f"{API}/universities")).json() if u["short_name"] == "TATU")
+    assert tatu["faculties"] == []
+
+
+async def test_public_cv_leaves_portfolio_files_out(client, make_user):
+    from tests.test_career import upload_doc
+    u = await full_student(client, make_user, "Ochiq Talaba")
+    scan = await upload_doc(client, u["headers"], "ielts.png", PNG)
+    await client.post(f"{API}/me/portfolio", json={"kind": "certificate", "title": "IELTS 7.0", "org": "British Council",
+                                                   "file_ids": [scan]}, headers=u["headers"])
+    me = (await client.patch(f"{API}/me", json={"cv_public": True}, headers=u["headers"])).json()
+    public = (await client.get(f"{API}/cv/{me['cv_slug']}")).json()
+    assert public["certificates"][0]["title"] == "IELTS 7.0" and "files" not in public["certificates"][0]
+    own = (await client.get(f"{API}/me/cv", headers=u["headers"])).json()
+    assert own["certificates"][0]["files"]                       # the student (and allowed companies) still see them
+    page = await client.get(f"/cv/{me['cv_slug']}")
+    assert page.status_code == 200 and "/api/v1/media/" not in page.text
+
+
+async def test_company_without_a_shared_contact_gets_no_telegram_in_the_cv(client, make_user):
+    from app.core.db import SessionLocal
+    from app.models import User
+    from app.services.cv import build_cv
+    u = await full_student(client, make_user, "Telegram Talaba")
+    async with SessionLocal() as s:
+        user = await s.get(User, u["id"])
+        user.username = "talaba_tg"
+        await s.commit()
+        assert (await build_cv(s, user))["username"] == "talaba_tg"
+        assert (await build_cv(s, user, contacts=False))["username"] is None
+    from app.core.security import create_token
+    anon = create_token(str(u["id"]), "cvpdf-anon", 1)
+    assert (await client.get(f"{API}/cv-pdf/{u['id']}?t={anon}")).status_code == 200
+    assert (await client.get(f"{API}/cv-pdf/{u['id']}?t={create_token(str(u['id']), 'other', 1)}")).status_code == 403
+
+
+async def test_profile_files_stay_out_of_submissions_and_links_die_with_their_use(client, make_user, monkeypatch):
+    from tests.test_career import upload_doc
+    from app.services import portfolio as pf
+    u = await full_student(client, make_user, "Fayl Talaba")
+    pic = await upload_doc(client, u["headers"], "a.png", PNG)
+    url = (await client.put(f"{API}/me/photo", json={"file_id": pic}, headers=u["headers"])).json()["photo_url"]
+    # a kept profile file cannot be handed in as weekly work
+    tasks = (await client.get(f"{API}/tracks/{u['track_id']}/tasks", headers=u["headers"])).json()
+    task = next(t for t in tasks if t["kind"] == "submission")
+    r = await client.post(f"{API}/tasks/{task['id']}/submit", json={"proof_url": "", "note": "", "file_ids": [pic]}, headers=u["headers"])
+    assert r.status_code == 422
+    # replacing the photo takes the old link down; deleting an item takes its files down
+    pic2 = await upload_doc(client, u["headers"], "b.png", PNG)
+    await client.put(f"{API}/me/photo", json={"file_id": pic2}, headers=u["headers"])
+    assert (await client.get(url)).status_code == 404
+    shot = await upload_doc(client, u["headers"], "c.png", PNG)
+    p = (await client.post(f"{API}/me/portfolio", json={"kind": "project", "title": "Loyiha", "cover_id": shot},
+                           headers=u["headers"])).json()["projects"][0]
+    assert (await client.get(p["cover_url"])).status_code == 200
+    await client.delete(f"{API}/me/portfolio/{p['id']}", headers=u["headers"])
+    assert (await client.get(p["cover_url"])).status_code == 404
+    # a cap on kept files
+    monkeypatch.setattr(pf, "MAX_KEPT", 1)
+    pic3 = await upload_doc(client, u["headers"], "d.png", PNG)
+    assert (await client.put(f"{API}/me/cover", json={"file_id": pic3}, headers=u["headers"])).status_code == 409
+
+
+async def test_review_fixes_for_events_chat_and_experience(client, make_user):
+    from datetime import UTC, datetime, timedelta
+    from tests.conftest import owner_headers as owner
+    from tests.test_pipeline_and_inbox import applied_student, live_job
+    hr, job = await live_job(client, make_user)
+    student = await applied_student(client, make_user, job, "Dilnoza")
+    when = (datetime.now(UTC) + timedelta(days=3)).isoformat()
+    eid = (await client.post(f"{API}/employer/events", json={"title": "Vebinar", "kind": "workshop", "starts_at": when},
+                             headers=hr["headers"])).json()["id"]
+    assert (await client.post(f"{API}/me/events/{eid}/register", headers=student["headers"])).status_code == 201
+    assert (await client.post(f"{API}/me/events/{eid}/register", headers=student["headers"])).status_code == 201   # twice: no 500
+    # the company is sent back to review: its events disappear for students
+    await client.post(f"{API}/admin/companies/{hr['company_id']}/review", json={"approve": False, "note": "Hujjat eskirgan"},
+                      headers=await owner(client))
+    assert (await client.get(f"{API}/me/events", headers=student["headers"])).json() == []
+
+    hr2, job2 = await live_job(client, make_user, stir="308888888", name="HR Ikki")
+    s2 = await applied_student(client, make_user, job2, "Bekzod")
+    tid = (await client.post(f"{API}/employer/chats", json={"student_id": s2["id"]}, headers=hr2["headers"])).json()["thread"]["id"]
+    apps = (await client.get(f"{API}/me/applications", headers=s2["headers"])).json()
+    await client.post(f"{API}/me/applications/{apps[0]['id']}/withdraw", headers=s2["headers"])
+    assert (await client.get(f"{API}/employer/chats/{tid}", headers=hr2["headers"])).json()["can_write"] is False
+
+    job_entry = (await client.post(f"{API}/me/outcomes", json={"company_name": "Kafe", "kind": "part_time"},
+                                   headers=s2["headers"])).json()
+    r = await client.patch(f"{API}/me/outcomes/{job_entry['id']}", json={"description": None, "position": None}, headers=s2["headers"])
+    assert r.status_code == 200 and r.json()["description"] == ""

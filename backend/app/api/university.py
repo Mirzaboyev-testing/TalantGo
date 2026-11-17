@@ -35,6 +35,8 @@ public_router = APIRouter(prefix="/public/universities", tags=["university"])
 async def staff(user: CurrentUser) -> User:
     if user.account_type != "university" or user.staff_status != "approved" or user.staff_university_id is None:
         raise HTTPException(403, "Bu bo'lim tasdiqlangan universitet xodimlari uchun")
+    if user.staff_university is None or not user.staff_university.is_active:     # the admin switched the university off
+        raise HTTPException(403, "Universitet faol emas. Administratorga yozing.")
     return user
 
 
@@ -103,7 +105,7 @@ def apply_filter(query, f: StudentFilter, uni_id: int):
     if f.q and f.q.strip():
         like = f"%{f.q.strip()}%"
         query = query.where(User.full_name.ilike(like) | User.student_number.ilike(like) | User.faculty.ilike(like)
-                            | User.group_name.ilike(like) | User.username.ilike(like))
+                            | User.group_name.ilike(like))
     if f.faculty:
         query = query.where(User.faculty == f.faculty)
     if f.course:
@@ -148,7 +150,8 @@ SORTS = {
 
 
 def _student_row(u: User, verified_tasks: int, applications: int = 0, hired: bool = False, placed: bool = False) -> dict:
-    return {"id": u.id, "full_name": u.full_name, "username": u.username, "photo_url": u.photo_url,
+    # never phone, email or Telegram: the student's consent opens contacts only to employers they apply to
+    return {"id": u.id, "full_name": u.full_name, "photo_url": u.photo_url,
             "faculty": u.faculty, "course": u.course, "group_name": u.group_name, "student_number": u.student_number,
             "graduation_year": u.graduation_year, "verification": u.verification,
             "track": u.track.title if u.track else None, "track_id": u.track_id, "points": u.points,
@@ -386,7 +389,7 @@ async def student_detail(student_id: int, user: Staff, session: Session) -> dict
     return {
         **_student_row(s, works, len(apps), hired, placed),
         "skills": s.skills, "languages": s.languages, "job_types": s.job_types, "city": s.city, "bio": s.bio,
-        "headline": s.headline, "gpa": s.gpa, "gpa_scale": s.gpa_scale, "phone": s.phone, "email": s.email,
+        "headline": s.headline, "gpa": s.gpa, "gpa_scale": s.gpa_scale,
         "github_url": s.github_url, "linkedin_url": s.linkedin_url, "verified_by": s.verified_by,
         "verified_at": s.verified_at, "verification_note": s.verification_note,
         "cv_slug": s.cv_slug, "completeness": completeness(s), "streak": s.streak_count,
@@ -428,12 +431,19 @@ async def verify(student_id: int, body: ReviewDecisionIn, user: Staff, session: 
     return {"verification": student.verification}
 
 
+def cell(value):
+    """Text a student typed (name, group, company) must not run as a formula when Excel opens the file."""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + value
+    return value
+
+
 def _csv(rows: list[list], header: list[str], filename: str) -> StreamingResponse:
     buf = io.StringIO()
     buf.write("﻿")                      # Excel opens UTF-8 with a BOM correctly
     out = csv.writer(buf)
     out.writerow(header)
-    out.writerows(rows)
+    out.writerows([cell(v) for v in row] for row in rows)
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv; charset=utf-8",
                              headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
@@ -448,11 +458,11 @@ async def export(user: Staff, session: Session, f: Annotated[StudentFilter, Quer
     yes = lambda v: "ha" if v else "yo'q"  # noqa: E731
     return _csv([[u.full_name, u.faculty, u.course or "", u.group_name, u.student_number, u.graduation_year or "",
                   u.verification, u.track.title if u.track else "", u.points, w, a, yes(h), yes(p), yes(u.open_to_work),
-                  yes(u.cv_public), u.phone, u.email or "",
+                  yes(u.cv_public),
                   u.last_seen_at.strftime("%d.%m.%Y") if u.last_seen_at else ""] for u, w, a, h, p in rows],
                 ["Ism", "Fakultet", "Kurs", "Guruh", "Talaba ID", "Bitirish yili", "Tasdiq", "Yo'nalish", "Ball",
                  "Tasdiqlangan ishlar", "Arizalar", "Ishga olingan", "Ish joyi tasdiqlangan", "Ishga tayyor", "CV ochiq",
-                 "Telefon", "Email", "Oxirgi kirish"], "talabalar-hisobot.csv")
+                 "Oxirgi kirish"], "talabalar-hisobot.csv")
 
 
 @router.get("/faculties.csv")
@@ -555,7 +565,11 @@ async def university_logo(university_id: int, session: Session) -> FileResponse:
 
 @router.get("/team")
 async def team(user: Staff, session: Session) -> dict:
-    return {"me": {"id": user.id, "role": user.staff_role}, "rows": await staff_service.team(session, user.staff_university_id)}
+    rows = await staff_service.team(session, user.staff_university_id)
+    if user.staff_role != "lead":           # members see who is on the team, not colleagues' documents and contacts
+        rows = [r if r["id"] == user.id else {**r, "phone": "", "email": None, "work_email": "", "doc": None, "mou": None,
+                                              "review_note": ""} for r in rows]
+    return {"me": {"id": user.id, "role": user.staff_role}, "rows": rows}
 
 
 async def _colleague(session, user: User, colleague_id: int) -> User:

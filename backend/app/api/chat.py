@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ..core import ratelimit
@@ -69,8 +69,9 @@ async def _messages(session, c: Conversation, side: str) -> dict:
     elif side == "company" and c.company_unread:
         c.company_unread = 0
         await session.commit()
+    can_write = side == "student" or (not c.closed_by_student and await may_talk(session, c.company_id, c.student_id))
     return {"thread": _thread_out(c, side, msgs[0] if msgs else None), "messages": [_msg_out(m) for m in reversed(msgs)],
-            "can_write": side == "student" or not c.closed_by_student}
+            "can_write": can_write}
 
 
 class MessageIn(BaseModel):
@@ -88,13 +89,16 @@ async def _send(session, c: Conversation, user: User, side: str, text: str) -> d
         raise HTTPException(403, "Talaba ariza bermagan yoki bog'lanishga rozilik bermagan")
     m = ChatMessage(conversation_id=c.id, sender_id=user.id, side=side, text=text)
     session.add(m)
-    c.last_message_at = datetime.now(UTC)
+    # counters in SQL: two people of one company writing at the same moment must both count
+    values = {"last_message_at": datetime.now(UTC)}
     if side == "company":
-        c.student_unread += 1
+        values["student_unread"] = Conversation.student_unread + 1
     else:
-        c.company_unread += 1
-        c.closed_by_student = False                     # writing reopens a closed thread
+        values["company_unread"] = Conversation.company_unread + 1
+        values["closed_by_student"] = False             # writing reopens a closed thread
+    await session.execute(update(Conversation).where(Conversation.id == c.id).values(**values))
     await session.commit()
+    await session.refresh(c)
     await session.refresh(m)
     short = text if len(text) <= 120 else text[:117] + "…"
     if side == "company":

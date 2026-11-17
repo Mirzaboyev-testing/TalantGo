@@ -49,7 +49,9 @@ class ItemIn(BaseModel):
         return self
 
 
-async def _apply(session, user, item: PortfolioItem, body: ItemIn) -> None:
+async def _apply(session, user, item: PortfolioItem, body: ItemIn) -> list[int]:
+    """Fills the item; returns the files it no longer uses (to release once flushed)."""
+    before = [item.cover_file_id, *(item.file_ids or [])]
     cover = await pf.claim(session, user, [body.cover_id] if body.cover_id else [], pf.IMAGE_TYPES, "Muqova rasmi")
     attached = await pf.claim(session, user, body.file_ids, pf.ATTACH_TYPES, "Fayl")
     item.kind, item.title, item.org = body.kind, " ".join(body.title.split()), body.org.strip()
@@ -58,6 +60,7 @@ async def _apply(session, user, item: PortfolioItem, body: ItemIn) -> None:
     item.skills = list(dict.fromkeys(body.skills))
     item.cover_file_id = cover[0].id if cover else None
     item.file_ids = [f.id for f in attached]
+    return [i for i in before if i and i != item.cover_file_id and i not in item.file_ids]
 
 
 @router.post("/me/portfolio", status_code=201)
@@ -85,7 +88,9 @@ async def _own(session, user, item_id: int) -> PortfolioItem:
 @router.put("/me/portfolio/{item_id}")
 async def edit_item(item_id: int, body: ItemIn, user: CurrentUser, session: Session) -> dict:
     item = await _own(session, user, item_id)
-    await _apply(session, user, item, body)
+    dropped = await _apply(session, user, item, body)
+    await session.flush()
+    await pf.release(session, user, dropped)
     await session.commit()
     return await pf.portfolio(session, user)
 
@@ -93,8 +98,10 @@ async def edit_item(item_id: int, body: ItemIn, user: CurrentUser, session: Sess
 @router.delete("/me/portfolio/{item_id}")
 async def delete_item(item_id: int, user: CurrentUser, session: Session) -> dict:
     item = await _own(session, user, item_id)
+    used = [item.cover_file_id, *(item.file_ids or [])]
     await session.delete(item)
     await session.flush()
+    await pf.release(session, user, used)
     await pf.refresh_count(session, user)
     await session.commit()
     return await pf.portfolio(session, user)
@@ -121,7 +128,9 @@ async def edit_experience(outcome_id: int, body: ExperiencePatch, user: CurrentU
     if start and end and end < start:
         raise HTTPException(422, "Tugash sanasi boshlanishidan oldin bo'lmasin")
     for k, v in changes.items():
-        setattr(o, k, v.strip() if isinstance(v, str) else v)
+        if k in ("position", "description"):
+            v = (v or "").strip()                        # these columns are NOT NULL: an empty value clears them
+        setattr(o, k, v)
     await session.commit()
     return pf.experience_out(o)
 
@@ -133,11 +142,15 @@ class ImageIn(BaseModel):
 @router.put("/me/photo", response_model=MeOut)
 async def set_photo(body: ImageIn, user: CurrentUser, session: Session) -> MeOut:
     from .people import me_out
+    old = user.avatar_file_id
     if body.file_id:
         row = (await pf.claim(session, user, [body.file_id], pf.IMAGE_TYPES, "Profil rasmi"))[0]
         user.avatar_file_id, user.photo_url = row.id, pf.media_url(row.id)
     else:
         user.avatar_file_id, user.photo_url = None, None
+    await session.flush()
+    if old != user.avatar_file_id:
+        await pf.release(session, user, [old])
     await session.commit()
     await session.refresh(user)
     return await me_out(session, user)
@@ -146,10 +159,14 @@ async def set_photo(body: ImageIn, user: CurrentUser, session: Session) -> MeOut
 @router.put("/me/cover", response_model=MeOut)
 async def set_cover(body: ImageIn, user: CurrentUser, session: Session) -> MeOut:
     from .people import me_out
+    old = user.cover_file_id
     if body.file_id:
         user.cover_file_id = (await pf.claim(session, user, [body.file_id], pf.IMAGE_TYPES, "Muqova rasmi"))[0].id
     else:
         user.cover_file_id = None
+    await session.flush()
+    if old != user.cover_file_id:
+        await pf.release(session, user, [old])
     await session.commit()
     await session.refresh(user)
     return await me_out(session, user)
@@ -162,7 +179,9 @@ async def media(file_id: int, s: str, session: Session) -> FileResponse:
         raise HTTPException(403, "Havola noto'g'ri")
     row = await session.get(SubmissionFile, file_id)
     path = files.root() / row.stored_name if row else None
-    if row is None or not row.kept or not path.is_file():           # only files checked when they were kept
+    # only files checked when they were kept, and only while something still uses them (a deleted item,
+    # a replaced photo or an edited task entry takes the link down with it)
+    if row is None or not row.kept or not path.is_file() or not await pf.referenced(session, file_id):
         raise HTTPException(404, "Fayl topilmadi")
     inline = row.mime in pf.ATTACH_TYPES                                  # images and PDF show, the rest downloads
     return FileResponse(path, media_type=row.mime if inline else "application/octet-stream", filename=row.filename,

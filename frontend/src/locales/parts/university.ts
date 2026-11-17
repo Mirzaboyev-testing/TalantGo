@@ -350,7 +350,6 @@ const uz = {
   "u.st.profile": "Profil",
   "u.st.study": "O'qish ma'lumotlari",
   "u.st.verified_by": "Tasdiqlagan: {who}, {when}",
-  "u.st.contacts": "Aloqa",
   "u.st.career": "Karyera",
   "u.st.headline": "Qisqacha",
   "u.st.apps_title": "Arizalar ({n})",

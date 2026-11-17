@@ -353,7 +353,10 @@ async def enter(challenge_id: int, body: EntryIn, user: CurrentUser, session: Se
                                file_ids=[f.id for f in files])
         session.add(entry)
     else:                                                                 # can be improved until reviewed
+        dropped = [i for i in (entry.file_ids or []) if i not in [f.id for f in files]]
         entry.proof_url, entry.note, entry.file_ids = body.proof_url, body.note.strip(), [f.id for f in files]
+        await session.flush()
+        await pf.release(session, user, dropped)
     await session.commit()
     await session.refresh(entry)
     return entry_out(entry)

@@ -27,9 +27,9 @@
 .st-field-tick { position: absolute; top: 8px; right: 8px; width: 18px; height: 18px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center; }
 .st-kinds .co-choice { min-height: 70px; }
 @media (max-width: 520px) {
-  .st-field-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
-  .st-field { padding: 8px 24px 8px 8px; gap: 8px; font-size: 12.5px; min-height: 48px; }
-  .st-field-icon { width: 28px; height: 28px; }
+  .st-field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .st-field { padding: 8px 24px 8px 10px; gap: 8px; font-size: 13px; min-height: 46px; }
+  .st-field-icon { display: none; }                 /* two columns on a phone: the text needs the room */
   .st-seg button { padding: 7px 11px; font-size: 13px; }
 }
 

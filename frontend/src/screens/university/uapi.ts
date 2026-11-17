@@ -49,7 +49,7 @@ export interface FacultyRow {
 }
 
 export interface RosterRow {
-  id: number; full_name: string; username: string | null; photo_url: string | null; faculty: string; course: number | null;
+  id: number; full_name: string; photo_url: string | null; faculty: string; course: number | null;
   group_name: string; student_number: string; graduation_year: number | null; verification: Verification;
   track: string | null; track_id: number | null; points: number; verified_tasks: number; open_to_work: boolean;
   cv_public: boolean; last_seen_at: string | null; created_at: string; applications: number; hired: boolean; placed: boolean;
@@ -57,7 +57,7 @@ export interface RosterRow {
 }
 export interface StudentCard extends RosterRow {
   languages: string[]; job_types: string[]; city: string; bio: string; headline: string; gpa: number | null; gpa_scale: number;
-  phone: string; email: string | null; github_url: string; linkedin_url: string; verified_by: string; verified_at: string | null;
+  github_url: string; linkedin_url: string; verified_by: string; verified_at: string | null;
   verification_note: string; cv_slug: string; completeness: { percent: number; missing: string[] }; streak: number;
   applications_list: { job: string; company: string; status: string; updated_at: string }[];
   outcomes: { company: string; position: string; kind: OutcomeKind; confirmed: boolean; confirmed_by: string; started_on: string | null }[];
@@ -101,7 +101,7 @@ export interface EventInput {
   title: string; kind: EventKind; description: string; starts_at: string; ends_at: string | null; location: string;
   online_url: string; capacity: number | null; companies: string; audience: Audience; notify: boolean;
 }
-export interface Registration { user_id: number; full_name: string; faculty: string; course: number | null; group_name: string; phone: string; attended: boolean; created_at: string }
+export interface Registration { user_id: number; full_name: string; faculty: string; course: number | null; group_name: string; attended: boolean; created_at: string }
 
 export interface UniversityStats {
   min_sample: number; students: number; with_graduation_year: number; placed: number; employed: number; interned: number;

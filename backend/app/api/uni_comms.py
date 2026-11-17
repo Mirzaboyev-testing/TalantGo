@@ -18,7 +18,7 @@ from ..core import ratelimit
 from ..models import EVENT_KINDS, AuditLog, EventRegistration, UniversityAnnouncement, UniversityEvent, User
 from ..services import inbox
 from .deps import CurrentUser, Session
-from .university import Staff, StudentFilter, _roster_query, actor
+from .university import Staff, StudentFilter, _roster_query, actor, cell
 
 TASHKENT = ZoneInfo("Asia/Tashkent")
 router = APIRouter(prefix="/university", tags=["university"])
@@ -83,7 +83,8 @@ async def announcement_preview(body: Audience, user: Staff, session: Session) ->
 async def send_announcement(body: AnnouncementIn, user: Staff, session: Session) -> dict:
     uni = user.staff_university
     link = body.link.strip()
-    if link and not (link.startswith("/") and not link.startswith("//")):
+    # an in-app page only: a browser reads "//x", "/\x" and "/<tab>/x" as another site
+    if link and (not link.startswith("/") or link.startswith("//") or any(c == "\\" or ord(c) <= 32 for c in link)):
         raise HTTPException(422, "Havola ilova ichidagi sahifa bo'lsin (masalan /vakansiyalar/12)")
     ids = await _audience_ids(session, uni.id, body.audience)
     if not ids:
@@ -220,7 +221,7 @@ async def registrations(event_id: int, user: Staff, session: Session) -> list[di
     rows = (await session.execute(select(EventRegistration).where(EventRegistration.event_id == e.id)
                                   .order_by(EventRegistration.created_at))).scalars()
     return [{"user_id": r.user_id, "full_name": r.user.full_name, "faculty": r.user.faculty, "course": r.user.course,
-             "group_name": r.user.group_name, "phone": r.user.phone, "attended": r.attended, "created_at": r.created_at}
+             "group_name": r.user.group_name, "attended": r.attended, "created_at": r.created_at}
             for r in rows]
 
 
@@ -247,9 +248,9 @@ async def registrations_csv(event_id: int, user: Staff, session: Session) -> Str
     buf = io.StringIO()
     buf.write("﻿")
     out = csv.writer(buf)
-    out.writerow(["Ism", "Fakultet", "Kurs", "Guruh", "Telefon", "Qatnashdi", "Ro'yxatdan o'tgan"])
+    out.writerow(["Ism", "Fakultet", "Kurs", "Guruh", "Qatnashdi", "Ro'yxatdan o'tgan"])
     for r in rows:
-        out.writerow([r["full_name"], r["faculty"], r["course"] or "", r["group_name"], r["phone"],
+        out.writerow([cell(r["full_name"]), cell(r["faculty"]), r["course"] or "", cell(r["group_name"]),
                       "ha" if r["attended"] else "yo'q", r["created_at"].strftime("%d.%m.%Y %H:%M")])
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv; charset=utf-8",
                              headers={"Content-Disposition": f'attachment; filename="tadbir-{e.id}.csv"'})

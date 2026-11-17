@@ -70,6 +70,8 @@ export default function CompanySignup({ me, onSaved, onBack, onLogout }: {
     ...(draft?.f ?? {}),
   });
   const [files, setFiles] = useState<Files>(draft?.files ?? { registration: null, authority: null, logo: null });
+  // an existing company's documents load first; until then a save must not send empty ids (that removes them)
+  const [docsReady, setDocsReady] = useState(!c);
   const [consent, setConsent] = useState(me.consent_current);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -83,11 +85,14 @@ export default function CompanySignup({ me, onSaved, onBack, onLogout }: {
     }, (e) => setError(message(e)));
     api.tracks().then(setTracks, () => {});
     if (c) {
-      api.employer.documents().then((docs) => setFiles({
-        registration: docs.find((d) => d.kind === "registration") ?? null,
-        authority: docs.find((d) => d.kind === "authority") ?? null,
-        logo: docs.find((d) => d.kind === "logo") ?? null,
-      }), () => {});
+      api.employer.documents().then((docs) => {
+        setFiles({
+          registration: docs.find((d) => d.kind === "registration") ?? null,
+          authority: docs.find((d) => d.kind === "authority") ?? null,
+          logo: docs.find((d) => d.kind === "logo") ?? null,
+        });
+        setDocsReady(true);
+      }, () => {});
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -123,7 +128,7 @@ export default function CompanySignup({ me, onSaved, onBack, onLogout }: {
       ["e-stir", /^\d{9}$/.test(f.stir.trim()), t("p.signup.req.stir")],
       ["e-about", f.description.trim().length >= aboutMin, t("co.su.req.about", { n: aboutMin })],
     ];
-    if (n === 2) return [["e-doc", Boolean(files.registration), t("co.su.req.doc")]];
+    if (n === 2) return [["e-doc", Boolean(files.registration) || (!docsReady && Boolean(c?.registration_doc_id)), t("co.su.req.doc")]];
     return [
       ["e-coop", f.cooperation.length > 0, t("co.su.req.coop")],
       ["e-consent", consent, t("p.signup.req.consent")],
@@ -150,15 +155,21 @@ export default function CompanySignup({ me, onSaved, onBack, onLogout }: {
       stir: f.stir.trim(), description: f.description.trim(), website: f.website.trim(), telegram: f.telegram.trim(),
       address: f.address.trim(), email: f.email.trim(), contact_role: f.contact_role, cooperation: f.cooperation,
       wanted_track_ids: f.wanted_track_ids, show_as_partner: f.show_as_partner,
-      registration_doc_id: files.registration?.id ?? null,
-      authority_doc_id: f.contact_role === "representative" ? files.authority?.id ?? null : null,
-      logo_file_id: files.logo?.id ?? null,
+      // a file is sent when its current state is known (loaded, or picked here); otherwise the saved one stays
+      ...(docsReady || files.registration ? { registration_doc_id: files.registration?.id ?? null } : {}),
+      ...(docsReady || files.authority || f.contact_role !== "representative"
+        ? { authority_doc_id: f.contact_role === "representative" ? files.authority?.id ?? null : null } : {}),
+      ...(docsReady || files.logo ? { logo_file_id: files.logo?.id ?? null } : {}),
     };
     setBusy(true); setError("");
     try {
       let saved: Me;
       if (isNew) {
-        saved = await api.registerCompany({ ...company, full_name: f.full_name.trim(), job_title: f.job_title.trim(), consent: true, data_pledge: true });   // the consent text holds the pledge
+        saved = await api.registerCompany({
+          ...company, registration_doc_id: files.registration?.id ?? null, logo_file_id: files.logo?.id ?? null,
+          authority_doc_id: f.contact_role === "representative" ? files.authority?.id ?? null : null,
+          full_name: f.full_name.trim(), job_title: f.job_title.trim(), consent: true, data_pledge: true,   // the consent text holds the pledge
+        });
         try { localStorage.removeItem(draftKey(me.id)); } catch { /* storage blocked */ }
       } else {
         await api.updateMe({ full_name: f.full_name.trim(), job_title: f.job_title.trim(), ...(me.consent_current ? {} : { consent: true }) });

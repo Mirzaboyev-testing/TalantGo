@@ -28,6 +28,7 @@ WORK_EXTS = {".xlsx", ".xls", ".csv", ".docx", ".doc", ".pptx", ".ppt", ".zip", 
              ".r", ".pbix", ".twbx", ".fig", ".pdf", ".png", ".jpg", ".jpeg", ".webp"}
 MAX_ITEMS = 30
 MAX_ITEM_FILES = 6
+MAX_KEPT = 80              # files one person can keep on the profile and task entries (uploads are capped too)
 VERIFIED = (Status.peer_verified, Status.mentor_verified)
 
 
@@ -45,6 +46,10 @@ async def claim(session: AsyncSession, user: User, file_ids: list[int], kinds: s
     ids = list(dict.fromkeys(i for i in file_ids if i))
     if not ids:
         return []
+    kept = await session.scalar(select(func.count()).select_from(SubmissionFile).where(
+        SubmissionFile.user_id == user.id, SubmissionFile.kept.is_(True), SubmissionFile.id.notin_(ids)))
+    if kept + len(ids) > MAX_KEPT:
+        raise HTTPException(409, "Profilda fayllar juda ko'p: eskilarini o'chirib, keyin qo'shing")
     rows = (await session.execute(select(SubmissionFile).where(SubmissionFile.id.in_(ids)))).scalars().all()
     by_id = {r.id: r for r in rows}
     out = []
@@ -58,6 +63,24 @@ async def claim(session: AsyncSession, user: User, file_ids: list[int], kinds: s
         row.kept = True
         out.append(row)
     return out
+
+
+async def referenced(session: AsyncSession, file_id: int) -> bool:
+    """Whether a profile photo or cover, a portfolio item or a task entry still uses the file."""
+    for query in (select(User.id).where((User.avatar_file_id == file_id) | (User.cover_file_id == file_id)),
+                  select(PortfolioItem.id).where((PortfolioItem.cover_file_id == file_id) | PortfolioItem.file_ids.contains([file_id])),
+                  select(ChallengeEntry.id).where(ChallengeEntry.file_ids.contains([file_id]))):
+        if await session.scalar(query.limit(1)) is not None:
+            return True
+    return False
+
+
+async def release(session: AsyncSession, user: User, file_ids) -> None:
+    """Files no longer used anywhere stop being kept: their /media links stop working (call after the change is flushed)."""
+    for file_id in {i for i in file_ids if i}:
+        row = await session.get(SubmissionFile, file_id)
+        if row is not None and row.user_id == user.id and row.kept and not await referenced(session, file_id):
+            row.kept = False
 
 
 async def refresh_count(session: AsyncSession, user: User) -> None:

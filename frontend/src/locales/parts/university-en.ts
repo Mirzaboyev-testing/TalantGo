@@ -346,7 +346,6 @@ export const en = {
   "u.st.profile": "Profile",
   "u.st.study": "Study details",
   "u.st.verified_by": "Verified by: {who}, {when}",
-  "u.st.contacts": "Contacts",
   "u.st.career": "Career",
   "u.st.headline": "Summary",
   "u.st.apps_title": "Applications ({n})",

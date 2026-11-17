@@ -511,10 +511,11 @@ async def export_users(actor: AdminActor, session: Session) -> StreamingResponse
     out = csv.writer(buf)
     out.writerow(["Ism", "Username", "Universitet", "Guruh", "Yo'nalish", "Rol", "Ball",
                   "Tasdiqlangan ishlar", "Seriya", "CV ochiq", "Ro'yxatdan o'tgan"])
+    from .university import cell                    # typed text must not run as a formula in Excel
     for u, n in rows:
-        out.writerow([u.full_name, u.username or "", u.university, u.group_name, u.track.title if u.track else "",
-                      u.role.value, u.points, n, u.streak_count, "ha" if u.cv_public else "yo'q",
-                      u.created_at.date().isoformat()])
+        out.writerow([cell(u.full_name), cell(u.username or ""), cell(u.university), cell(u.group_name),
+                      cell(u.track.title) if u.track else "", u.role.value, u.points, n, u.streak_count,
+                      "ha" if u.cv_public else "yo'q", u.created_at.date().isoformat()])
     audit(session, actor, "export.users", f"{len(rows)} qator")
     await session.commit()
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv; charset=utf-8",
@@ -867,9 +868,10 @@ async def export_applications(actor: AdminActor, session: Session) -> StreamingR
     buf.write("\ufeff")
     out = csv.writer(buf)
     out.writerow(["Nomzod", "Telefon", "Universitet", "Vakansiya", "Kompaniya", "Holat", "Sana"])
+    from .university import cell                    # typed text must not run as a formula in Excel
     for r in rows:
-        out.writerow([r["candidate"], r["phone"], r["university"] or "", r["job"], r["company"], r["status"],
-                      r["created_at"].astimezone(TASHKENT).strftime("%Y-%m-%d %H:%M")])
+        out.writerow([cell(r["candidate"]), cell(r["phone"]), cell(r["university"] or ""), cell(r["job"]),
+                      cell(r["company"]), r["status"], r["created_at"].astimezone(TASHKENT).strftime("%Y-%m-%d %H:%M")])
     audit(session, actor, "export.applications", f"{len(rows)} qator")
     await session.commit()
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv; charset=utf-8",

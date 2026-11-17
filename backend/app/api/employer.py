@@ -443,7 +443,7 @@ async def student_detail(student_id: int, user: ApprovedEmployer, session: Sessi
     shared = bool(applied) or contact == "accepted"
     return {
         **student_row(student, n),
-        "cv": await build_cv(session, student),
+        "cv": await build_cv(session, student, contacts=shared),
         "phone": student.phone if shared and student.phone else None,
         "username": student.username if shared else None,
         "contact_status": contact,
@@ -456,15 +456,27 @@ async def student_detail(student_id: int, user: ApprovedEmployer, session: Sessi
 CV_LINK_HOURS = 2
 
 
-def cv_pdf_link(student_id: int) -> str:
-    """A short-lived signed link: it works when opened in an outside browser, where there is no app session."""
-    return f"/api/v1/cv-pdf/{student_id}?t={create_token(str(student_id), 'cvpdf', CV_LINK_HOURS)}"
+def cv_pdf_link(student_id: int, contacts: bool = True) -> str:
+    """A short-lived signed link: it works when opened in an outside browser, where there is no app session.
+    Without `contacts` the PDF leaves the Telegram username out (people.py reads the "cvpdf-anon" scope)."""
+    scope = "cvpdf" if contacts else "cvpdf-anon"
+    return f"/api/v1/cv-pdf/{student_id}?t={create_token(str(student_id), scope, CV_LINK_HOURS)}"
+
+
+async def contacts_shared(session: Session, company_id: int, student_id: int) -> bool:
+    """The student applied to one of the company's jobs (not withdrawn) or accepted its contact request."""
+    applied = await session.scalar(select(func.count()).select_from(Application).join(Job).where(
+        Application.user_id == student_id, Job.company_id == company_id, Application.status != "withdrawn"))
+    if applied:
+        return True
+    return await session.scalar(select(ContactRequest.status).where(
+        ContactRequest.company_id == company_id, ContactRequest.student_id == student_id)) == "accepted"
 
 
 @router.get("/students/{student_id}/cv-link")
 async def student_cv_link(student_id: int, user: ApprovedEmployer, session: Session) -> dict:
     await _visible_student(session, student_id, user.company_id)
-    return {"url": cv_pdf_link(student_id)}
+    return {"url": cv_pdf_link(student_id, contacts=await contacts_shared(session, user.company_id, student_id))}
 
 
 # --------------------------------------------------------------------------- dashboard and candidates

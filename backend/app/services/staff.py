@@ -110,6 +110,8 @@ async def submit(session: AsyncSession, user: User, body) -> None:
             raise HTTPException(422, "Lavozimni tasdiqlovchi hujjatni yuklang")
         if not [c for c in body.cooperation if c in COOPERATION]:
             raise HTTPException(422, "Hamkorlikda nima qila olishingizni kamida bitta belgilang")
+    # every send notifies the university's leads and the admins, so it cannot be repeated without end
+    ratelimit.limit(f"staff-request:{user.id}", 6, 24 * 3600, "Bir kunda 6 martadan ortiq so'rov yuborib bo'lmaydi")
     uni = await _university(session, user, body.university_id, body.new_university, body.new_university_region)
     if body.full_name:
         user.full_name, user.name_set_by_user = _clean(body.full_name), True

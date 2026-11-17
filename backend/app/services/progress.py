@@ -63,7 +63,7 @@ async def submit(session: AsyncSession, user: User, task_id: int, proof_url: str
     if file_ids:
         uploads = list((await session.execute(select(SubmissionFile).where(
             SubmissionFile.id.in_(file_ids), SubmissionFile.user_id == user.id,
-            SubmissionFile.submission_id.is_(None)))).scalars())
+            SubmissionFile.submission_id.is_(None), SubmissionFile.kept.is_(False)))).scalars())
         if len(uploads) != len(set(file_ids)):
             raise HTTPException(422, "Fayl topilmadi: uni qayta yuklang")
     if not proof_url and not uploads:
@@ -93,7 +93,7 @@ async def submit(session: AsyncSession, user: User, task_id: int, proof_url: str
         User.track_id == task.track_id, User.id != user.id, User.account_type == "student",
         User.is_blocked.is_(False)))).scalars().all()
     notify.send(list(peers), f"📝 {user.full_name} «{task.title}» ishini topshirdi. "
-                             f"«Tekshirish» bo'limida baholang va +{rules.review_points} ball oling.")
+                             f"«Topshiriqlar → Boshqalarni tekshirish»da baholang va +{rules.review_points} ball oling.")
     return await _reload(session, sub.id)
 
 

@@ -11,7 +11,7 @@ from sqlalchemy import select
 from ..core.config import settings
 from ..models import User
 from ..services import bots, telegram_bot, web_login
-from ..services.cv import build_cv
+from ..services.cv import build_cv, public_view
 from .deps import Session
 
 log = logging.getLogger("careerflow")
@@ -24,7 +24,7 @@ async def cv_page(slug: str, request: Request, session: Session) -> HTMLResponse
     user = (await session.execute(select(User).where(User.cv_slug == slug))).scalar_one_or_none()
     if user is None or not user.cv_public:
         raise HTTPException(404, "CV topilmadi yoki egasi uni yopiq qilgan")
-    return templates.TemplateResponse(request, "cv.html", {"cv": await build_cv(session, user)})
+    return templates.TemplateResponse(request, "cv.html", {"cv": public_view(await build_cv(session, user))})
 
 
 @router.post("/telegram/webhook")

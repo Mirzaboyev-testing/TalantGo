@@ -203,7 +203,7 @@ function Roster({ preset, onOpen, onChanged }: { preset: string; onOpen: (id: nu
                              onChange={(e) => { const next = new Set(selected); if (e.target.checked) next.add(r.id); else next.delete(r.id); setSelected(next); }} />
                     </td>
                     <td className="main"><div className="u-person"><Avatar name={r.full_name} url={r.photo_url} />
-                      <div style={{ minWidth: 0 }}><b>{r.full_name}</b><span>{r.student_number ? `ID ${r.student_number}` : r.username ? `@${r.username}` : "—"}</span></div></div></td>
+                      <div style={{ minWidth: 0 }}><b>{r.full_name}</b><span>{r.student_number ? `ID ${r.student_number}` : "—"}</span></div></div></td>
                     <td data-label={t("u.col.faculty")}>{r.faculty || "—"}{r.group_name && <div className="u-dim">{r.group_name}</div>}</td>
                     <td data-label={t("u.col.course")} className="nowrap">{courseText(r.course) || "—"}</td>
                     <td data-label={t("u.col.status")}><VerifyBadge v={r.verification} /></td>
@@ -419,17 +419,11 @@ function StudentDrawer({ id, onClose, onChanged }: { id: number; onClose: () => 
             {s.verified_by && <p className="hint" style={{ margin: "10px 0 0" }}>{t("u.st.verified_by", { who: s.verified_by, when: formatDateTime(s.verified_at, false) })}</p>}
             {s.verification === "rejected" && s.verification_note && <div className="u-note red" style={{ marginTop: 10 }}>{s.verification_note}</div>}
           </Panel>
-          <Panel title={t("u.st.contacts")} icon="phone">
-            <dl className="u-dl">
-              <dt>{t("u.su.phone")}</dt><dd>{s.phone ? <a href={`tel:${s.phone}`}>{s.phone}</a> : "—"}</dd>
-              <dt>Email</dt><dd>{s.email ? <a href={`mailto:${s.email}`}>{s.email}</a> : "—"}</dd>
-              <dt>Telegram</dt><dd>{s.username ? <a href={`https://t.me/${s.username}`} target="_blank" rel="noreferrer">@{s.username}</a> : "—"}</dd>
-              <dt>{t("u.col.last_seen")}</dt><dd>{ago(s.last_seen_at)}</dd>
-            </dl>
-          </Panel>
+          {/* no phone, email or Telegram here: the student's consent opens contacts only to employers they apply to */}
           <Panel title={t("u.st.career")} icon="target">
             <dl className="u-dl">
               <dt>{t("u.col.track")}</dt><dd>{s.track ?? "—"}</dd>
+              <dt>{t("u.col.last_seen")}</dt><dd>{ago(s.last_seen_at)}</dd>
               {s.headline && <><dt>{t("u.st.headline")}</dt><dd>{s.headline}</dd></>}
               {s.city && <><dt>{t("p.signup.city")}</dt><dd>{s.city}</dd></>}
             </dl>

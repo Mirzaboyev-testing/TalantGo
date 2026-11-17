@@ -37,6 +37,7 @@ async def test_sign_up_keeps_role_documents_logo_and_cooperation(client, make_us
     docs = (await client.get(f"{API}/employer/company/documents", headers=h)).json()
     assert {d["kind"] for d in docs} == {"registration", "authority", "logo"}
 
+
     # the logo is public only after the admin check
     assert (await client.get(f"{API}/public/companies/{c['id']}/logo")).status_code == 404
     await client.post(f"{API}/admin/companies/{c['id']}/review", json={"approve": True, "note": ""}, headers=await owner(client))
@@ -66,6 +67,7 @@ async def test_waiting_company_sees_its_place_in_the_queue_and_the_students_it_w
     c = (await client.patch(f"{API}/employer/company", json={**COMPANY, "stir": "301111111", "industry": "fintech"},
                             headers=first["headers"])).json()
     assert c["status"] == "pending" and c["cooperation"] == ["internship", "projects"]   # fields left out are kept
+    assert c["registration_doc_id"]                          # an edit without the file fields keeps the document
     s = (await client.get(f"{API}/employer/review-status", headers=first["headers"])).json()
     assert s["queue_position"] == 2 and s["in_industry"] == 1
 
@@ -98,3 +100,38 @@ async def test_counters_and_dashboard_extras(client, make_user):
     waiting = await make_employer(client, make_user, "HR Kutayotgan", "309999999")
     assert (await client.get(f"{API}/employer/counters", headers=waiting["headers"])).status_code == 403
     assert EMPLOYER["contact_role"] == "director"
+
+
+async def test_admin_csv_exports_do_not_run_typed_text_as_formulas(client, make_user):
+    await make_user("=HYPERLINK(\"http://evil\")")
+    body = (await client.get(f"{API}/admin/export/users.csv", headers=await owner(client))).text
+    assert "'=HYPERLINK" in body and "\n=HYPERLINK" not in body
+
+
+async def test_company_sees_student_telegram_only_after_application(client, make_user):
+    """The CV in the student sheet and the PDF link leave the Telegram username out until the student applies."""
+    from urllib.parse import parse_qs, urlparse
+    from app.core.db import SessionLocal
+    from app.core.security import read_token
+    from app.models import User
+    hr, job = await live_job(client, make_user)
+    student = await full_student(client, make_user, "Vali Karimov")
+    async with SessionLocal() as s:
+        (await s.get(User, student["id"])).username = "vali_tg"
+        await s.commit()
+
+    def scope_ok(url: str, scope: str) -> bool:
+        return read_token(parse_qs(urlparse(url).query)["t"][0], scope) == str(student["id"])
+
+    d = (await client.get(f"{API}/employer/students/{student['id']}", headers=hr["headers"])).json()
+    assert d["username"] is None and d["cv"]["username"] is None
+    link = (await client.get(f"{API}/employer/students/{student['id']}/cv-link", headers=hr["headers"])).json()["url"]
+    assert scope_ok(link, "cvpdf-anon") and not scope_ok(link, "cvpdf")
+
+    await client.post(f"{API}/me/verification", headers=student["headers"])      # applying needs a verification request
+    r = await client.post(f"{API}/jobs/{job['id']}/apply", json={"note": "Qiziqaman"}, headers=student["headers"])
+    assert r.status_code == 201, r.text
+    d = (await client.get(f"{API}/employer/students/{student['id']}", headers=hr["headers"])).json()
+    assert d["username"] == "vali_tg" and d["cv"]["username"] == "vali_tg"
+    link = (await client.get(f"{API}/employer/students/{student['id']}/cv-link", headers=hr["headers"])).json()["url"]
+    assert scope_ok(link, "cvpdf")

@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 
 from ..core import ratelimit
-from ..models import EventRegistration, UniversityEvent, User
+from ..models import Company, EventRegistration, UniversityEvent, User
 from ..services import inbox
 from ..services.files import logo_url
 from .deps import CurrentUser, Session
@@ -31,7 +31,7 @@ def _organiser(e: UniversityEvent) -> dict:
 
 def _open_to(e: UniversityEvent, user: User) -> bool:
     if e.company_id:
-        return True
+        return bool(e.company and e.company.status == "approved")     # a company sent back to review loses its events
     return e.university_id == user.university_id and Audience(**e.audience).matches(user)
 
 
@@ -39,7 +39,7 @@ def _open_to(e: UniversityEvent, user: User) -> bool:
 async def my_events(user: CurrentUser, session: Session, scope: Literal["upcoming", "mine", "past"] = "upcoming") -> list[dict]:
     cutoff = datetime.now(UTC) - timedelta(hours=6)
     query = select(UniversityEvent).where(UniversityEvent.status == "published", or_(
-        UniversityEvent.company_id.isnot(None),
+        UniversityEvent.company_id.in_(select(Company.id).where(Company.status == "approved")),
         (UniversityEvent.university_id == user.university_id) if user.university_id else UniversityEvent.id < 0))
     registered_ids = set((await session.execute(select(EventRegistration.event_id).where(
         EventRegistration.user_id == user.id))).scalars())
@@ -54,8 +54,8 @@ async def my_events(user: CurrentUser, session: Session, scope: Literal["upcomin
     return [_event_out(e, counts.get(e.id, (0, 0))[0], me_registered=e.id in registered_ids, **_organiser(e)) for e in rows]
 
 
-async def _event_for(session, user: User, event_id: int) -> UniversityEvent:
-    e = await session.get(UniversityEvent, event_id)
+async def _event_for(session, user: User, event_id: int, lock: bool = False) -> UniversityEvent:
+    e = await session.get(UniversityEvent, event_id, with_for_update=lock)   # the lock keeps the capacity honest
     if e is None or user.account_type != "student" or not (e.company_id or e.university_id == user.university_id):
         raise HTTPException(404, "Tadbir topilmadi")
     return e
@@ -64,7 +64,8 @@ async def _event_for(session, user: User, event_id: int) -> UniversityEvent:
 @router.post("/me/events/{event_id}/register", status_code=201)
 async def register(event_id: int, user: CurrentUser, session: Session) -> dict:
     from sqlalchemy import func
-    e = await _event_for(session, user, event_id)
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    e = await _event_for(session, user, event_id, lock=True)
     if e.status != "published" or e.starts_at < datetime.now(UTC) - timedelta(hours=6):
         raise HTTPException(409, "Bu tadbirga ro'yxatdan o'tib bo'lmaydi")
     if not _open_to(e, user):
@@ -75,7 +76,8 @@ async def register(event_id: int, user: CurrentUser, session: Session) -> dict:
         taken = await session.scalar(select(func.count()).select_from(EventRegistration).where(EventRegistration.event_id == e.id))
         if taken >= e.capacity:
             raise HTTPException(409, "Joylar to'lgan")
-    session.add(EventRegistration(event_id=e.id, user_id=user.id))
+    await session.execute(pg_insert(EventRegistration).values(event_id=e.id, user_id=user.id)
+                          .on_conflict_do_nothing(index_elements=["event_id", "user_id"]))
     await session.commit()
     return {"registered": True}
 

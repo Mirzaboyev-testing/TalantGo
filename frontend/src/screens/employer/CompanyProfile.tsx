@@ -17,6 +17,10 @@ const SECTIONS: { key: Section; icon: IconName }[] = [
   { key: "docs", icon: "lock" }, { key: "login", icon: "globe" },
 ];
 type Files = { registration: SubmittedFile | null; authority: SubmittedFile | null; logo: SubmittedFile | null };
+const FILE_FIELDS = { registration: "registration_doc_id", authority: "authority_doc_id", logo: "logo_file_id" } as const;
+/** Only the listed files are sent: a field left out keeps what is saved on the server. */
+const fileIds = (fl: Files, keys: (keyof Files)[]) =>
+  Object.fromEntries(keys.map((k) => [FILE_FIELDS[k], fl[k]?.id ?? null])) as Partial<Record<(typeof FILE_FIELDS)[keyof Files], number | null>>;
 
 /** The approved company's profile: what students see on its page, the person, documents and sign-in methods. */
 export default function CompanyProfile({ me, onChanged }: { me: Me; onChanged: (m: Me) => void }) {
@@ -26,6 +30,8 @@ export default function CompanyProfile({ me, onChanged }: { me: Me; onChanged: (
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [files, setFiles] = useState<Files>({ registration: null, authority: null, logo: null });
+  // until the saved documents arrive, a save must not send empty ids (that would remove the files)
+  const [docsReady, setDocsReady] = useState(false);
   const [f, setF] = useState({
     full_name: me.full_name, job_title: me.job_title, contact_role: c.contact_role,
     name: c.name, legal_form: c.legal_form, ownership: c.ownership, size: c.size, industry: c.industry, city: c.city,
@@ -39,11 +45,14 @@ export default function CompanyProfile({ me, onChanged }: { me: Me; onChanged: (
   useEffect(() => {
     loadCatalog().then(setCatalog, (e) => setError(message(e)));
     api.tracks().then(setTracks, () => {});
-    api.employer.documents().then((docs) => setFiles({
-      registration: docs.find((d) => d.kind === "registration") ?? null,
-      authority: docs.find((d) => d.kind === "authority") ?? null,
-      logo: docs.find((d) => d.kind === "logo") ?? null,
-    }), () => {});
+    api.employer.documents().then((docs) => {
+      setFiles({
+        registration: docs.find((d) => d.kind === "registration") ?? null,
+        authority: docs.find((d) => d.kind === "authority") ?? null,
+        logo: docs.find((d) => d.kind === "logo") ?? null,
+      });
+      setDocsReady(true);
+    }, () => {});
   }, []);
 
   const set = (k: keyof typeof f, id = "") => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -77,7 +86,7 @@ export default function CompanyProfile({ me, onChanged }: { me: Me; onChanged: (
         stir: f.stir.trim(), description: f.description.trim(), website: f.website.trim(), telegram: f.telegram.trim(),
         email: f.email.trim(), address: f.address.trim(), contact_role: f.contact_role, cooperation: f.cooperation,
         wanted_track_ids: f.wanted_track_ids, show_as_partner: f.show_as_partner,
-        registration_doc_id: fl.registration?.id ?? null, authority_doc_id: fl.authority?.id ?? null, logo_file_id: fl.logo?.id ?? null,
+        ...fileIds(fl, docsReady ? ["registration", "authority", "logo"] : Object.keys(changedFiles) as (keyof Files)[]),
       });
       onChanged(await api.me());
       haptic("success");

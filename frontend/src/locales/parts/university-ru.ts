@@ -346,7 +346,6 @@ export const ru = {
   "u.st.profile": "Профиль",
   "u.st.study": "Данные об обучении",
   "u.st.verified_by": "Подтвердил: {who}, {when}",
-  "u.st.contacts": "Контакты",
   "u.st.career": "Карьера",
   "u.st.headline": "Кратко",
   "u.st.apps_title": "Заявки ({n})",

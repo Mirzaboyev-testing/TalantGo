@@ -244,7 +244,8 @@ export default function StudentProfile({ me, onSaved }: { me: Me; onSaved: (m: M
           <Strength me={me} onGo={(k) => {
             if (k === "photo") photoInput.current?.click();
             else if (k === "portfolio") setEditor({ kind: "project" });
-            else if (k === "verification" || k === "phone") navigate("/talaba/sozlamalar");
+            else if (k === "verification") document.querySelector(".st-verify")?.scrollIntoView({ behavior: "smooth", block: "center" });
+            else if (k === "phone") navigate("/talaba/sozlamalar");
             else setTab("about");
           }} />
           <Verification me={me} onSaved={onSaved} />

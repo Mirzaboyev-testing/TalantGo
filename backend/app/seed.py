@@ -7,7 +7,7 @@ import re
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import Group, Task, Track, University
+from .models import AppConfig, Group, Task, Track, University
 from .seed_catalog import ALL_UNIVERSITIES, FACULTIES
 
 POINTS_BY_WEEK = {1: 10, 2: 15, 3: 20, 4: 30}
@@ -197,9 +197,15 @@ def _short_from(name: str) -> str:
 RENAMED = {"O'zMPU": "TDPU"}         # TDPU became Nizomiy nomidagi O'zbekiston milliy pedagogika universiteti (2025)
 
 
+CATALOG_MARK = "seed_catalog_v1"
+
+
 async def add_universities(session: AsyncSession) -> None:
     """Every Uzbek OTM for the sign-up search (seed_catalog.ALL_UNIVERSITIES), skipping ones already there under the
-    same name or short name, then faculty lists for universities whose list is still empty."""
+    same name or short name, then faculty lists for universities whose list is still empty. Runs ONCE per database
+    (marked in app_config): later renames, hidden universities and faculty lists cleared by staff stay as they are."""
+    if await session.get(AppConfig, CATALOG_MARK) is not None:
+        return
     rows = (await session.execute(select(University))).scalars().all()
     names = {_key(u.name) for u in rows}
     shorts = {_key(u.short_name) for u in rows if u.short_name}
@@ -213,6 +219,7 @@ async def add_universities(session: AsyncSession) -> None:
     for uni in rows:
         if not uni.faculties and uni.short_name in FACULTIES:
             uni.faculties = list(FACULTIES[uni.short_name])
+    session.add(AppConfig(key=CATALOG_MARK, value={"universities": len(ALL_UNIVERSITIES), "faculties": len(FACULTIES)}))
     await session.commit()
 
 

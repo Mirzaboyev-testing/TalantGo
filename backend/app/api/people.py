@@ -16,7 +16,7 @@ from ..services.portfolio import media_url
 from ..services.catalog import CONSENT_VERSION, as_dict as catalog_dict
 from ..core.security import read_token
 from ..services import cv_pdf
-from ..services.cv import build_cv
+from ..services.cv import build_cv, public_view
 from ..services.progress import current_streak, rank_of
 from .deps import CurrentUser, Session
 
@@ -126,14 +126,16 @@ async def my_cv_link(user: CurrentUser) -> dict:
 async def cv_pdf_file(user_id: int, t: str, session: Session) -> Response:
     """The CV as a PDF. The signed link is the permission: the app hands it only to the student
     themselves and to approved employers, and it expires after a couple of hours."""
-    if read_token(t, "cvpdf") != str(user_id):
+    # "cvpdf": the student or a company the student shared contacts with; "cvpdf-anon": any other company
+    contacts = read_token(t, "cvpdf") == str(user_id)
+    if not contacts and read_token(t, "cvpdf-anon") != str(user_id):
         raise HTTPException(403, "Havola eskirgan: CV'ni ilovadan qayta yuklab oling")
     user = await session.get(User, user_id)
     if user is None:
         raise HTTPException(404, "Talaba topilmadi")
     extra = {"city": user.city, "gpa": user.gpa, "gpa_scale": user.gpa_scale,
              "work_industries": user.work_industries, "job_types": user.job_types}
-    pdf = cv_pdf.render(await build_cv(session, user), extra)
+    pdf = cv_pdf.render(await build_cv(session, user, contacts=contacts), extra)
     name = cv_pdf.filename(user.full_name)
     return Response(pdf, media_type="application/pdf", headers={
         "Content-Disposition": f'attachment; filename="{name.encode("ascii", "replace").decode()}"',
@@ -145,7 +147,7 @@ async def public_cv(slug: str, session: Session) -> dict:
     user = (await session.execute(select(User).where(User.cv_slug == slug))).scalar_one_or_none()
     if user is None or not user.cv_public:
         raise HTTPException(404, "CV topilmadi yoki yopiq")
-    return await build_cv(session, user)
+    return public_view(await build_cv(session, user))
 
 
 def _verified_count():
