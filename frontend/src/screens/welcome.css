@@ -1,0 +1,97 @@
+/* First screen of a new account (Welcome.tsx): student, company or university staff.
+   Same greens, pictures and card colours as the website's panel cards and the sign-in page. */
+.app:has(> .wl) { max-width: none; padding: 0; }
+.wl { min-height: 100vh; display: flex; flex-direction: column;
+      background: radial-gradient(900px 440px at 12% 0%, #d7f3e1 0%, rgba(215,243,225,0) 60%),
+                  radial-gradient(700px 380px at 100% 100%, #fff4dc 0%, rgba(255,244,220,0) 60%),
+                  linear-gradient(180deg, #f1faf4 0%, var(--bg2) 100%); }
+
+.wl-top, .wl-main { width: 100%; max-width: 1240px; margin: 0 auto; padding-left: clamp(16px, 4vw, 48px); padding-right: clamp(16px, 4vw, 48px); }
+.wl-top { display: flex; align-items: center; gap: 10px; padding-top: 16px; padding-bottom: 8px; }
+.wl-logout { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: #fff; color: var(--hint);
+             border-radius: 999px; padding: 7px 12px; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.wl-logout:hover { color: var(--text); border-color: #c6dccd; }
+
+.wl-main { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: clamp(20px, 3vw, 32px); padding-top: 12px; padding-bottom: 40px; }
+.wl-head { text-align: center; max-width: 700px; margin: 0 auto; }
+.wl-chip { display: inline-flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #b9e0c7; color: var(--brand-strong);
+           border-radius: 999px; padding: 5px 12px; font-size: 12.5px; font-weight: 700; }
+.wl-head h1 { margin: 14px 0 10px; font-size: clamp(28px, 4vw, 46px); line-height: 1.08; letter-spacing: -.025em; color: var(--brand-ink); }
+.wl-head p { margin: 0; color: var(--hint); font-size: clamp(14.5px, 1.3vw, 16.5px); line-height: 1.55; }
+
+.wl-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.wl-card { display: flex; flex-direction: column; gap: 6px; text-align: left; font: inherit; color: var(--text); cursor: pointer;
+           background: #fff; border: 1px solid var(--line); border-radius: 22px; padding: 12px 12px 16px; box-shadow: var(--shadow);
+           transition: transform .2s, box-shadow .2s, border-color .2s; }
+.wl-card:hover { transform: translateY(-3px); border-color: #b9dcc5; box-shadow: 0 24px 44px -26px rgba(20,83,45,.45); }
+.wl-card:focus-visible { outline: 3px solid rgba(22,163,74,.35); outline-offset: 2px; }
+.wl-card.korxona:hover { border-color: #f0d9a6; box-shadow: 0 24px 44px -26px rgba(146,90,7,.4); }
+.wl-card.universitet:hover { border-color: #c4dcf3; box-shadow: 0 24px 44px -26px rgba(29,78,216,.32); }
+
+.wl-art { display: block; border-radius: 16px; padding: 10px 8px 0; overflow: hidden; background: linear-gradient(160deg, #e3f5ea 0%, #f6fbf7 100%); }
+.wl-card.korxona .wl-art { background: linear-gradient(160deg, #fff1d6 0%, #fffaf1 100%); }
+.wl-card.universitet .wl-art { background: linear-gradient(160deg, #e0efff 0%, #f6fbff 100%); }
+.wl-art .panel-art { display: block; width: 100%; height: auto; transition: transform .3s; }
+.wl-card:hover .wl-art .panel-art { transform: scale(1.03); }
+
+.wl-body { flex: 1; display: flex; flex-direction: column; gap: 14px; padding: 10px 6px 0; min-width: 0; }
+.wl-title { display: flex; align-items: center; gap: 12px; }
+.wl-title b { display: block; font-size: 19px; letter-spacing: -.01em; }
+.wl-title small { display: block; color: var(--hint); font-size: 13px; margin-top: 2px; }
+.wl-icon { flex: none; width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand-strong); }
+.wl-card.korxona .wl-icon { background: #fff1d6; color: #b45309; }
+.wl-card.universitet .wl-icon { background: #e0efff; color: #1d4ed8; }
+
+.wl-points { display: flex; flex-direction: column; gap: 9px; }
+.wl-points > span { display: flex; align-items: flex-start; gap: 9px; font-size: 14px; line-height: 1.42; }
+.wl-points svg { flex: none; box-sizing: content-box; padding: 3px; margin-top: -1px; border-radius: 50%; background: var(--brand-soft); color: var(--brand-strong); }
+
+.wl-next { margin-top: auto; display: flex; align-items: center; gap: 7px; padding-top: 12px; border-top: 1px dashed var(--line); color: var(--hint); font-size: 13px; }
+.wl-next svg { flex: none; }
+.wl-go { width: 100%; justify-content: center; gap: 8px; padding: 13px 16px; border-radius: 12px; font-size: 15px; }
+.wl-go svg { transition: transform .2s; }
+.wl-card:hover .wl-go svg { transform: translateX(3px); }
+
+.wl-foot { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 0; color: var(--hint); font-size: 13.5px; text-align: center; }
+.wl-foot svg { flex: none; }
+
+/* a tablet: picture on the left, text on the right, one card per row */
+@media (min-width: 640px) and (max-width: 979px) {
+  .wl-card { flex-direction: row; gap: 18px; padding: 12px; }
+  .wl-art { flex: none; width: 38%; display: flex; align-items: center; padding: 10px; }
+  .wl-body { padding: 8px 6px 4px 0; }
+}
+/* a computer: three cards side by side */
+@media (min-width: 980px) {
+  .wl-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+  .wl-card { padding: 14px 14px 18px; }
+}
+/* a laptop with a short screen (1366×768, 1280×720): smaller pictures and spacing so the buttons stay in view */
+@media (min-width: 980px) and (max-height: 880px) {
+  .wl-top { padding-top: 12px; padding-bottom: 4px; }
+  .wl-main { gap: 20px; padding-top: 4px; padding-bottom: 20px; }
+  .wl-head h1 { margin: 10px 0 8px; font-size: clamp(28px, 3.2vw, 40px); }
+  .wl-art { padding-top: 6px; }
+  .wl-art .panel-art { width: auto; height: 118px; margin: 0 auto; }
+  .wl-body { gap: 12px; padding-top: 8px; }
+  .wl-points { gap: 7px; }
+  .wl-next { padding-top: 10px; }
+  .wl-go { padding: 11px 16px; }
+}
+/* a phone: no pictures, the choice fits on about one screen */
+@media (max-width: 639px) {
+  .wl-art { display: none; }
+  .wl-card { padding: 16px; border-radius: 18px; }
+  .wl-body { padding: 0; gap: 12px; }
+  .wl-points { gap: 7px; }
+  .wl-points > span { font-size: 13.5px; }
+  .wl-head h1 { margin-top: 12px; }
+}
+/* a small phone: the sign-out button keeps only its icon */
+@media (max-width: 400px) {
+  .wl-top { gap: 6px; }
+  .wl-top .brand-logo { font-size: 21px !important; }       /* BrandLogo sets its size inline */
+  .wl-top .brand-logo-mark { width: 30px; height: 30px; }
+  .wl-logout { padding: 8px; }
+  .wl-logout span { display: none; }
+}

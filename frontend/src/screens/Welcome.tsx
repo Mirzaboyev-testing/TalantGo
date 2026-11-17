@@ -1,15 +1,31 @@
 import { useEffect, useState } from "react";
 import { api, type Me } from "../api";
-import { t, useLang } from "../i18n";
+import { BrandLogo } from "../brand";
+import { t, useLang, type MsgKey } from "../i18n";
+import { Icon, type IconName } from "../icons";
+import { PanelArt } from "../public/art";
+import type { Panel } from "../public/panels";
+import { insideTelegram } from "../tg";
 import { LogoutLink } from "../ui";
-import { Icon } from "../icons";
 import EmployerSignup from "./employer/EmployerSignup";
 import CompanySignup from "./employer/CompanySignup";
 import UniSignup from "./university/UniSignup";
+import LangSwitch from "./LangSwitch";
+import "./welcome.css";
 
 type Choice = "student" | "employer" | "university" | null;
 
-/** First screen for a new account: job seeker or employer. (University staff come with their own link.) */
+// The three ways to use Careerup, in the colours and pictures of the website's panel cards.
+const ROLES: { id: Exclude<Choice, null>; panel: Panel; icon: IconName }[] = [
+  { id: "student", panel: "talaba", icon: "school" },
+  { id: "employer", panel: "korxona", icon: "briefcase" },
+  { id: "university", panel: "universitet", icon: "building" },
+];
+
+/**
+ * First screen of a brand-new account that did not pick a panel on the website (or came back from a sign-up form):
+ * student, company or university staff. The next screen asks only what that role needs.
+ */
 export default function Welcome({ me, initial, onStudent, onChanged, onLogout }: {
   me: Me; initial: Choice; onStudent: () => void; onChanged: (m: Me) => void; onLogout?: () => void;
 }) {
@@ -19,28 +35,51 @@ export default function Welcome({ me, initial, onStudent, onChanged, onLogout }:
   if (choice === "employer") return <CompanySignup me={me} onSaved={onChanged} onBack={() => setChoice(null)} onLogout={onLogout} />;
   if (choice === "university") return <UniSignup me={me} onBack={() => setChoice(null)} onChanged={onChanged} onLogout={onLogout} />;
 
+  const name = me.full_name.trim().split(/\s+/)[0];
+  const pick = (id: Exclude<Choice, null>) => (id === "student" ? onStudent() : setChoice(id));
   return (
-    <div>
-      <LogoutLink onLogout={onLogout} />
-      <h1>{t("s.welcome.hello", { name: me.full_name.split(" ")[0] })}</h1>
-      <p className="hint">{t("s.welcome.intro")}</p>
-      <div className="choice-grid">
-        <button className="choice-card" onClick={onStudent}>
-          <span className="avatar"><Icon name="school" /></span>
-          <b>{t("s.welcome.seeker")}</b>
-          <span className="hint">{t("s.welcome.seeker_hint")}</span>
-        </button>
-        <button className="choice-card" onClick={() => setChoice("employer")}>
-          <span className="avatar"><Icon name="briefcase" /></span>
-          <b>{t("s.welcome.employer")}</b>
-          <span className="hint">{t("s.welcome.employer_hint")}</span>
-        </button>
-      </div>
-      {initial === "university" && (
-        <div className="card tap" style={{ marginTop: 10 }} onClick={() => setChoice("university")}>
-          <div className="row"><span className="avatar"><Icon name="building" /></span><div><b>{t("s.welcome.staff")}</b><div className="hint">{t("s.welcome.staff_hint")}</div></div></div>
+    <div className="wl">
+      <header className="wl-top">
+        <BrandLogo size={36} />
+        <span className="grow" />
+        <LangSwitch />
+        {onLogout && !insideTelegram && (
+          <button className="wl-logout" onClick={onLogout} aria-label={t("shell.logout")}>
+            <Icon name="logout" size={16} /><span>{t("shell.logout")}</span>
+          </button>
+        )}
+      </header>
+
+      <main className="wl-main">
+        <div className="wl-head">
+          <span className="wl-chip"><Icon name="tick" size={14} />{t("st.wl.chip")}</span>
+          <h1>{name ? t("st.wl.hello", { name }) : t("st.wl.hello_plain")}</h1>
+          <p>{t("st.wl.intro")}</p>
         </div>
-      )}
+
+        <div className="wl-cards">
+          {ROLES.map((r) => (
+            <button key={r.id} type="button" className={`wl-card ${r.panel}`} onClick={() => pick(r.id)}>
+              <span className="wl-art"><PanelArt panel={r.panel} /></span>
+              <span className="wl-body">
+                <span className="wl-title">
+                  <span className="wl-icon"><Icon name={r.icon} size={22} /></span>
+                  <span><b>{t(`st.wl.${r.id}` as MsgKey)}</b><small>{t(`st.wl.${r.id}_who` as MsgKey)}</small></span>
+                </span>
+                <span className="wl-points">
+                  {[1, 2, 3].map((n) => (
+                    <span key={n}><Icon name="tick" size={14} />{t(`st.wl.${r.id}_p${n}` as MsgKey)}</span>
+                  ))}
+                </span>
+                <span className="wl-next"><Icon name="clock" size={15} />{t(`st.wl.${r.id}_next` as MsgKey)}</span>
+                <span className="btn wl-go">{t(`st.wl.${r.id}_go` as MsgKey)}<Icon name="arrow" size={18} /></span>
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <p className="wl-foot"><Icon name="lock" size={15} />{t("st.wl.foot")}</p>
+      </main>
     </div>
   );
 }

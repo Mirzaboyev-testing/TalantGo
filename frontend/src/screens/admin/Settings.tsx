@@ -96,7 +96,7 @@ export function BotCard() {
       )}
       {status.configured && !status.previous_username && <PreviousBot onSaved={(s) => { setStatus(s); setResult("Eski bot ulandi: endi unga kirganlar yangi botga yo'naltiriladi."); }} />}
       <label>Yangi token (BotFather beradi; saqlangach faqat qisqartirilgan ko'rinishi qoladi)</label>
-      <div className="hint">Boshqa botning tokeni saqlansa, ilova o'sha botga o'tadi, eski bot esa yangisiga yo'naltiruvchi bo'lib qoladi. Avval BotFather'da yangi bot uchun /setdomain qiling.</div>
+      <div className="hint">Boshqa botning tokeni saqlansa, ilova o'sha botga o'tadi, eski bot esa yangisiga yo'naltiruvchi bo'lib qoladi.</div>
       <input type="password" value={token} placeholder="123456789:AA…" autoComplete="off" onChange={(e) => setToken(e.target.value.trim())} />
       <div className="row wrap" style={{ marginTop: 10 }}>
         <button className="btn small" disabled={busy || !token}
