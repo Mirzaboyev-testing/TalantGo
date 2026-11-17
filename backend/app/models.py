@@ -65,6 +65,23 @@ class University(Base):
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
     website: Mapped[str] = mapped_column(String(256), default="", server_default="")
     region: Mapped[str] = mapped_column(String(60), default="", server_default="")
+    # university panel v2 (2026-11-17): contacts, channels, what it does with companies, official size
+    telegram: Mapped[str] = mapped_column(String(128), default="", server_default="")
+    social: Mapped[str] = mapped_column(String(256), default="", server_default="")        # Instagram, LinkedIn...
+    email: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    phone: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    address: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    founded_year: Mapped[int | None] = mapped_column(Integer)
+    students_total: Mapped[int | None] = mapped_column(Integer)      # official headcount: platform coverage %
+    cooperation: Mapped[list[str]] = mapped_column(ARRAY(String(24)), default=list, server_default="{}")
+    show_as_partner: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # faculties offered in the sign-up form after the university is picked: seeded from the researched
+    # catalog (seed_data/faculties.json), then edited by the university's staff or an admin
+    faculties: Mapped[list[str]] = mapped_column(ARRAY(String(120)), default=list, server_default="{}")
+    logo_file_id: Mapped[int | None] = mapped_column(ForeignKey("submission_files.id", ondelete="SET NULL",
+                                                                use_alter=True, name="fk_universities_logo_file"))
+    mou_file_id: Mapped[int | None] = mapped_column(ForeignKey("submission_files.id", ondelete="SET NULL",
+                                                               use_alter=True, name="fk_universities_mou_file"))
 
 
 class Company(Base):
@@ -86,6 +103,22 @@ class Company(Base):
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
     review_note: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # sign-up details asked since 2026-11-17 (older companies have them empty)
+    ownership: Mapped[str] = mapped_column(String(16), default="", server_default="")         # catalog.OWNERSHIP
+    contact_role: Mapped[str] = mapped_column(String(16), default="", server_default="")      # catalog.CONTACT_ROLES
+    cooperation: Mapped[list[str]] = mapped_column(ARRAY(String(16)), default=list, server_default="{}")
+    wanted_track_ids: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, server_default="{}")
+    show_as_partner: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # files kept like submission files (random name on disk, signed links): the registration certificate or
+    # charter, the letter of authority of a representative, and the logo (shown publicly once approved)
+    registration_doc_id: Mapped[int | None] = mapped_column(ForeignKey("submission_files.id", ondelete="SET NULL",
+                                                                use_alter=True, name="fk_companies_registration_doc"))
+    authority_doc_id: Mapped[int | None] = mapped_column(ForeignKey("submission_files.id", ondelete="SET NULL",
+                                                                use_alter=True, name="fk_companies_authority_doc"))
+    logo_file_id: Mapped[int | None] = mapped_column(ForeignKey("submission_files.id", ondelete="SET NULL",
+                                                                use_alter=True, name="fk_companies_logo_file"))
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))      # sent (again) for review
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Track(Base):
@@ -170,6 +203,7 @@ class User(Base):
     consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))   # personal-data consent
     consent_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")   # catalog.CONSENT_VERSION
     work_industries: Mapped[list[str]] = mapped_column(ARRAY(String(24)), default=list, server_default="{}")
+    job_fields: Mapped[list[str]] = mapped_column(ARRAY(String(24)), default=list, server_default="{}")   # catalog.JOB_FIELDS
     job_title: Mapped[str] = mapped_column(String(120), default="", server_default="")   # an employer's position
     # student career profile (what employers filter on)
     university_id: Mapped[int | None] = mapped_column(ForeignKey("universities.id", ondelete="SET NULL"), index=True)
@@ -197,6 +231,19 @@ class User(Base):
     staff_university_id: Mapped[int | None] = mapped_column(ForeignKey("universities.id", ondelete="SET NULL"))
     staff_status: Mapped[str] = mapped_column(String(16), default="", server_default="")
     staff_position: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    # university staff request details (2026-11-17). staff_status: "" / pending / needs_info / approved / rejected;
+    # staff_role "lead" approves colleagues of the same university (the first approved person becomes lead)
+    staff_role: Mapped[str] = mapped_column(String(12), default="", server_default="")
+    staff_department: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    staff_work_email: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    staff_doc_id: Mapped[int | None] = mapped_column(ForeignKey("submission_files.id", ondelete="SET NULL",
+                                                                use_alter=True, name="fk_users_staff_doc"))
+    # what else the request said (cooperation, channels, memorandum file...): applied to the university on approval
+    staff_extra: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    staff_review_note: Mapped[str] = mapped_column(Text, default="", server_default="")
+    staff_reviewed_by: Mapped[str] = mapped_column(String(160), default="", server_default="")
+    staff_submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    staff_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     language: Mapped[str] = mapped_column(String(5), default="uz", server_default="uz")         # uz / ru / en
     # the student can hide from the companies' named list; applications still share the profile
@@ -391,6 +438,7 @@ class Job(Base):
     requirements: Mapped[str] = mapped_column(Text, default="")
     skills: Mapped[list[str]] = mapped_column(ARRAY(String(40)), default=list, server_default="{}")
     track_ids: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, server_default="{}")
+    job_fields: Mapped[list[str]] = mapped_column(ARRAY(String(24)), default=list, server_default="{}")   # catalog.JOB_FIELDS
     counts_as_practice: Mapped[bool] = mapped_column(Boolean, default=False)   # usable as malakaviy amaliyot
     deadline: Mapped[date | None] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(16), default="pending")
@@ -805,3 +853,62 @@ class LoginRequest(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     tg_username: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# --------------------------------------------------------------------------- university panel v2 (2026-11-17)
+
+EVENT_KINDS = ("career_day", "job_fair", "hackathon", "workshop", "open_day", "meetup", "other")
+EVENT_STATES = ("published", "cancelled")
+
+
+class UniversityAnnouncement(Base):
+    """A career centre's message to its own students (all, or by faculty / course / group); goes to their inbox."""
+    __tablename__ = "university_announcements"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    university_id: Mapped[int] = mapped_column(ForeignKey("universities.id", ondelete="CASCADE"), index=True)
+    author_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    title: Mapped[str] = mapped_column(String(160), default="")
+    text: Mapped[str] = mapped_column(Text)
+    link: Mapped[str] = mapped_column(String(256), default="", server_default="")
+    audience: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")     # the filters used
+    recipients: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    author: Mapped[User | None] = relationship(lazy="selectin")
+
+
+class UniversityEvent(Base):
+    """A career day, job fair, hackathon... organised by a university for its students (they sign up in the app)."""
+    __tablename__ = "university_events"
+    __table_args__ = (_in("kind", EVENT_KINDS, "university_event_kind_valid"),
+                      _in("status", EVENT_STATES, "university_event_status_valid"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    university_id: Mapped[int] = mapped_column(ForeignKey("universities.id", ondelete="CASCADE"), index=True)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    title: Mapped[str] = mapped_column(String(160))
+    kind: Mapped[str] = mapped_column(String(16), default="career_day")
+    description: Mapped[str] = mapped_column(Text, default="")
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    location: Mapped[str] = mapped_column(String(200), default="")
+    online_url: Mapped[str] = mapped_column(String(256), default="")
+    capacity: Mapped[int | None] = mapped_column(Integer)
+    companies: Mapped[str] = mapped_column(String(300), default="")          # partner companies taking part
+    audience: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")   # faculty / course limits
+    status: Mapped[str] = mapped_column(String(12), default="published")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EventRegistration(Base):
+    __tablename__ = "event_registrations"
+    __table_args__ = (UniqueConstraint("event_id", "user_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("university_events.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    attended: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped[User] = relationship(lazy="selectin")

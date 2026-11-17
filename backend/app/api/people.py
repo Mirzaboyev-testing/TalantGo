@@ -10,7 +10,7 @@ from ..models import Company, Role, Status, Submission, Track, University, User
 from ..schemas import (CompanyOut, EmployerSignupIn, LeaderboardOut, LeaderRow, MeOut, MeUpdate, PeerOut,
                        StaffRequestIn, TrackOut, UniversityOut)
 from ..core import ratelimit
-from ..services import inbox, notify
+from ..services import files, inbox, notify
 from ..services.career import completeness, signup_missing
 from ..services.catalog import CONSENT_VERSION, as_dict as catalog_dict
 from ..core.security import read_token
@@ -43,9 +43,16 @@ async def me_out(session: Session, user: User) -> MeOut:
         invite_code=f"r{user.id}", headline=user.headline,
         invited_count=await session.scalar(select(func.count()).select_from(User).where(User.referred_by_id == user.id)),
         completeness=completeness(user), consent_current=user.consent_version >= CONSENT_VERSION,
-        work_industries=user.work_industries, job_title=user.job_title, signup_missing=signup_missing(user),
+        work_industries=user.work_industries, job_fields=user.job_fields, job_title=user.job_title,
+        signup_missing=signup_missing(user),
         email=user.email, has_password=bool(user.password_hash), has_telegram=user.telegram_id is not None,
-        language=user.language, visible_to_employers=user.visible_to_employers)
+        language=user.language, visible_to_employers=user.visible_to_employers,
+        staff=await staff_info(session, user) if user.account_type == "university" and user.staff_status else None)
+
+
+async def staff_info(session: Session, user: User) -> dict:
+    from ..services import staff
+    return await staff.info(session, user)
 
 
 # Changing any of these after verification means the old check no longer covers the profile.
@@ -70,7 +77,7 @@ async def update_me(body: MeUpdate, user: CurrentUser, session: Session) -> MeOu
         uni = await session.get(University, changes["university_id"])
         if uni is None or not uni.is_active:
             raise HTTPException(404, "Universitet topilmadi")
-    for key in ("goals", "skills", "languages", "job_types"):
+    for key in ("goals", "skills", "languages", "job_types", "job_fields"):
         if changes.get(key) is not None:
             changes[key] = list(dict.fromkeys(changes[key]))
     if changes.get("full_name"):
@@ -323,7 +330,13 @@ async def register_company(body: EmployerSignupIn, user: CurrentUser, session: S
         raise HTTPException(422, "Telefon raqamingizni kiriting")
     if await session.scalar(select(func.count()).select_from(Company).where(Company.stir == body.stir)):
         raise HTTPException(409, "Bu STIR bilan kompaniya ro'yxatdan o'tgan. Jamoaga qo'shilish uchun adminga yozing.")
-    company = Company(**body.model_dump(exclude={"full_name", "job_title", "consent"}))
+    data = body.model_dump(exclude={"full_name", "job_title", "consent", "data_pledge"})
+    data["registration_doc_id"] = await files.company_file(session, user.id, body.registration_doc_id, files.DOC_TYPES,
+                                                           "Kompaniya hujjati")
+    data["authority_doc_id"] = (await files.company_file(session, user.id, body.authority_doc_id, files.DOC_TYPES,
+                                                         "Vakolat xati") if body.contact_role == "representative" else None)
+    data["logo_file_id"] = await files.company_file(session, user.id, body.logo_file_id, files.LOGO_TYPES, "Logotip")
+    company = Company(**data, submitted_at=datetime.now(UTC))
     session.add(company)
     await session.flush()
     user.company_id, user.account_type = company.id, "employer"
@@ -341,14 +354,9 @@ async def register_company(body: EmployerSignupIn, user: CurrentUser, session: S
 
 @router.post("/me/staff-request", response_model=MeOut, status_code=201)
 async def request_staff(body: StaffRequestIn, user: CurrentUser, session: Session) -> MeOut:
-    """University career-centre staff ask for access to their university's dashboard."""
-    if not await session.get(University, body.university_id):
-        raise HTTPException(404, "Universitet topilmadi")
-    user.account_type, user.staff_university_id = "university", body.university_id
-    user.staff_position, user.staff_status = body.position, "pending"
-    user.consent_at = user.consent_at or datetime.now(UTC)
-    await session.commit()
-    await session.refresh(user)
+    """University career-centre staff ask for access to their university's dashboard (also re-sends it)."""
+    from ..services import staff
+    await staff.submit(session, user, body)
     return await me_out(session, user)
 
 

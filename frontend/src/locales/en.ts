@@ -1,11 +1,17 @@
 import type { MsgKey } from "./uz";
+import { company } from "./parts/company";
+import { university } from "./parts/university";
 import { partner } from "./parts/partner";
 import { student } from "./parts/student";
+import { student2 } from "./parts/student2";
 
 // English. Machine-assisted: review before a public launch.
 export const en: Record<MsgKey, string> = {
   ...student.en,
+  ...student2.en,
   ...partner.en,
+  ...company.en,
+  ...university.en,
   "common.loading": "Loading…",
   "common.close": "Close",
   "common.save": "Save",

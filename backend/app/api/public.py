@@ -6,9 +6,12 @@ and nothing about individual students.
 from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse
 from sqlalchemy import func, or_, select
 
-from ..models import Application, Challenge, Company, EmploymentOutcome, Job, Partnership, Track, University, User
+from ..models import (Application, Challenge, Company, EmploymentOutcome, Job, Partnership, SubmissionFile, Track,
+                      University, User)
+from ..services import files
 from ..services.outcomes import university_stats
 from .deps import Session
 from .jobs import visible_jobs
@@ -27,7 +30,8 @@ def public_job(job: Job) -> dict:
 
 def public_company(c: Company, open_jobs: int) -> dict:
     return {"id": c.id, "name": c.name, "industry": c.industry, "city": c.city, "size": c.size,
-            "website": c.website, "description": c.description, "open_jobs": open_jobs, "verified": True}
+            "website": c.website, "description": c.description, "open_jobs": open_jobs, "verified": True,
+            "logo_url": files.logo_url(c.id, c.logo_file_id, c.status)}
 
 
 def _open_jobs_count():
@@ -118,6 +122,18 @@ async def company_activity(session, company_id: int) -> dict:
         EmploymentOutcome.company_id == company_id, EmploymentOutcome.source == "application"))
     return {"applications": total, "answer_rate": round(100 * answered / total) if total >= MIN_APPLICATIONS else None,
             "hires": hires, "tasks": tasks, "min_applications": MIN_APPLICATIONS}
+
+
+@router.get("/companies/{company_id}/logo", include_in_schema=False)
+async def company_logo(company_id: int, session: Session) -> FileResponse:
+    """An approved company's logo (an image it uploaded: PNG, JPG or WEBP only)."""
+    found = await session.get(Company, company_id)
+    row = await session.get(SubmissionFile, found.logo_file_id) if found and found.logo_file_id else None
+    path = files.root() / row.stored_name if row else None
+    if found is None or found.status != "approved" or row is None or row.mime not in files.LOGO_TYPES or not path.is_file():
+        raise HTTPException(404, "Logotip topilmadi")
+    return FileResponse(path, media_type=row.mime, headers={
+        "X-Content-Type-Options": "nosniff", "Cache-Control": "public, max-age=86400"})
 
 
 @router.get("/companies/{company_id}")

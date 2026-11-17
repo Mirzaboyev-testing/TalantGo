@@ -1,25 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, fileSize, type Me, type Task, type TaskQuestion } from "../api";
+import { api, fileSize, type Me, type Task, type TaskQuestion, type Track } from "../api";
 import { formatDateTime, t, useLang } from "../i18n";
 import { haptic, openLink } from "../tg";
 import { ErrorText, FileList, ReviewList, Sheet, StatusBadge, message, toast } from "../ui";
 import InviteCard from "./InviteCard";
-import Challenges from "./Challenges";
 import { Icon, TrackMark } from "../icons";
 import ProfileTask from "./ProfileTask";
 
 const MAX_FILES = 5;
 const MAX_MB = 10;
 
-export default function PathScreen({ me, onChanged, onChangeTrack }: { me: Me; onChanged: () => void; onChangeTrack: () => void }) {
+/** The optional weekly programme of a track (student panel v2: picked here, not at sign-up). */
+export default function PathScreen({ me, onChanged }: { me: Me; onChanged: () => void }) {
   useLang();
   const [tasks, setTasks] = useState<Task[] | null>(null);
-  const [view, setView] = useState<"tasks" | "challenges">("tasks");
   const [openId, setOpenId] = useState<number | null>(null);
+  const [picking, setPicking] = useState(false);
   const [error, setError] = useState("");
+  const trackId = me.track?.id ?? null;
 
-  const load = useCallback(() => api.tasks(me.track!.id).then(setTasks, (e) => setError(message(e))), [me.track]);
-  useEffect(() => { void load(); }, [load]);
+  const load = useCallback(() => (trackId ? api.tasks(trackId).then(setTasks, (e) => setError(message(e))) : Promise.resolve()),
+                           [trackId]);
+  useEffect(() => { setTasks(null); void load(); }, [load]);
 
   // while the AI is checking a submission, refresh quietly so its verdict shows up by itself
   const checking = tasks?.some((t) => t.submission?.ai_state === "checking") ?? false;
@@ -31,51 +33,101 @@ export default function PathScreen({ me, onChanged, onChangeTrack }: { me: Me; o
     return () => clearTimeout(timer);
   }, [checking, tasks, load, onChanged]);
 
+  if (!me.track || picking) {
+    return <TrackPicker me={me} onCancel={me.track ? () => setPicking(false) : undefined}
+                        onPicked={() => { setPicking(false); onChanged(); }} />;
+  }
+
   const done = tasks?.filter((t) => t.submission && ["peer_verified", "mentor_verified"].includes(t.submission.status)).length ?? 0;
+  const total = tasks?.length ?? 0;
   const open = tasks?.find((t) => t.id === openId) ?? null;
 
   return (
-    <div>
-      <div className="row between">
-        <h1 className="row" style={{ gap: 12 }}><TrackMark title={me.track!.title} size={40} />{me.track!.title}</h1>
-      </div>
-      <div className="stats">
-        <div className="stat"><b>{me.points}</b><span>{t("home.points")}</span></div>
-        <div className="stat"><b>{me.streak > 0 && <Icon name="flame" size={18} />}{me.streak}</b><span>{t("home.streak")}</span></div>
-        <div className="stat"><b>#{me.rank_overall}</b><span>{t("home.rank")}</span></div>
-      </div>
-      {tasks && (
-        <p className="hint">{t("s.path.done", { done, total: tasks.length })} · <a href="#" onClick={(e) => { e.preventDefault(); onChangeTrack(); }}>{t("s.path.change_track")}</a></p>
-      )}
-      {me.invited_count < 3 && <InviteCard me={me} compact />}
-      <div className="segmented">
-        <button className={view === "tasks" ? "on" : ""} onClick={() => setView("tasks")}>{t("s.common.tasks")}</button>
-        <button className={view === "challenges" ? "on" : ""} onClick={() => setView("challenges")}>{t("s.common.challenges")}</button>
-      </div>
-      {view === "challenges" && <Challenges />}
-      <ErrorText error={error} />
-      {view === "tasks" && !tasks && !error && <div className="hint">{t("common.loading")}</div>}
-      {view === "tasks" && tasks?.map((task) => (
-        <div key={task.id} className="card tap" onClick={() => setOpenId(task.id)}>
-          <div className="row between">
-            <span className="hint">{task.kind === "profile" ? t("s.path.start") : t("s.path.week", { n: task.week })} · {t("s.common.points", { n: task.points })}</span>
-            {task.kind === "profile" && task.submission ? <span className="badge peer_verified">{t("s.path.done_badge")}</span>
-              : task.submission?.ai_state === "checking" ? <span className="badge pending">{t("s.path.checking")}</span>
-              : <StatusBadge status={task.submission?.status ?? null} />}
-          </div>
-          <b>{task.title}</b>
-          {(task.mentor || task.questions > 0) && (
-            <div className="hint" style={{ marginTop: 2 }}>
-              {[task.mentor && t("s.path.mentor", { name: task.mentor }), task.questions > 0 && t("s.path.questions_n", { n: task.questions })]
-                .filter(Boolean).join(" · ")}
+    <div className="co-page">
+      <div className="co-card st-track-head">
+        <TrackMark title={me.track.title} size={48} />
+        <div className="grow" style={{ minWidth: 0 }}>
+          <b className="st-track-title">{me.track.title}</b>
+          <div className="hint">{me.track.description}</div>
+          {tasks && (
+            <div className="st-track-progress">
+              <div className="progress"><div style={{ width: `${total ? Math.round((100 * done) / total) : 0}%` }} /></div>
+              <span>{t("s.path.done", { done, total })}</span>
             </div>
           )}
         </div>
-      ))}
+        <button className="btn small ghost" onClick={() => setPicking(true)}>{t("s.path.change_track")}</button>
+      </div>
+      {me.invited_count < 3 && <InviteCard me={me} compact />}
+      <ErrorText error={error} />
+      {!tasks && !error && <div className="hint">{t("common.loading")}</div>}
+      <div className="st-task-grid">
+        {tasks?.map((task) => (
+          <div key={task.id} className="card tap st-task" onClick={() => setOpenId(task.id)}>
+            <div className="row between">
+              <span className="hint">{task.kind === "profile" ? t("s.path.start") : t("s.path.week", { n: task.week })} · {t("s.common.points", { n: task.points })}</span>
+              {task.kind === "profile" && task.submission ? <span className="badge peer_verified">{t("s.path.done_badge")}</span>
+                : task.submission?.ai_state === "checking" ? <span className="badge pending">{t("s.path.checking")}</span>
+                : <StatusBadge status={task.submission?.status ?? null} />}
+            </div>
+            <b>{task.title}</b>
+            {(task.mentor || task.questions > 0) && (
+              <div className="hint" style={{ marginTop: 2 }}>
+                {[task.mentor && t("s.path.mentor", { name: task.mentor }), task.questions > 0 && t("s.path.questions_n", { n: task.questions })]
+                  .filter(Boolean).join(" · ")}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
       {open && (
         <TaskSheet task={open} me={me} onClose={() => setOpenId(null)}
                    onSubmitted={async () => { await load(); onChanged(); }} />
       )}
+    </div>
+  );
+}
+
+/** Choosing (or changing) the weekly programme. */
+function TrackPicker({ me, onPicked, onCancel }: { me: Me; onPicked: () => void; onCancel?: () => void }) {
+  useLang();
+  const [tracks, setTracks] = useState<Track[] | null>(null);
+  const [busy, setBusy] = useState<number | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => { api.tracks().then(setTracks, (e) => setError(message(e))); }, []);
+
+  async function pick(id: number) {
+    setBusy(id); setError("");
+    try {
+      await api.updateMe({ track_id: id });
+      haptic("success");
+      toast(t("st.weekly.picked"));
+      onPicked();
+    } catch (e) { setError(message(e)); setBusy(null); }
+  }
+  return (
+    <div className="co-page">
+      <div className="co-card st-weekly-intro">
+        <span className="co-stat-icon"><Icon name="path" size={20} /></span>
+        <div className="grow">
+          <b>{me.track ? t("st.weekly.change_title") : t("st.weekly.title")}</b>
+          <p className="hint" style={{ margin: "4px 0 0" }}>{t("st.weekly.hint")}</p>
+        </div>
+        {onCancel && <button className="btn small ghost" onClick={onCancel}>{t("common.cancel")}</button>}
+      </div>
+      <ErrorText error={error} />
+      {!tracks && !error && <div className="hint">{t("common.loading")}</div>}
+      <div className="st-task-grid">
+        {tracks?.map((tr) => (
+          <div key={tr.id} className={`co-card st-track-card ${me.track?.id === tr.id ? "on" : ""}`}>
+            <div className="row" style={{ gap: 12 }}><TrackMark title={tr.title} /><b>{tr.title}</b></div>
+            <p className="hint" style={{ margin: "8px 0 12px" }}>{tr.description}</p>
+            <button className="btn small" disabled={busy !== null || me.track?.id === tr.id} onClick={() => pick(tr.id)}>
+              {me.track?.id === tr.id ? t("st.weekly.current") : busy === tr.id ? t("s.common.saving") : t("st.weekly.pick")}
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

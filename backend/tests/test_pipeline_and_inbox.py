@@ -46,11 +46,11 @@ async def test_pipeline_moves_history_and_student_notices(client, make_user):
     listed = (await client.get(f"{API}/employer/jobs/{job['id']}/applicants", headers=hr["headers"])).json()
     assert listed[0]["status"] == "viewed"
 
-    r = await move(client, hr, app_id, status="interview", interview_at="2026-11-02T10:30:00",
+    r = await move(client, hr, app_id, status="interview", interview_at="2099-11-02T10:30:00",
                    interview_place="Amir Temur 1, 3-qavat")
     assert r.status_code == 200 and r.json()["status"] == "interview"
     assert r.json()["interview_place"] == "Amir Temur 1, 3-qavat"
-    assert r.json()["interview_at"].startswith("2026-11-02T05:30")          # 10:30 Tashkent = 05:30 UTC
+    assert r.json()["interview_at"].startswith("2099-11-02T05:30")          # 10:30 Tashkent = 05:30 UTC
 
     mine = (await client.get(f"{API}/me/applications", headers=student["headers"])).json()[0]
     assert mine["status"] == "interview" and mine["interview_place"] == "Amir Temur 1, 3-qavat"

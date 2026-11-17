@@ -4,16 +4,17 @@ Students stay anonymous to an employer until they apply to its job or accept its
 """
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from ..models import (Application, ApplicationEvent, Company, ContactRequest, EmploymentOutcome, Job, Partnership, Role,
-                      Status, Submission, University, User)
+from ..models import (Application, ApplicationEvent, Challenge, ChallengeEntry, Company, ContactRequest, EmploymentOutcome,
+                      Job, Partnership, Role, Status, Submission, SubmissionFile, Track, University, User)
 from ..schemas import (ApplicantOut, ApplicationPatch, CompanyIn, CompanyOut, ContactIn, JobIn, JobOut)
 from ..core import ratelimit
-from ..services import applications, inbox, notify, partnerships
+from ..services import applications, files, inbox, notify, partnerships
 from ..core.security import create_token
 from ..models import CompanyTest, TestAttempt
 from ..services.career import JOB_KIND_LABEL, anonymous_card, identity, student_row
@@ -24,6 +25,7 @@ from .jobs import job_out, match_score
 
 router = APIRouter(prefix="/employer", tags=["employer"])
 CONTACTS_PER_DAY = 20          # per company: keeps students from being spammed
+TASHKENT = ZoneInfo("Asia/Tashkent")
 
 
 async def employer(user: CurrentUser) -> User:
@@ -71,17 +73,106 @@ async def edit_company(body: CompanyIn, user: Employer, session: Session) -> Com
     # first time (older accounts had none) keeps the approval and is only reported to the admins
     identity_changed = body.name != company.name or bool(company.stir and body.stir != company.stir)
     first_stir = not company.stir and bool(body.stir)
-    for field, value in body.model_dump().items():
+    changes = body.model_dump(exclude_unset=True)
+    # files must be the person's own uploads; a new registration document is checked again like a new STIR
+    for key, kinds, what in (("registration_doc_id", files.DOC_TYPES, "Kompaniya hujjati"),
+                             ("authority_doc_id", files.DOC_TYPES, "Vakolat xati"),
+                             ("logo_file_id", files.LOGO_TYPES, "Logotip")):
+        if key in changes and changes[key] != getattr(company, key):
+            changes[key] = await files.company_file(session, user.id, changes[key], kinds, what)
+    new_document = "registration_doc_id" in changes and changes["registration_doc_id"] not in (None, company.registration_doc_id)
+    for field, value in changes.items():
         setattr(company, field, value)
     resubmitted = company.status == "rejected"          # fixing a rejected company sends it back for review
     if resubmitted or (identity_changed and company.status == "approved"):
         company.status, company.review_note = "pending", ""
+        company.submitted_at = datetime.now(UTC)
     await session.commit()
     if resubmitted:
         await _notify_admins(session, f"Rad etilgan kompaniya ma'lumotlarini tuzatib qayta yubordi: {company.name} (STIR {company.stir}).")
-    elif identity_changed or first_stir:
+    elif identity_changed or first_stir or new_document:
         await _notify_admins(session, f"Kompaniya ma'lumotlari o'zgardi: {company.name} (STIR {company.stir}).")
     return company
+
+
+async def company_documents(session: Session, company: Company) -> list[dict]:
+    """The company's own files with signed links (for its staff and for admins)."""
+    ids = {"registration": company.registration_doc_id, "authority": company.authority_doc_id, "logo": company.logo_file_id}
+    rows = {f.id: f for f in (await session.execute(select(SubmissionFile).where(
+        SubmissionFile.id.in_([i for i in ids.values() if i])))).scalars()}
+    return [{"kind": kind, **files.file_out(rows[i])} for kind, i in ids.items() if i in rows]
+
+
+@router.get("/company/documents")
+async def my_company_documents(user: Employer, session: Session) -> list[dict]:
+    return await company_documents(session, user.company)
+
+
+def _visible_students_count(*extra):
+    return select(func.count()).select_from(User).where(*_visible_students(), *extra)
+
+
+@router.get("/review-status")
+async def review_status(user: Employer, session: Session) -> dict:
+    """What a company waiting for the admin check sees: where it is in the queue, how long checks usually
+    take, and real numbers about the students it will reach once approved."""
+    company = user.company
+    submitted = company.submitted_at or company.created_at
+    position = None
+    if company.status == "pending":
+        position = 1 + await session.scalar(select(func.count()).select_from(Company).where(
+            Company.status == "pending", Company.id != company.id,
+            func.coalesce(Company.submitted_at, Company.created_at) < submitted))
+    # the median time of the checks done in the last 90 days (needs at least 3 of them)
+    since = datetime.now(UTC) - timedelta(days=90)
+    durations = sorted((r - (s or c)).total_seconds() / 3600 for r, s, c in (await session.execute(select(
+        Company.reviewed_at, Company.submitted_at, Company.created_at).where(
+        Company.reviewed_at.isnot(None), Company.reviewed_at >= since))).all())
+    typical = round(durations[len(durations) // 2], 1) if len(durations) >= 3 else None
+    tracks = (await session.execute(select(Track.title, func.count()).join(User, User.track_id == Track.id)
+                                    .where(*_visible_students()).group_by(Track.title)
+                                    .order_by(func.count().desc()).limit(5))).all()
+    universities = await session.scalar(select(func.count(func.distinct(User.university_id))).where(
+        *_visible_students(), User.university_id.isnot(None)))
+    return {
+        "status": company.status, "review_note": company.review_note, "submitted_at": submitted,
+        "reviewed_at": company.reviewed_at, "queue_position": position, "typical_hours": typical,
+        "students": await session.scalar(_visible_students_count()),
+        "open_to_work": await session.scalar(_visible_students_count(User.open_to_work.is_(True))),
+        "verified": await session.scalar(_visible_students_count(User.verification == "verified")),
+        "in_industry": await session.scalar(_visible_students_count(User.work_industries.contains([company.industry])))
+        if company.industry else 0,
+        "universities": universities,
+        "companies": await session.scalar(select(func.count()).select_from(Company).where(Company.status == "approved")),
+        "top_tracks": [{"title": t.split(":")[0], "students": n} for t, n in tracks],
+        "documents": await company_documents(session, company),
+    }
+
+
+@router.get("/counters")
+async def counters(user: ApprovedEmployer, session: Session) -> dict:
+    """Numbers for the sidebar badges and the dashboard's "needs attention" list."""
+    cid = user.company_id
+    new_apps = await session.scalar(select(func.count()).select_from(Application).join(Job).where(
+        Job.company_id == cid, Application.status == "new"))
+    to_grade = await session.scalar(select(func.count()).select_from(TestAttempt).join(
+        CompanyTest, CompanyTest.id == TestAttempt.test_id).where(CompanyTest.company_id == cid,
+                                                                   TestAttempt.status == "submitted"))
+    to_review = await session.scalar(select(func.count()).select_from(ChallengeEntry).join(
+        Challenge, Challenge.id == ChallengeEntry.challenge_id).where(Challenge.company_id == cid,
+                                                                       ChallengeEntry.status == "submitted"))
+    outcomes = await session.scalar(select(func.count()).select_from(EmploymentOutcome).where(
+        EmploymentOutcome.company_id == cid, EmploymentOutcome.source == "self",
+        EmploymentOutcome.confirmed_by != "company"))
+    partnerships_in = await session.scalar(select(func.count()).select_from(Partnership).where(
+        Partnership.company_id == cid, Partnership.status == "pending", Partnership.initiated_by == "university"))
+    rejected_jobs = await session.scalar(select(func.count()).select_from(Job).where(
+        Job.company_id == cid, Job.status == "rejected"))
+    since = datetime.now(UTC) - timedelta(days=7)
+    contacts_accepted = await session.scalar(select(func.count()).select_from(ContactRequest).where(
+        ContactRequest.company_id == cid, ContactRequest.status == "accepted", ContactRequest.created_at >= since))
+    return {"new_applications": new_apps, "to_grade": to_grade, "to_review": to_review, "outcomes": outcomes,
+            "partnerships_in": partnerships_in, "rejected_jobs": rejected_jobs, "contacts_accepted": contacts_accepted}
 
 
 # --------------------------------------------------------------------------- jobs
@@ -398,8 +489,17 @@ async def dashboard(user: ApprovedEmployer, session: Session, days: int = Query(
         Job.company_id == user.company_id, Application.status == "interview",
         Application.interview_at >= now).order_by(Application.interview_at).limit(5))).scalars().all()
     recent = (await session.execute(select(Application).join(Job).where(Job.company_id == user.company_id)
-                                    .order_by(Application.created_at.desc()).limit(5))).scalars().all()
+                                    .order_by(Application.created_at.desc()).limit(6))).scalars().all()
+    # the same numbers for the period before, to show the change
+    before = since - timedelta(days=days)
+    prev_received = await session.scalar(select(func.count()).select_from(Application).join(Job).where(
+        Job.company_id == user.company_id, Application.created_at >= before, Application.created_at < since))
+    prev_hired = await session.scalar(select(func.count(func.distinct(ApplicationEvent.application_id))).where(
+        ApplicationEvent.application_id.in_(company_apps), ApplicationEvent.to_status == "hired",
+        ApplicationEvent.created_at >= before, ApplicationEvent.created_at < since))
     return {
+        **await _dashboard_extras(session, user.company, since, days),
+        "previous": {"received": prev_received, "hired": prev_hired},
         "days": days,
         "jobs": {s: jobs_by_status.get(s, 0) for s in ("approved", "pending", "rejected", "closed")},
         "pipeline": {s: pipeline.get(s, 0) for s in ("new", "viewed", "shortlisted", "interview", "offer", "hired",
@@ -414,11 +514,62 @@ async def dashboard(user: ApprovedEmployer, session: Session, days: int = Query(
     }
 
 
+def company_profile_check(company: Company) -> dict:
+    """What a student sees on the company page and what makes it trusted: filled in or not."""
+    checks = {"logo": bool(company.logo_file_id), "about": len(company.description.strip()) >= 120,
+              "website": bool(company.website), "contacts": bool(company.telegram or company.email),
+              "address": bool(company.address), "cooperation": bool(company.cooperation),
+              "tracks": bool(company.wanted_track_ids), "document": bool(company.registration_doc_id)}
+    return {"percent": round(100 * sum(checks.values()) / len(checks)), "missing": [k for k, ok in checks.items() if not ok]}
+
+
+async def _dashboard_extras(session: Session, company: Company, since: datetime, days: int) -> dict:
+    cid = company.id
+    # applications per day (per week for a year) in Tashkent time, with empty days filled in
+    local_day = func.date(func.timezone("Asia/Tashkent", Application.created_at))
+    per_day = dict((await session.execute(select(local_day, func.count()).join(Job).where(
+        Job.company_id == cid, Application.created_at >= since).group_by(local_day))).all())
+    today = datetime.now(TASHKENT).date()
+    step = 7 if days > 90 else 1
+    buckets = []
+    for i in range(days // step - 1, -1, -1):
+        end = today - timedelta(days=i * step)
+        start = end - timedelta(days=step - 1)
+        n = sum(v for d, v in per_day.items() if start <= d <= end)
+        buckets.append({"date": start.isoformat(), "applications": n})
+    counts = (select(func.count()).where(Application.job_id == Job.id).correlate(Job).scalar_subquery())
+    hired = (select(func.count()).where(Application.job_id == Job.id, Application.status == "hired")
+             .correlate(Job).scalar_subquery())
+    top = (await session.execute(select(Job, counts.label("n"), hired.label("h")).where(Job.company_id == cid)
+                                 .order_by(counts.desc(), Job.created_at.desc()).limit(5))).all()
+    unis = (await session.execute(select(University.short_name, func.count()).select_from(Application)
+                                  .join(Job, Job.id == Application.job_id).join(User, User.id == Application.user_id)
+                                  .join(University, University.id == User.university_id)
+                                  .where(Job.company_id == cid).group_by(University.short_name)
+                                  .order_by(func.count().desc()).limit(5))).all()
+    views = await session.scalar(select(func.coalesce(func.sum(Job.views), 0)).where(Job.company_id == cid))
+    tasks = await session.scalar(select(func.count()).select_from(Challenge).where(Challenge.company_id == cid))
+    tests = await session.scalar(select(func.count()).select_from(CompanyTest).where(CompanyTest.company_id == cid))
+    partners = await session.scalar(select(func.count()).select_from(Partnership).where(
+        Partnership.company_id == cid, Partnership.status != "rejected"))
+    jobs_total = await session.scalar(select(func.count()).select_from(Job).where(Job.company_id == cid))
+    profile = company_profile_check(company)
+    return {
+        "trend": buckets, "trend_step": step, "views": views,
+        "top_jobs": [{"id": j.id, "title": j.title, "status": j.status, "kind": j.kind, "views": j.views,
+                      "applications": n, "hired": h} for j, n, h in top],
+        "universities": [{"name": name, "applications": n} for name, n in unis],
+        "profile": profile,
+        "first_steps": {"profile": profile["percent"] >= 75, "job": jobs_total > 0, "task": tasks > 0,
+                        "test": tests > 0, "partnership": partners > 0},
+    }
+
+
 @router.get("/applications")
 async def all_applications(user: ApprovedEmployer, session: Session, job_id: int | None = None,
                            status: str | None = Query(default=None, max_length=16),
                            q: str | None = Query(default=None, max_length=80),
-                           limit: int = Query(default=25, ge=1, le=100), offset: int = Query(default=0, ge=0)) -> dict:
+                           limit: int = Query(default=25, ge=1, le=200), offset: int = Query(default=0, ge=0)) -> dict:
     """Every application to the company's jobs in one table (the "Nomzodlar" page), newest first."""
     verified = _verified_count().label("verified")
     query = (select(Application, verified).join(Job, Job.id == Application.job_id)
@@ -435,10 +586,16 @@ async def all_applications(user: ApprovedEmployer, session: Session, job_id: int
                                   .offset(offset).limit(limit))).all()
     jobs = (await session.execute(select(Job.id, Job.title).where(Job.company_id == user.company_id)
                                   .order_by(Job.created_at.desc()))).all()
+    stage_query = select(Application.status, func.count()).join(Job, Job.id == Application.job_id).where(
+        Job.company_id == user.company_id)
+    if job_id:
+        stage_query = stage_query.where(Application.job_id == job_id)
+    stages = dict((await session.execute(stage_query.group_by(Application.status))).all())
     return {
         "items": [{**applicant_out(a, n).model_dump(), "job_id": a.job_id, "job_title": a.job.title,
                    "match": match_score(a.job, a.user)} for a, n in rows],
         "total": total,
+        "stages": stages,
         "jobs": [{"id": i, "title": t} for i, t in jobs],
     }
 

@@ -1,6 +1,6 @@
 """Two-way sign-up (job seeker / employer), the employer's named student list with PDF CVs, and company tests."""
 from tests.conftest import owner_headers as owner
-from tests.test_career import COMPANY, EMPLOYER, make_employer, uni_id
+from tests.test_career import COMPANY, EMPLOYER, employer_body, make_employer, upload_doc, uni_id
 
 
 async def full_student(client, make_user, name: str, track_index: int = 0, points: int = 0) -> dict:
@@ -9,7 +9,8 @@ async def full_student(client, make_user, name: str, track_index: int = 0, point
     r = await client.patch("/api/v1/me", json={
         "full_name": name, "phone": "+998901112233", "university_id": await uni_id("TDIU"), "faculty": "Iqtisodiyot",
         "course": 2, "group_name": "114-25", "track_id": track["id"], "work_industries": ["fintech", "bank"],
-        "job_types": ["internship"], "consent": True}, headers=u["headers"])
+        "job_fields": ["finance", "data"], "job_types": ["internship"], "city": "Toshkent shahri", "consent": True},
+        headers=u["headers"])
     assert r.status_code == 200, r.text
     assert r.json()["signup_missing"] == []
     if points:
@@ -32,10 +33,18 @@ async def approved_employer(client, make_user, name="HR Nigora", stir="301234567
 async def test_new_student_sees_every_required_field_missing(client, make_user):
     u = await make_user("Ali")
     me = (await client.get("/api/v1/me", headers=u["headers"])).json()
-    assert me["signup_missing"] == ["full_name", "phone", "university", "faculty", "course", "group", "track",
-                                    "work_industries", "job_types", "consent"]
+    # student panel v2: the track is optional; job functions, job types and the city are asked instead
+    assert me["signup_missing"] == ["full_name", "phone", "university", "faculty", "course", "group",
+                                    "job_fields", "job_types", "city", "consent"]
     r = await client.patch("/api/v1/me", json={"work_industries": ["kosmos"]}, headers=u["headers"])
     assert r.status_code == 422                                  # only fields from the list
+    r = await client.patch("/api/v1/me", json={"job_fields": ["astronavt"]}, headers=u["headers"])
+    assert r.status_code == 422
+    r = await client.patch("/api/v1/me", json={"job_fields": ["software", "data", "design", "hr", "law", "sales"]},
+                           headers=u["headers"])
+    assert r.status_code == 422                                  # five at most
+    r = await client.patch("/api/v1/me", json={"city": "Toshkent"}, headers=u["headers"])
+    assert "city" in r.json()["signup_missing"]                  # a region from the list, not free text
 
 
 async def test_old_consent_must_be_given_again(client, make_user):
@@ -53,16 +62,20 @@ async def test_old_consent_must_be_given_again(client, make_user):
 
 async def test_employer_sign_up_requires_every_starred_field(client, make_user):
     hr = await make_user("HR")
-    r = await client.post("/api/v1/me/company", json=EMPLOYER, headers=hr["headers"])
+    full = await employer_body(client, hr["headers"])
+    r = await client.post("/api/v1/me/company", json=full, headers=hr["headers"])
     assert r.status_code == 422 and "Telefon" in r.json()["detail"]          # phone first
     await client.patch("/api/v1/me", json={"phone": "+998901234567"}, headers=hr["headers"])
-    for missing in ("stir", "legal_form", "industry", "size", "city", "description", "job_title"):
-        body = {k: v for k, v in EMPLOYER.items() if k != missing}
+    for missing in ("stir", "legal_form", "industry", "size", "city", "description", "job_title", "ownership",
+                    "contact_role", "cooperation", "registration_doc_id", "data_pledge"):
+        body = {k: v for k, v in full.items() if k != missing}
         assert (await client.post("/api/v1/me/company", json=body, headers=hr["headers"])).status_code == 422, missing
-    assert (await client.post("/api/v1/me/company", json={**EMPLOYER, "industry": "IT"}, headers=hr["headers"])).status_code == 422
-    assert (await client.post("/api/v1/me/company", json={**EMPLOYER, "consent": False}, headers=hr["headers"])).status_code == 422
+    for wrong in ({"industry": "IT"}, {"consent": False}, {"data_pledge": False}, {"cooperation": []},
+                  {"cooperation": ["kosmos"]}, {"description": "Qisqa tavsif, ellik belgidan kam"},
+                  {"contact_role": "representative"}):                  # a representative needs a letter of authority
+        assert (await client.post("/api/v1/me/company", json={**full, **wrong}, headers=hr["headers"])).status_code == 422, wrong
 
-    r = await client.post("/api/v1/me/company", json=EMPLOYER, headers=hr["headers"])
+    r = await client.post("/api/v1/me/company", json=full, headers=hr["headers"])
     me = r.json()
     assert r.status_code == 201 and me["account_type"] == "employer" and me["signup_missing"] == []
     assert me["full_name"] == "Nigora Karimova" and me["job_title"] == "HR menejer"
@@ -253,8 +266,8 @@ async def test_leaving_a_pending_company_request_can_be_undone(client, make_user
     me = (await client.post("/api/v1/me/account-type/student", headers=hr["headers"])).json()
     assert me["account_type"] == "student" and me["company"] is None
     await client.patch("/api/v1/me", json={"phone": "+998901234567"}, headers=hr["headers"])
-    from tests.test_career import EMPLOYER
-    assert (await client.post("/api/v1/me/company", json=EMPLOYER, headers=hr["headers"])).status_code == 201
+    assert (await client.post("/api/v1/me/company", json=await employer_body(client, hr["headers"]),
+                              headers=hr["headers"])).status_code == 201
 
 
 async def test_only_students_who_agreed_appear_in_peers(client, make_user):

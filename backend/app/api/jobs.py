@@ -12,7 +12,7 @@ from ..schemas import ApplyIn, ContactAnswerIn, JobOut, MyApplicationOut
 from ..core import ratelimit
 from ..services import applications, inbox
 from ..services.applications import company_staff_ids
-from ..services.career import JOB_KIND_LABEL
+from ..services.career import JOB_KIND_LABEL, verified_work_count
 from .deps import CurrentUser, Session
 
 router = APIRouter(tags=["jobs"])
@@ -24,12 +24,20 @@ def job_out(job: Job, **extra) -> JobOut:
 
 
 def match_score(job: Job, user: User) -> int:
-    """0-100: shared skills plus being on a track the job asks for."""
+    """0-100, an open formula: shared skills (45), the job function (30; the track a job asks for counts too),
+    the job type the student looks for (15) and the business field (10). Anything a side left empty counts half."""
     skills = {s.lower() for s in user.skills}
     wanted = {s.lower() for s in job.skills}
     skill_part = len(skills & wanted) / len(wanted) if wanted else 0.5
-    track_part = 1.0 if user.track_id in job.track_ids else (0.5 if not job.track_ids else 0.0)
-    return round(100 * (0.7 * skill_part + 0.3 * track_part))
+    if job.job_fields or job.track_ids:
+        field_part = 1.0 if (set(job.job_fields) & set(user.job_fields)
+                             or (user.track_id is not None and user.track_id in job.track_ids)) else 0.0
+    else:
+        field_part = 0.5
+    kind_part = (1.0 if job.kind in user.job_types else 0.0) if user.job_types else 0.5
+    industry = job.company.industry if job.company else ""
+    industry_part = (1.0 if industry in user.work_industries else 0.0) if user.work_industries and industry else 0.5
+    return round(100 * (0.45 * skill_part + 0.30 * field_part + 0.15 * kind_part + 0.10 * industry_part))
 
 
 def visible_jobs():
@@ -219,7 +227,7 @@ async def student_dashboard(user: CurrentUser, session: Session) -> dict:
                         key=lambda a: a.interview_at or now)
     applied = {a.job_id for a in apps if a.status != "withdrawn"}
     open_jobs = (await session.execute(visible_jobs().order_by(Job.created_at.desc()).limit(200))).scalars().all()
-    recommended = sorted((j for j in open_jobs if j.id not in applied), key=lambda j: -match_score(j, user))[:3]
+    recommended = sorted((j for j in open_jobs if j.id not in applied), key=lambda j: -match_score(j, user))[:6]
     saved = await session.scalar(select(func.count()).select_from(SavedJob).join(Job, Job.id == SavedJob.job_id)
                                  .where(SavedJob.user_id == user.id, Job.status == "approved"))
     return {
@@ -232,6 +240,7 @@ async def student_dashboard(user: CurrentUser, session: Session) -> dict:
         "recommended": [job_out(j, match=match_score(j, user)) for j in recommended],
         "saved": saved,
         "open_jobs": len(open_jobs),
+        "verified_tasks": await verified_work_count(session, user.id),
     }
 
 

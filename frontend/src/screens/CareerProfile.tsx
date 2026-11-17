@@ -6,6 +6,8 @@ import { t, tMaybe, useLang } from "../i18n";
 import { courseText, verificationLabel } from "../labels";
 import { haptic } from "../tg";
 import { ErrorText, message, toast } from "../ui";
+import Combo, { uniItems } from "./student/Combo";
+import { fieldLabel } from "./student/StudentSignup";
 
 const missingLabel = (m: string) => tMaybe(`s.career.missing.${m}`) ?? m;
 const LANGUAGE_HINTS = ["O'zbek (ona tili)", "Rus B2", "Ingliz B1", "Ingliz B2", "Ingliz C1", "Koreys TOPIK 3", "Nemis B1"];
@@ -23,6 +25,7 @@ export default function CareerProfile({ me, onSaved }: { me: Me; onSaved: (m: Me
   });
   const [jobTypes, setJobTypes] = useState<JobKind[]>(me.job_types);
   const [industries, setIndustries] = useState<string[]>(me.work_industries);
+  const [jobFields, setJobFields] = useState<string[]>(me.job_fields);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -50,14 +53,14 @@ export default function CareerProfile({ me, onSaved }: { me: Me; onSaved: (m: Me
 
   const seeker = me.role === "student";
   const save = () => {
-    if (seeker && (industries.length === 0 || jobTypes.length === 0)) {
-      setError(industries.length === 0 ? t("s.common.pick_industry") : t("s.career.pick_jobtype"));
+    if (seeker && (jobFields.length === 0 || jobTypes.length === 0 || !catalog?.regions.includes(f.city))) {
+      setError(jobFields.length === 0 ? t("st.su.fields_err") : jobTypes.length === 0 ? t("s.career.pick_jobtype") : t("st.su.city_err"));
       return;
     }
     return doSave();
   };
   const doSave = () => run(() => api.updateMe({
-    ...(seeker ? { work_industries: industries } : {}),
+    ...(seeker ? { work_industries: industries, job_fields: jobFields } : {}),
     university_id: f.university_id ? Number(f.university_id) : null, faculty: f.faculty.trim(),
     course: f.course ? Number(f.course) : null, graduation_year: f.graduation_year ? Number(f.graduation_year) : null,
     gpa: f.gpa ? Number(f.gpa.replace(",", ".")) : null, gpa_scale: Number(f.gpa_scale),
@@ -101,12 +104,13 @@ export default function CareerProfile({ me, onSaved }: { me: Me; onSaved: (m: Me
       <div className="card">
         <b>{t("s.career.study")}</b>
         <label>{t("s.common.university")}</label>
-        <select value={f.university_id} onChange={set("university_id")}>
-          <option value="">{t("task.f.choose")}</option>
-          {unis.map((u) => <option key={u.id} value={u.id}>{u.short_name} · {u.name}</option>)}
-        </select>
-        <label>{t("s.career.faculty")}</label>
-        <input value={f.faculty} maxLength={120} onChange={set("faculty")} />
+        <Combo id="cp-uni" items={uniItems(unis)} value={f.university_id} icon="school" placeholder={t("st.su.uni_ph")}
+               onChange={(v, custom) => { if (!custom) { setSaved(false); setF({ ...f, university_id: v }); } }} />
+        <label htmlFor="cp-faculty">{t("s.career.faculty")}</label>
+        <input id="cp-faculty" value={f.faculty} maxLength={120} list="cp-faculties" onChange={set("faculty")} />
+        <datalist id="cp-faculties">
+          {(unis.find((u) => String(u.id) === f.university_id)?.faculties ?? []).map((x) => <option key={x} value={x} />)}
+        </datalist>
         <div className="row">
           <div className="grow"><label>{t("s.common.course")}</label>
             <select value={f.course} onChange={set("course")}>
@@ -148,7 +152,16 @@ export default function CareerProfile({ me, onSaved }: { me: Me; onSaved: (m: Me
         </div>
         {seeker && (
           <>
-            <label>{t("s.common.industry_label")}<Req /></label>
+            <label>{t("st.su.fields")}<Req /></label>
+            <div className="chips">
+              {Object.keys(catalog?.job_fields ?? {}).map((k) => (
+                <button key={k} className={`chip ${jobFields.includes(k) ? "on" : ""}`}
+                        onClick={() => { setSaved(false); setJobFields(jobFields.includes(k) ? jobFields.filter((x) => x !== k) : [...jobFields, k].slice(0, 5)); }}>
+                  {fieldLabel(k, catalog)}
+                </button>
+              ))}
+            </div>
+            <label>{t("st.su.industries")} <span className="hint">· {t("st.su.optional")}</span></label>
             <div className="chips">
               {catalog && Object.entries(catalog.industries).map(([k, label]) => (
                 <button key={k} className={`chip ${industries.includes(k) ? "on" : ""}`}
@@ -168,8 +181,11 @@ export default function CareerProfile({ me, onSaved }: { me: Me; onSaved: (m: Me
             </button>
           ))}
         </div>
-        <label>{t("s.common.city")}</label>
-        <input value={f.city} maxLength={60} placeholder={t("s.common.city_ph")} onChange={set("city")} />
+        <label>{t("st.su.city")}{seeker && <Req />}</label>
+        <select value={catalog?.regions.includes(f.city) ? f.city : ""} onChange={set("city")}>
+          <option value="">{t("task.f.choose")}</option>
+          {catalog?.regions.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
         <ErrorText error={error} />
         <div className="stack" style={{ marginTop: 12 }}>
           <button className="btn" disabled={busy} onClick={save}>{saved ? t("s.common.saved") : t("common.save")}</button>

@@ -26,6 +26,7 @@ from ..services import inbox as user_inbox
 from ..services.applications import company_staff_ids
 from ..services.admin_accounts import hash_password
 from ..services.career import decide_verification
+from ..services.catalog import clean_faculties
 from ..services.rules import Rules, get_rules, save_rules
 from .deps import AdminActor, OwnerActor, Session, audit
 from ..seed import add_official_groups
@@ -556,12 +557,26 @@ async def decide(user_id: int, body: ReviewDecisionIn, actor: AdminActor, sessio
     return {"verification": student.verification}
 
 
-@router.get("/companies", response_model=list[CompanyOut])
-async def companies(_: AdminActor, session: Session, status: str | None = None) -> list[Company]:
+@router.get("/companies")
+async def companies(_: AdminActor, session: Session, status: str | None = None) -> list[dict]:
+    """Companies with what the check needs: the person who signed up, their role and the documents."""
+    from .employer import company_documents
     query = select(Company)
     if status:
         query = query.where(Company.status == status)
-    return list((await session.execute(query.order_by(Company.created_at.desc()).limit(300))).scalars())
+    rows = list((await session.execute(query.order_by(Company.created_at.desc()).limit(300))).scalars())
+    people: dict[int, User] = {}
+    for u in (await session.execute(select(User).where(User.company_id.in_([c.id for c in rows]))
+                                    .order_by(User.id))).scalars():
+        people.setdefault(u.company_id, u)
+    out = []
+    for c in rows:
+        person = people.get(c.id)
+        out.append({**CompanyOut.model_validate(c).model_dump(mode="json"),
+                    "documents": await company_documents(session, c),
+                    "contact": {"full_name": person.full_name, "job_title": person.job_title, "phone": person.phone,
+                                "email": person.email, "username": person.username} if person else None})
+    return out
 
 
 @router.post("/companies/{company_id}/review", response_model=CompanyOut)
@@ -570,6 +585,7 @@ async def review_company(company_id: int, body: ReviewDecisionIn, actor: AdminAc
     if company is None:
         raise HTTPException(404, "Kompaniya topilmadi")
     company.status, company.review_note = ("approved" if body.approve else "rejected"), body.note.strip()
+    company.reviewed_at = datetime.now(UTC)
     audit(session, actor, "company.review", company.name, f"{company.status}: STIR {company.stir or '-'} {body.note}")
     await session.commit()
     await user_inbox.push(session, await company_staff_ids(session, company.id), "company_review",
@@ -608,26 +624,46 @@ async def review_job(job_id: int, body: ReviewDecisionIn, actor: AdminActor, ses
 
 @router.get("/staff")
 async def staff_requests(_: AdminActor, session: Session, status: str = "pending") -> list[dict]:
-    rows = (await session.execute(select(User).where(User.staff_status == status).order_by(User.created_at))).scalars()
-    return [{"id": u.id, "full_name": u.full_name, "username": u.username, "position": u.staff_position,
-             "university": u.staff_university.name if u.staff_university else None, "status": u.staff_status}
-            for u in rows]
+    """University staff by state, with what the check needs: phone, work email, position document, the
+    university (a proposed new one is marked) and who already leads that university."""
+    from ..services import staff as staff_service
+    states = ("pending", "needs_info") if status == "open" else (status,)
+    rows = (await session.execute(select(User).where(User.staff_status.in_(states))
+                                  .order_by(User.staff_submitted_at.desc().nulls_last(), User.created_at))).scalars().all()
+    return [await staff_service.row(session, u) for u in rows]
+
+
+class StaffDecisionIn(BaseModel):
+    decision: Literal["approve", "needs_info", "reject"] | None = None
+    approve: bool | None = None          # older form of the same call
+    note: str = ""
 
 
 @router.post("/staff/{user_id}/review")
-async def review_staff(user_id: int, body: ReviewDecisionIn, actor: OwnerActor, session: Session) -> dict:
-    """Owner only: staff can verify students, so this access is checked by a person (call the university)."""
+async def review_staff(user_id: int, body: StaffDecisionIn, actor: OwnerActor, session: Session) -> dict:
+    """Owner only: staff can verify students, so this access is checked by a person (call the university).
+    "needs_info" sends the request back with a question; the person edits and sends it again."""
+    from ..services import staff as staff_service
     user = await session.get(User, user_id)
     if user is None or not user.staff_status:
         raise HTTPException(404, "So'rov topilmadi")
-    user.staff_status = "approved" if body.approve else "rejected"
+    decision = body.decision or ("approve" if body.approve else "reject")
     uni = user.staff_university.name if user.staff_university else "?"
-    audit(session, actor, "staff.review", f"{user.full_name} ({uni})", user.staff_status)
-    await session.commit()
-    await user_inbox.push(session, [user.id], "staff_review",
-                     f"{uni} karyera markazi paneliga kirish berildi." if body.approve
-                     else "Universitet xodimi sifatidagi so'rovingiz tasdiqlanmadi.",
-                     link="/universitet", params={"approved": body.approve, "university": uni})
+    audit(session, actor, "staff.review", f"{user.full_name} ({uni})", f"{decision} {body.note}".strip())
+    # the older call (approve: false) had no reason; a "needs_info" or "reject" decision must give one
+    note = body.note or ("Tasdiqlanmadi" if body.decision is None and decision == "reject" else "")
+    await staff_service.decide(session, user, decision, note, "TalantGo")
+    return {"status": user.staff_status, "role": user.staff_role}
+
+
+@router.post("/staff/{user_id}/revoke")
+async def revoke_staff(user_id: int, body: StaffDecisionIn, actor: OwnerActor, session: Session) -> dict:
+    from ..services import staff as staff_service
+    user = await session.get(User, user_id)
+    if user is None or user.account_type != "university":
+        raise HTTPException(404, "Xodim topilmadi")
+    audit(session, actor, "staff.revoke", user.full_name, body.note)
+    await staff_service.revoke(session, user, body.note, "TalantGo")
     return {"status": user.staff_status}
 
 
@@ -656,7 +692,7 @@ async def edit_university(university_id: int, body: UniversityPatch, actor: Admi
     if uni is None:
         raise HTTPException(404, "Universitet topilmadi")
     for field, value in body.model_dump(exclude_unset=True, exclude_none=True).items():
-        setattr(uni, field, value)
+        setattr(uni, field, clean_faculties(value) if field == "faculties" else value)
     audit(session, actor, "university.update", uni.name)
     await session.commit()
     return uni

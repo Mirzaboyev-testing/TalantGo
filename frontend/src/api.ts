@@ -36,7 +36,7 @@ export interface Me {
   company: Company | null; staff_university: University | null; staff_status: string; staff_position: string;
   phone: string; phone_verified: boolean; show_phone: boolean; invite_code: string; invited_count: number; headline: string;
   completeness: { percent: number; missing: string[] };
-  consent_current: boolean; work_industries: string[]; job_title: string; signup_missing: string[];
+  consent_current: boolean; work_industries: string[]; job_fields: string[]; job_title: string; signup_missing: string[];
   email: string | null; has_password: boolean; has_telegram: boolean;
   language: "uz" | "ru" | "en"; visible_to_employers: boolean;
 }
@@ -46,15 +46,32 @@ export type AccountType = "student" | "employer" | "university";
 export type Verification = "none" | "pending" | "verified" | "rejected";
 export type JobKind = "internship" | "part_time" | "junior" | "project";
 export type WorkMode = "office" | "remote" | "hybrid";
-export interface University { id: number; name: string; short_name: string; city: string }
+export interface University { id: number; name: string; short_name: string; city: string; faculties?: string[] }
 export interface Company {
   id: number; name: string; stir: string | null; industry: string; website: string; city: string;
   description: string; status: "pending" | "approved" | "rejected"; review_note: string; created_at: string;
   legal_form: string; size: string; telegram: string; address: string; email: string;
+  ownership: string; contact_role: string; cooperation: string[]; wanted_track_ids: number[]; show_as_partner: boolean;
+  registration_doc_id: number | null; authority_doc_id: number | null; logo_file_id: number | null;
+  submitted_at: string | null; reviewed_at: string | null; logo_url: string | null;
 }
-export type CompanyInput = Omit<Company, "id" | "status" | "review_note" | "created_at" | "stir"> & { stir: string };
+export type CompanyInput = Omit<Company, "id" | "status" | "review_note" | "created_at" | "stir" | "submitted_at" |
+  "reviewed_at" | "logo_url"> & { stir: string };
+export interface CompanyDocument extends SubmittedFile { kind: "registration" | "authority" | "logo" }
 export interface Catalog {
-  industries: Record<string, string>; legal_forms: Record<string, string>; company_sizes: Record<string, string>; regions: string[];
+  industries: Record<string, string>; job_fields: Record<string, string>; legal_forms: Record<string, string>; legal_forms_all: Record<string, string>;
+  company_sizes: Record<string, string>; regions: string[]; ownership: Record<string, string>;
+  contact_roles: Record<string, string>; cooperation: Record<string, string>;
+}
+export interface ReviewStatus {
+  status: Company["status"]; review_note: string; submitted_at: string; reviewed_at: string | null;
+  queue_position: number | null; typical_hours: number | null; students: number; open_to_work: number; verified: number;
+  in_industry: number; universities: number; companies: number; top_tracks: { title: string; students: number }[];
+  documents: CompanyDocument[];
+}
+export interface EmployerCounters {
+  new_applications: number; to_grade: number; to_review: number; outcomes: number; partnerships_in: number;
+  rejected_jobs: number; contacts_accepted: number;
 }
 export interface StudentRow extends TalentCard {
   full_name: string; username: string | null; photo_url: string | null; group_name: string; bio: string;
@@ -116,11 +133,11 @@ export interface Job {
   id: number; company_id: number; company_name: string; company_industry: string; title: string; kind: JobKind;
   work_mode: WorkMode; city: string; is_paid: boolean; salary_from: number | null; salary_to: number | null;
   hours_per_week: number | null; description: string; requirements: string; skills: string[]; track_ids: number[];
-  counts_as_practice: boolean; deadline: string | null; status: string; review_note: string; views: number;
+  job_fields?: string[]; counts_as_practice: boolean; deadline: string | null; status: string; review_note: string; views: number;
   created_at: string; applied: boolean; application_status: string | null; match: number; applications: number; saved?: boolean;
 }
 export type JobInput = Pick<Job, "title" | "kind" | "work_mode" | "city" | "is_paid" | "salary_from" | "salary_to" |
-  "hours_per_week" | "description" | "requirements" | "skills" | "track_ids" | "counts_as_practice" | "deadline"> & { rules_accepted: boolean };
+  "hours_per_week" | "description" | "requirements" | "skills" | "track_ids" | "counts_as_practice" | "deadline"> & { job_fields?: string[]; rules_accepted: boolean };
 export interface MyApplication {
   id: number; status: string; note: string; created_at: string; updated_at: string; job: Job;
   interview_at: string | null; interview_place: string; history: { status: string; at: string }[];
@@ -133,20 +150,28 @@ export interface PublicJob {
 }
 export interface PublicCompany {
   id: number; name: string; industry: string; city: string; size: string; website: string; description: string;
-  open_jobs: number; verified: boolean;
+  open_jobs: number; verified: boolean; logo_url?: string | null;
+}
+export interface AdminCompany extends Company {
+  documents: CompanyDocument[];
+  contact: { full_name: string; job_title: string; phone: string; email: string | null; username: string | null } | null;
 }
 export interface PublicStats { jobs: number; companies: number; students: number; universities: number }
 export interface StudentDashboard {
   applications: Record<string, number>; active_applications: number;
   interviews: { application_id: number; job: string; company: string; at: string | null; place: string }[];
   recent: { id: number; job: string; company: string; status: string; updated_at: string }[];
-  recommended: Job[]; saved: number; open_jobs: number;
+  recommended: Job[]; saved: number; open_jobs: number; verified_tasks?: number;
 }
 export interface EmployerDashboard {
   days: number; jobs: Record<"approved" | "pending" | "rejected" | "closed", number>;
   pipeline: Record<string, number>; applications_total: number; received: number; hired: number;
   interviews: { application_id: number; student: string; job: string; at: string | null; place: string }[];
   recent: { application_id: number; student: string; job: string; status: string; created_at: string }[];
+  previous: { received: number; hired: number }; trend: { date: string; applications: number }[]; trend_step: number;
+  views: number; top_jobs: { id: number; title: string; status: string; kind: JobKind; views: number; applications: number; hired: number }[];
+  universities: { name: string; applications: number }[]; profile: { percent: number; missing: string[] };
+  first_steps: Record<"profile" | "job" | "task" | "test" | "partnership", boolean>;
 }
 export interface CandidateRow extends Applicant { job_id: number; job_title: string; match: number }
 export type OutcomeKind = "full_time" | "part_time" | "internship" | "dual_education";
@@ -295,7 +320,7 @@ function describe(detail: unknown): string {
   return "Kutilmagan xato";
 }
 
-async function request<T>(method: string, path: string, body?: unknown, admin = false): Promise<T> {
+export async function request<T>(method: string, path: string, body?: unknown, admin = false): Promise<T> {
   // the admin API accepts the owner's password session or an admin's own Telegram session
   const token = admin ? adminToken || userToken : userToken;
   let resp: Response;
@@ -339,7 +364,7 @@ export function fileSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-async function download(path: string, filename: string): Promise<void> {
+export async function download(path: string, filename: string): Promise<void> {
   const resp = await fetch(`/api/v1${path}`, { headers: { Authorization: `Bearer ${adminToken || userToken}` } });
   if (!resp.ok) throw new ApiError(resp.status, "Yuklab bo'lmadi");
   const url = URL.createObjectURL(await resp.blob());
@@ -372,7 +397,8 @@ export const api = {
   universities: () => request<University[]>("GET", "/universities"),
   addUniversity: (name: string) => request<University>("POST", "/universities", { name }),
   requestVerification: () => request<Me>("POST", "/me/verification"),
-  registerCompany: (c: CompanyInput & { full_name: string; job_title: string; consent: boolean }) => request<Me>("POST", "/me/company", c),
+  registerCompany: (c: CompanyInput & { full_name: string; job_title: string; consent: boolean; data_pledge: boolean }) =>
+    request<Me>("POST", "/me/company", c),
   catalog: () => request<Catalog>("GET", "/catalog"),
   myCvLink: () => request<{ url: string }>("GET", "/me/cv-link"),
   tests: {
@@ -468,7 +494,10 @@ export const api = {
 
   employer: {
     company: () => request<Company>("GET", "/employer/company"),
-    editCompany: (c: CompanyInput) => request<Company>("PATCH", "/employer/company", c),
+    editCompany: (c: Partial<CompanyInput>) => request<Company>("PATCH", "/employer/company", c),
+    documents: () => request<CompanyDocument[]>("GET", "/employer/company/documents"),
+    reviewStatus: () => request<ReviewStatus>("GET", "/employer/review-status"),
+    counters: () => request<EmployerCounters>("GET", "/employer/counters"),
     students: (params: Record<string, string>) => request<StudentRow[]>("GET", `/employer/students?${new URLSearchParams(params)}`),
     student: (id: number) => request<StudentDetail>("GET", `/employer/students/${id}`),
     cvLink: (id: number) => request<{ url: string }>("GET", `/employer/students/${id}/cv-link`),
@@ -502,7 +531,8 @@ export const api = {
     reviewTaskEntry: (id: number, entryId: number, r: { accept: boolean; score: number | null; place: 1 | 2 | 3 | null; comment: string }) =>
       request<ChallengeEntry>("POST", `/employer/tasks/${id}/entries/${entryId}/review`, r),
     candidates: (params: Record<string, string>) =>
-      request<{ items: CandidateRow[]; total: number; jobs: { id: number; title: string }[] }>("GET", `/employer/applications?${new URLSearchParams(params)}`),
+      request<{ items: CandidateRow[]; total: number; jobs: { id: number; title: string }[]; stages: Record<string, number> }>(
+        "GET", `/employer/applications?${new URLSearchParams(params)}`),
     updateApplication: (id: number, changes: { status?: string; employer_note?: string; interview_at?: string; interview_place?: string }) =>
       request<Applicant>("PATCH", `/employer/applications/${id}`, changes),
     talent: (params: Record<string, string>) => request<TalentCard[]>("GET", `/employer/talent?${new URLSearchParams(params)}`),
@@ -602,7 +632,7 @@ export const api = {
     reviewTest: (id: number, approve: boolean, note: string) => request<CompanyTestFull>("POST", `/admin/tests/${id}/review`, { approve, note }, true),
     verifications: () => request<PendingStudent[]>("GET", "/admin/verifications", undefined, true),
     decideVerification: (id: number, approve: boolean, note: string) => request<unknown>("POST", `/admin/verifications/${id}`, { approve, note }, true),
-    companies: (status: string) => request<Company[]>("GET", `/admin/companies?status=${status}`, undefined, true),
+    companies: (status: string) => request<AdminCompany[]>("GET", `/admin/companies?status=${status}`, undefined, true),
     reviewCompany: (id: number, approve: boolean, note: string) => request<Company>("POST", `/admin/companies/${id}/review`, { approve, note }, true),
     pendingJobs: () => request<Job[]>("GET", "/admin/jobs?status=pending", undefined, true),
     reviewJob: (id: number, approve: boolean, note: string) => request<Job>("POST", `/admin/jobs/${id}/review`, { approve, note }, true),

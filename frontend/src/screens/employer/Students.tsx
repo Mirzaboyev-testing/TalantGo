@@ -7,6 +7,8 @@ import { absoluteUrl, api, formatPhone, JOB_KIND, loadCatalog,
          type Catalog, type JobKind, type StudentDetail, type StudentRow, type Track, type University } from "../../api";
 import { haptic, openAfter, openLink } from "../../tg";
 import { Avatar, ErrorText, Sheet, message, toast } from "../../ui";
+import { Icon } from "../../icons";
+import { EmptyState, PageHead } from "./kit";
 
 /** Opens the signed PDF link; in Telegram it opens in the phone's browser, which saves the file. */
 export async function downloadCv(studentId: number): Promise<void> {
@@ -19,14 +21,16 @@ export async function downloadCv(studentId: number): Promise<void> {
 
 const industryLabels = (keys: string[], catalog: Catalog | null) => keys.map((k) => tMaybe(`industry.${k}`) ?? catalog?.industries[k] ?? k);
 
+const EMPTY_FILTERS = { q: "", university_id: "", track_id: "", course: "", industry: "", job_type: "",
+                        verified_only: false, open_only: false, sort: "rating" };
+
 export default function Students({ onTest }: { onTest?: (attemptId: number) => void }) {
   useLang();
   const [unis, setUnis] = useState<University[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const fromUrl = useSearch();         // /korxona/talabalar?university=<id> comes from a university page
-  const [filters, setFilters] = useState({ q: "", university_id: fromUrl.university ?? "", track_id: "", course: "", industry: "", job_type: "",
-                                           verified_only: false, open_only: false, sort: "rating" });
+  const [filters, setFilters] = useState({ ...EMPTY_FILTERS, university_id: fromUrl.university ?? "" });
   const [rows, setRows] = useState<StudentRow[] | null>(null);
   const [open, setOpen] = useState<number | null>(null);
   const [error, setError] = useState("");
@@ -50,90 +54,106 @@ export default function Students({ onTest }: { onTest?: (attemptId: number) => v
     setFilters(next);
     if (now) search(next);
   };
+  const active = Object.entries(filters).filter(([k, v]) => k !== "sort" && k !== "q" && v).length;
 
   return (
-    <div>
-      <h1>{t("nav.company.students")}</h1>
-      <p className="hint">{t("p.students.hint")}</p>
-      <div className="card">
-        <form className="row" onSubmit={(e) => { e.preventDefault(); search(); }}>
-          <input className="grow" value={filters.q} placeholder={t("p.students.search_ph")} onChange={(e) => update("q", e.target.value)} />
-          <button className="btn small" type="submit">{t("p.common.search")}</button>
-        </form>
-        <div className="row" style={{ marginTop: 8 }}>
-          <select className="grow" value={filters.university_id} onChange={(e) => update("university_id", e.target.value, true)}>
+    <>
+      <PageHead title={t("nav.company.students")} sub={t("p.students.hint")} />
+      <div className="co-filter-layout">
+        <aside className="co-card co-filters">
+          <form className="co-search" onSubmit={(e) => { e.preventDefault(); search(); }}>
+            <Icon name="search" size={18} />
+            <input value={filters.q} placeholder={t("p.students.search_ph")} onChange={(e) => update("q", e.target.value)} />
+          </form>
+          <div className="co-filters-title">
+            <b>{t("co.stud.filters")}</b>
+            {active > 0 && <button className="link-btn" onClick={() => { setFilters(EMPTY_FILTERS); search(EMPTY_FILTERS); }}>{t("co.stud.reset", { n: active })}</button>}
+          </div>
+          <label>{t("cand.col.university")}</label>
+          <select value={filters.university_id} onChange={(e) => update("university_id", e.target.value, true)}>
             <option value="">{t("p.students.all_unis")}</option>
             {unis.map((u) => <option key={u.id} value={u.id}>{u.short_name}</option>)}
           </select>
-          <select className="grow" value={filters.track_id} onChange={(e) => update("track_id", e.target.value, true)}>
+          <label>{t("co.stud.track")}</label>
+          <select value={filters.track_id} onChange={(e) => update("track_id", e.target.value, true)}>
             <option value="">{t("p.common.all_tracks")}</option>
             {tracks.map((tr) => <option key={tr.id} value={tr.id}>{tr.title.split(":")[0]}</option>)}
           </select>
-        </div>
-        <div className="row" style={{ marginTop: 8 }}>
-          <select className="grow" value={filters.industry} onChange={(e) => update("industry", e.target.value, true)}>
+          <label>{t("p.signup.industry")}</label>
+          <select value={filters.industry} onChange={(e) => update("industry", e.target.value, true)}>
             <option value="">{t("p.students.any_industry")}</option>
             {catalog && Object.entries(catalog.industries).map(([k, label]) => <option key={k} value={k}>{tMaybe(`industry.${k}`) ?? label}</option>)}
           </select>
-          <select className="grow" value={filters.course} onChange={(e) => update("course", e.target.value, true)}>
+          <label>{t("co.stud.course")}</label>
+          <select value={filters.course} onChange={(e) => update("course", e.target.value, true)}>
             <option value="">{t("p.students.any_course")}</option>
             {[1, 2, 3, 4, 5, 6].map((c) => <option key={c} value={c}>{courseText(c)}</option>)}
             <option value="7">{t("course.master")}</option>
           </select>
-        </div>
-        <div className="row" style={{ marginTop: 8 }}>
-          <select className="grow" value={filters.job_type} onChange={(e) => update("job_type", e.target.value, true)}>
+          <label>{t("p.jobs.f.kind")}</label>
+          <select value={filters.job_type} onChange={(e) => update("job_type", e.target.value, true)}>
             <option value="">{t("p.students.any_job_type")}</option>
             {(Object.keys(JOB_KIND) as JobKind[]).map((k) => <option key={k} value={k}>{kindLabel(k)}</option>)}
           </select>
-          <select className="grow" value={filters.sort} onChange={(e) => update("sort", e.target.value, true)}>
-            <option value="rating">{t("p.students.sort_rating")}</option>
-            <option value="tests">{t("p.students.sort_tests")}</option>
-            <option value="new">{t("p.students.sort_new")}</option>
-          </select>
-        </div>
-        <div className="row wrap" style={{ marginTop: 8, gap: 14 }}>
-          <label className="radio-line"><input type="checkbox" checked={filters.verified_only} onChange={(e) => update("verified_only", e.target.checked, true)} />{t("p.students.verified_only")}</label>
-          <label className="radio-line"><input type="checkbox" checked={filters.open_only} onChange={(e) => update("open_only", e.target.checked, true)} />{t("p.students.open_only")}</label>
+          <div className="co-filter-checks">
+            <label className="radio-line"><input type="checkbox" checked={filters.verified_only} onChange={(e) => update("verified_only", e.target.checked, true)} />{t("p.students.verified_only")}</label>
+            <label className="radio-line"><input type="checkbox" checked={filters.open_only} onChange={(e) => update("open_only", e.target.checked, true)} />{t("p.students.open_only")}</label>
+          </div>
+        </aside>
+        <div style={{ minWidth: 0 }}>
+          <div className="co-results-head">
+            <span>{rows ? t("p.students.count", { n: rows.length }) : t("common.loading")}</span>
+            <select className="co-sort" value={filters.sort} onChange={(e) => update("sort", e.target.value, true)}>
+              <option value="rating">{t("p.students.sort_rating")}</option>
+              <option value="tests">{t("p.students.sort_tests")}</option>
+              <option value="new">{t("p.students.sort_new")}</option>
+            </select>
+          </div>
+          <ErrorText error={error} />
+          {!rows && !error && <div className="co-grid">{[0, 1, 2, 3].map((i) => <div key={i} className="co-sk-block" style={{ height: 230 }} />)}</div>}
+          {rows?.length === 0 && <EmptyState icon="users" title={t("p.students.empty")} text={t("co.stud.empty_text")} />}
+          <div className="co-grid">
+            {rows?.map((r) => (
+              <div key={r.id} className="co-student">
+                <div className="co-student-top">
+                  <span className={`co-rank r${Math.min(r.rank, 4)}`} title={t("p.students.rank_title")}>#{r.rank}</span>
+                  <div className="co-student-avatar">
+                    <Avatar name={r.full_name} url={r.photo_url} />
+                    {r.open_to_work && <span className="co-open-dot" title={t("p.uni.open_to_work")} />}
+                  </div>
+                  <div className="grow" style={{ minWidth: 0 }}>
+                    <div className="co-student-name">
+                      <b className="ellipsis">{r.full_name}</b>
+                      {r.verification === "verified" && <span className="co-verify-ic" title={t("p.students.verified")}><Icon name="verified" size={16} /></span>}
+                    </div>
+                    <div className="hint ellipsis">{[r.university, r.faculty, courseText(r.course), r.group_name && t("p.students.group", { name: r.group_name })].filter(Boolean).join(" · ")}</div>
+                    <div className="hint ellipsis">{r.track?.split(":")[0] ?? t("p.common.no_track")}</div>
+                  </div>
+                </div>
+                <div className="co-student-metrics">
+                  <div><b>{r.points}</b><span>{t("home.points")}</span></div>
+                  <div><b>{r.verified_tasks}</b><span>{t("p.sheet.verified_works_stat")}</span></div>
+                  <div><b>{r.test_percent != null ? `${r.test_percent}%` : "—"}</b><span>{t("p.sheet.your_tests_stat")}</span></div>
+                </div>
+                {(r.work_industries.length > 0 || r.skills.length > 0) && (
+                  <div className="chips">
+                    {industryLabels(r.work_industries, catalog).slice(0, 3).map((s) => <span key={s} className="chip">{s}</span>)}
+                    {r.skills.slice(0, 3).map((s) => <span key={s} className="chip skill">{s}</span>)}
+                  </div>
+                )}
+                <div className="co-student-actions">
+                  <button className="btn small" onClick={() => setOpen(r.id)}>{t("p.common.profile")}</button>
+                  <button className="btn small ghost" onClick={() => downloadCv(r.id)}>CV</button>
+                  <button className="btn small ghost" onClick={() => navigate(`/korxona/vazifalar?talaba=${r.id}`)}>{t("stud.give_task")}</button>
+                  {r.username && <button className="icon-btn" title="Telegram" aria-label="Telegram" onClick={() => openLink(`https://t.me/${r.username}`)}><Icon name="send" size={16} /></button>}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-      <ErrorText error={error} />
-      {!rows && !error && <div className="hint">{t("common.loading")}</div>}
-      {rows?.length === 0 && <div className="center hint">{t("p.students.empty")}</div>}
-      {rows && rows.length > 0 && <div className="hint" style={{ margin: "4px 0 8px" }}>{t("p.students.count", { n: rows.length })}</div>}
-      {rows?.map((r) => (
-        <div key={r.id} className="card">
-          <div className="row" style={{ alignItems: "flex-start" }}>
-            <span className={`rank ${r.rank <= 3 ? "top" : ""}`} title={t("p.students.rank_title")}>{r.rank}</span>
-            <Avatar name={r.full_name} url={r.photo_url} />
-            <div className="grow" style={{ minWidth: 0 }}>
-              <div className="row between">
-                <b>{r.full_name}</b>
-                {r.verification === "verified" && <span className="badge peer_verified">{t("p.students.verified")}</span>}
-              </div>
-              <div className="hint">{[r.university, r.faculty, courseText(r.course), r.group_name && t("p.students.group", { name: r.group_name })].filter(Boolean).join(" · ")}</div>
-              <div className="hint">
-                {r.track?.split(":")[0] ?? t("p.common.no_track")} · <b style={{ color: "var(--text)" }}>{t("p.common.points_n", { n: r.points })}</b> · {t("p.common.verified_works", { n: r.verified_tasks })}
-                {r.test_percent != null ? ` · ${t("p.students.tests_pct", { n: r.test_percent })}` : ""}
-              </div>
-              {r.work_industries.length > 0 && (
-                <div className="chips" style={{ marginTop: 6 }}>
-                  {industryLabels(r.work_industries, catalog).map((s) => <span key={s} className="chip">{s}</span>)}
-                  {r.skills.slice(0, 4).map((s) => <span key={s} className="chip">{s}</span>)}
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="row wrap" style={{ marginTop: 10 }}>
-            <button className="btn small" onClick={() => setOpen(r.id)}>{t("p.common.profile")}</button>
-            <button className="btn small ghost" onClick={() => downloadCv(r.id)}>{t("p.common.cv_download")}</button>
-            <button className="btn small ghost" onClick={() => navigate(`/korxona/vazifalar?talaba=${r.id}`)}>{t("stud.give_task")}</button>
-            {r.username && <button className="btn small ghost" onClick={() => openLink(`https://t.me/${r.username}`)}>Telegram</button>}
-          </div>
-        </div>
-      ))}
       {open && <StudentSheet id={open} catalog={catalog} onClose={() => setOpen(null)} onTest={onTest} />}
-    </div>
+    </>
   );
 }
 

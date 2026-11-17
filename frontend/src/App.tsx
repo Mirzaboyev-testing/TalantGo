@@ -3,18 +3,21 @@ import { api, setUserToken, setUserUnauthorizedHandler, type Me } from "./api";
 import { initData, insideTelegram } from "./tg";
 import { message } from "./ui";
 import Onboarding from "./screens/Onboarding";
-import PathScreen from "./screens/Path";
-import ReviewScreen from "./screens/Review";
+import StudentSignup from "./screens/student/StudentSignup";
+import TasksHub from "./screens/student/TasksHub";
+import "./screens/student/student.css";
 import PeersScreen from "./screens/Peers";
 import LeaderboardScreen from "./screens/Leaderboard";
 import ProfileScreen from "./screens/Profile";
 import JobsScreen from "./screens/Jobs";
 import StudentHome from "./screens/StudentHome";
 import MyUniversity from "./screens/MyUniversity";
-import Welcome, { PendingScreen } from "./screens/Welcome";
+import Welcome from "./screens/Welcome";
 import EmployerApp from "./screens/employer/EmployerApp";
-import EmployerSignup from "./screens/employer/EmployerSignup";
+import CompanySignup from "./screens/employer/CompanySignup";
+import CompanyReview from "./screens/employer/CompanyReview";
 import UniversityApp from "./screens/university/UniversityApp";
+import UniPending from "./screens/university/UniPending";
 import Groups from "./screens/Groups";
 import Assistant, { type AiAudience } from "./screens/Assistant";
 import Shell, { type ShellTab } from "./screens/Shell";
@@ -22,6 +25,7 @@ import WebLogin from "./screens/WebLogin";
 import { announceMove } from "./screens/MovedNotice";
 import { getLang, hasChosenLang, setLang, t, useLang } from "./i18n";
 import { navigate, usePath, useRouteTab } from "./router";
+import { courseText } from "./labels";
 import PublicSite, { isPublicPath } from "./public/PublicSite";
 import { chosenPanel } from "./public/panels";
 
@@ -34,10 +38,12 @@ const storeToken = (t: string) => { try { localStorage.setItem(TOKEN_KEY, t); } 
 const storedToken = () => { try { return localStorage.getItem(TOKEN_KEY) ?? ""; } catch { return ""; } };
 const forgetToken = () => { try { localStorage.removeItem(TOKEN_KEY); } catch { /* storage blocked */ } };
 
-type Tab = "home" | "path" | "jobs" | "review" | "university" | "community" | "profile";
-// /talaba/<segment>; /talaba/arizalar and /talaba/saqlangan open the jobs tab on that view
+type Tab = "home" | "jobs" | "applications" | "tasks" | "university" | "community" | "profile";
+// /talaba/<segment>. Student panel v2 (2026-11-17): applications and tasks have their own sections;
+// the older /talaba/yol and /talaba/tekshirish open "Topshiriqlar", /talaba/saqlangan the saved jobs
 const STUDENT_TABS: Record<Tab, string> = {
-  home: "", path: "yol", jobs: "vakansiyalar", review: "tekshirish", university: "universitetim", community: "hamjamiyat", profile: "profil",
+  home: "", jobs: "vakansiyalar", applications: "arizalar", tasks: "topshiriqlar", university: "universitetim",
+  community: "hamjamiyat", profile: "profil",
 };
 let joinHandled = false;
 type AuthState = { kind: "loading" } | { kind: "login"; dev: boolean } | { kind: "error"; text: string } | { kind: "ok" };
@@ -139,15 +145,15 @@ export default function App() {
 
   // Employers: the sign-up form until every required field is filled, then the admin check, then their app.
   if (me.account_type === "employer") {
-    if (me.signup_missing.length > 0) return <>{ai}<div className="app"><EmployerSignup me={me} onSaved={setMe} onLogout={logout} /></div></>;
+    if (me.signup_missing.length > 0) return <>{ai}<CompanySignup me={me} onSaved={setMe} onLogout={logout} /></>;
     return <>{ai}{me.company?.status === "approved"
       ? <EmployerApp me={me} onChanged={setMe} onLogout={logout} />
-      : <div className="app"><PendingScreen me={me} onChanged={setMe} onLogout={logout} /></div>}</>;
+      : <CompanyReview me={me} onChanged={setMe} onLogout={logout} />}</>;
   }
   if (me.account_type === "university") {
     return <>{ai}{me.staff_status === "approved"
       ? <UniversityApp me={me} onLogout={logout} />
-      : <div className="app"><PendingScreen me={me} onChanged={setMe} onLogout={logout} /></div>}</>;
+      : <div className="app"><UniPending me={me} onChanged={setMe} onLogout={logout} /></div>}</>;
   }
   // a brand-new account first chooses: job seeker or employer (the panel picked on the website decides it)
   const isNew = !me.track && !me.has_consent;
@@ -160,7 +166,11 @@ export default function App() {
                                          onStudent={() => setChosenStudent(true)} onChanged={setMe} onLogout={logout} /></div></>;
   }
 
-  // job seekers stay on the sign-up form until every required field is filled
+  // students stay on the three-step sign-up until every required field is filled (mentors keep the older form)
+  if (me.role === "student" && me.signup_missing.length > 0) {
+    return <>{ai}<StudentSignup me={me} onMe={setMe} onDone={async () => { await refreshMe(); navigate("/talaba"); }}
+                                onBack={isNew ? () => setChosenStudent(false) : undefined} onLogout={logout} /></>;
+  }
   if (me.signup_missing.length > 0 || changingTrack) {
     return (
       <>
@@ -181,7 +191,7 @@ function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
   me: Me; refreshMe: () => Promise<void>; setMe: (m: Me) => void; onChangeTrack: () => void; onLogout: () => void;
 }) {
   useLang();
-  const [tab, setTab, segment] = useRouteTab<Tab>("/talaba", STUDENT_TABS, "home", { arizalar: "jobs", saqlangan: "jobs" });
+  const [tab, setTab, segment] = useRouteTab<Tab>("/talaba", STUDENT_TABS, "home", { saqlangan: "jobs", yol: "tasks", tekshirish: "tasks" });
   const [unread, setUnread] = useState(0);
   const [communityView, setCommunityView] = useState<"groups" | "peers" | "top">("groups");
   const refreshUnread = useCallback(() => api.groups.unread().then((r) => setUnread(r.unread), () => {}), []);
@@ -198,29 +208,34 @@ function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
     return () => clearInterval(timer);
   }, [refreshUnread]);
 
+  const seeker = me.role === "student";
+  const main = t("st.nav.main"), mine = t("st.nav.mine");
+  // the phone's bottom bar shows the first four; the rest open from "Ko'proq"
   const tabs: ShellTab<Tab>[] = [
-    { id: "home", icon: "home", label: t("nav.student.home") },
-    { id: "path", icon: "path", label: t("nav.student.path") },
-    { id: "jobs", icon: "briefcase", label: t("nav.student.jobs") },
-    { id: "review", icon: "check", label: t(me.role === "student" ? "nav.student.review" : "nav.student.mentor") },
-    { id: "university", icon: "school", label: t("nav.student.university") },
-    { id: "community", icon: "users", label: t("nav.student.community"), badge: unread },
-    { id: "profile", icon: "user", label: t("nav.student.profile") },
+    { id: "home", icon: "home", label: t("nav.student.home"), group: main },
+    { id: "jobs", icon: "briefcase", label: t("nav.student.jobs"), group: main },
+    { id: "tasks", icon: "target", label: seeker ? t("st.nav.tasks") : t("nav.student.mentor"), group: main },
+    { id: "applications", icon: "inbox", label: t("st.nav.applications"), group: main },
+    { id: "university", icon: "school", label: t("nav.student.university"), group: mine },
+    { id: "community", icon: "users", label: t("nav.student.community"), badge: unread, group: mine },
+    { id: "profile", icon: "user", label: t("st.nav.profile"), group: mine },
   ];
-  const subtitle = me.role === "student" ? me.headline || me.track?.title.split(":")[0] : t("nav.student.mentor");
+  const subtitle = seeker ? me.headline || [me.university_ref?.short_name, me.course ? courseText(me.course) : ""].filter(Boolean).join(" · ")
+    : t("nav.student.mentor");
 
   return (
-    <Shell tabs={tabs} active={tab} onChange={setTab} onLogout={onLogout}
-           user={{ name: me.full_name, photo: me.photo_url, subtitle: subtitle ?? undefined }}>
+    <Shell tabs={tabs} active={tab} onChange={setTab} onLogout={onLogout} wide onUser={() => setTab("profile")}
+           user={{ name: me.full_name, photo: me.photo_url, subtitle: subtitle || undefined, verified: me.verification === "verified" }}>
       {tab === "home" && <StudentHome me={me} />}
-      {tab === "path" && <PathScreen me={me} onChanged={refreshMe} onChangeTrack={onChangeTrack} />}
-      {tab === "review" && <ReviewScreen me={me} onChanged={refreshMe} />}
-      {tab === "university" && <MyUniversity me={me} />}
-      {tab === "jobs" && <JobsScreen key={segment} me={me}
-                                     initialView={segment === "arizalar" ? "mine" : segment === "saqlangan" ? "saved" : "jobs"}
+      {tab === "tasks" && <TasksHub me={me} onChanged={refreshMe} initial={segment === "tekshirish" ? "review" : segment === "yol" ? "weekly" : undefined} />}
+      {tab === "university" && <div className="st-legacy"><MyUniversity me={me} /></div>}
+      {tab === "jobs" && <JobsScreen key={`jobs-${segment}`} me={me} views={["jobs", "saved"]}
+                                     initialView={segment === "saqlangan" ? "saved" : "jobs"}
                                      onOpenProfile={() => setTab("profile")} />}
+      {tab === "applications" && <JobsScreen key="applications" me={me} views={["mine", "tests"]} initialView="mine"
+                                             onOpenProfile={() => setTab("profile")} />}
       {tab === "community" && (
-        <>
+        <div className="st-legacy">
           <div className="segmented">
             <button className={communityView === "groups" ? "on" : ""} onClick={() => setCommunityView("groups")}>{t("s.community.groups")}</button>
             <button className={communityView === "peers" ? "on" : ""} onClick={() => setCommunityView("peers")}>{t("s.community.peers")}</button>
@@ -229,9 +244,10 @@ function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
           {communityView === "groups" && <Groups joinCode={joinCode} onUnreadChange={refreshUnread} />}
           {communityView === "peers" && <PeersScreen me={me} />}
           {communityView === "top" && <LeaderboardScreen />}
-        </>
+        </div>
       )}
-      {tab === "profile" && <ProfileScreen me={me} onSaved={setMe} onChangeTrack={onChangeTrack} />}
+      {tab === "profile" && <div className="st-legacy"><ProfileScreen me={me} onSaved={setMe}
+                                                                     onChangeTrack={seeker ? () => navigate("/talaba/yol") : onChangeTrack} /></div>}
     </Shell>
   );
 }

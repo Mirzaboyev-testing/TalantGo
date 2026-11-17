@@ -21,7 +21,7 @@ def completeness(user: User) -> dict:
         "university": user.university_id is not None,
         "faculty": bool(user.faculty),
         "course": user.course is not None,
-        "track": user.track_id is not None,
+        "job_fields": bool(user.job_fields),
         "skills": len(user.skills) >= 3,
         "languages": bool(user.languages),
         "job_types": bool(user.job_types),
@@ -53,12 +53,16 @@ def signup_missing(user: User) -> list[str]:
                        ("description", len(c.description.strip()) >= 20)]
         checks.append(("consent", user.consent_version >= CONSENT_VERSION))
         return [k for k, ok in checks if not ok]
+    # student panel v2 (2026-11-17): the track is optional (picked later in "Topshiriqlar"); job functions,
+    # job types and the city are asked instead, in the order of the three sign-up steps
     checks = [("full_name", _full_name(user.full_name)), ("phone", bool(user.phone)),
               ("university", user.university_id is not None), ("faculty", len(user.faculty.strip()) >= 2),
-              ("course", user.course is not None), ("group", len(user.group_name.strip()) >= 2),
-              ("track", user.track_id is not None)]
+              ("course", user.course is not None), ("group", len(user.group_name.strip()) >= 2)]
     if user.role == Role.student:          # mentors teach; they are not looking for work
-        checks += [("work_industries", bool(user.work_industries)), ("job_types", bool(user.job_types))]
+        checks += [("job_fields", bool(user.job_fields)), ("job_types", bool(user.job_types)),
+                   ("city", user.city in REGIONS)]
+    elif user.track_id is None:            # a mentor still belongs to the track they teach
+        checks.append(("track", False))
     checks.append(("consent", user.consent_version >= CONSENT_VERSION))
     return [k for k, ok in checks if not ok]
 

@@ -109,6 +109,47 @@ STATEMENTS = [
     "ALTER TABLE universities ADD COLUMN IF NOT EXISTS region varchar(60) NOT NULL DEFAULT ''",
     # admin roles: moderator and analyst (2026-10-26)
     _replace_check("admin_accounts", "admin_role_valid", "role", ADMIN_ROLES, "analyst"),
+    # company sign-up in steps: role, documents, logo, what the company wants from students (2026-11-17)
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS ownership varchar(16) NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS contact_role varchar(16) NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS cooperation varchar(16)[] NOT NULL DEFAULT '{}'",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS wanted_track_ids integer[] NOT NULL DEFAULT '{}'",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS show_as_partner boolean NOT NULL DEFAULT false",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS registration_doc_id integer REFERENCES submission_files(id) ON DELETE SET NULL",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS authority_doc_id integer REFERENCES submission_files(id) ON DELETE SET NULL",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo_file_id integer REFERENCES submission_files(id) ON DELETE SET NULL",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS submitted_at timestamptz",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS reviewed_at timestamptz",
+    # university panel v2: staff request details, team roles, university contacts and files (2026-11-17)
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_role varchar(12) NOT NULL DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_department varchar(120) NOT NULL DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_work_email varchar(120) NOT NULL DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_doc_id integer REFERENCES submission_files(id) ON DELETE SET NULL",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_extra jsonb NOT NULL DEFAULT '{}'",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_review_note text NOT NULL DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_reviewed_by varchar(160) NOT NULL DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_submitted_at timestamptz",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_reviewed_at timestamptz",
+    # staff approved before roles existed: the earliest approved person of each university leads it
+    "UPDATE users SET staff_role = 'lead' WHERE id IN (SELECT DISTINCT ON (staff_university_id) id FROM users "
+    "WHERE staff_status = 'approved' AND staff_university_id IS NOT NULL ORDER BY staff_university_id, id) "
+    "AND staff_role = ''",
+    "UPDATE users SET staff_role = 'member' WHERE staff_status = 'approved' AND staff_role = ''",
+    "ALTER TABLE universities ADD COLUMN IF NOT EXISTS telegram varchar(128) NOT NULL DEFAULT ''",
+    "ALTER TABLE universities ADD COLUMN IF NOT EXISTS social varchar(256) NOT NULL DEFAULT ''",
+    "ALTER TABLE universities ADD COLUMN IF NOT EXISTS email varchar(120) NOT NULL DEFAULT ''",
+    "ALTER TABLE universities ADD COLUMN IF NOT EXISTS phone varchar(20) NOT NULL DEFAULT ''",
+    "ALTER TABLE universities ADD COLUMN IF NOT EXISTS address varchar(200) NOT NULL DEFAULT ''",
+    "ALTER TABLE universities ADD COLUMN IF NOT EXISTS founded_year integer",
+    "ALTER TABLE universities ADD COLUMN IF NOT EXISTS students_total integer",
+    "ALTER TABLE universities ADD COLUMN IF NOT EXISTS cooperation varchar(24)[] NOT NULL DEFAULT '{}'",
+    "ALTER TABLE universities ADD COLUMN IF NOT EXISTS show_as_partner boolean NOT NULL DEFAULT false",
+    "ALTER TABLE universities ADD COLUMN IF NOT EXISTS logo_file_id integer REFERENCES submission_files(id) ON DELETE SET NULL",
+    "ALTER TABLE universities ADD COLUMN IF NOT EXISTS mou_file_id integer REFERENCES submission_files(id) ON DELETE SET NULL",
+    # student panel v2 (2026-11-17): job functions for students and vacancies, faculties per university
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS job_fields varchar(24)[] NOT NULL DEFAULT '{}'",
+    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS job_fields varchar(24)[] NOT NULL DEFAULT '{}'",
+    "ALTER TABLE universities ADD COLUMN IF NOT EXISTS faculties varchar(120)[] NOT NULL DEFAULT '{}'",
 ]
 
 

@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { api, type Me, type University } from "../api";
+import { api, type Me } from "../api";
 import { t, useLang } from "../i18n";
-import { ErrorText, LogoutLink, message } from "../ui";
-import { Consent } from "./Consent";
+import { LogoutLink } from "../ui";
 import { Icon } from "../icons";
 import EmployerSignup from "./employer/EmployerSignup";
+import CompanySignup from "./employer/CompanySignup";
+import UniSignup from "./university/UniSignup";
 
 type Choice = "student" | "employer" | "university" | null;
 
@@ -15,8 +16,8 @@ export default function Welcome({ me, initial, onStudent, onChanged, onLogout }:
   useLang();
   const [choice, setChoice] = useState<Choice>(initial);
 
-  if (choice === "employer") return <EmployerSignup me={me} onSaved={onChanged} onBack={() => setChoice(null)} onLogout={onLogout} />;
-  if (choice === "university") return <StaffForm onBack={() => setChoice(null)} onChanged={onChanged} />;
+  if (choice === "employer") return <CompanySignup me={me} onSaved={onChanged} onBack={() => setChoice(null)} onLogout={onLogout} />;
+  if (choice === "university") return <UniSignup me={me} onBack={() => setChoice(null)} onChanged={onChanged} onLogout={onLogout} />;
 
   return (
     <div>
@@ -40,44 +41,6 @@ export default function Welcome({ me, initial, onStudent, onChanged, onLogout }:
           <div className="row"><span className="avatar"><Icon name="building" /></span><div><b>{t("s.welcome.staff")}</b><div className="hint">{t("s.welcome.staff_hint")}</div></div></div>
         </div>
       )}
-    </div>
-  );
-}
-
-function StaffForm({ onBack, onChanged }: { onBack: () => void; onChanged: (m: Me) => void }) {
-  useLang();
-  const [unis, setUnis] = useState<University[]>([]);
-  const [uniId, setUniId] = useState("");
-  const [position, setPosition] = useState("");
-  const [consent, setConsent] = useState(false);
-  const [error, setError] = useState("");
-  useEffect(() => { api.universities().then(setUnis, (e) => setError(message(e))); }, []);
-
-  async function send() {
-    try {
-      onChanged(await api.requestStaff(Number(uniId), position.trim()));
-    } catch (e) {
-      setError(message(e));
-    }
-  }
-
-  return (
-    <div>
-      <button className="btn small ghost" onClick={onBack}>{t("common.back")}</button>
-      <h1>{t("s.staff.title")}</h1>
-      <p className="hint">{t("s.staff.hint")}</p>
-      <div className="card">
-        <label>{t("s.common.university")}</label>
-        <select value={uniId} onChange={(e) => setUniId(e.target.value)}>
-          <option value="">{t("task.f.choose")}</option>
-          {unis.map((u) => <option key={u.id} value={u.id}>{u.short_name} · {u.name}</option>)}
-        </select>
-        <label>{t("s.staff.position")}</label>
-        <input value={position} maxLength={120} placeholder={t("s.staff.position_ph")} onChange={(e) => setPosition(e.target.value)} />
-        <Consent value={consent} onChange={setConsent} />
-        <ErrorText error={error} />
-        <button className="btn" style={{ marginTop: 12 }} disabled={!uniId || position.trim().length < 3 || !consent} onClick={send}>{t("s.staff.send")}</button>
-      </div>
     </div>
   );
 }

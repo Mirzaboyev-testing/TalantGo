@@ -5,6 +5,7 @@ import { navigate } from "../router";
 import { PublicJobCard } from "../public/PublicJobs";
 import { UniversityFacts } from "../public/PublicUniversities";
 import { ErrorText, message, toast } from "../ui";
+import StudentUniFeed from "./university/StudentUniFeed";
 
 const KINDS: OutcomeKind[] = ["internship", "part_time", "full_time", "dual_education"];
 
@@ -27,6 +28,7 @@ export default function MyUniversity({ me }: { me: Me }) {
         </div>
       )}
       {data.university && me.verification !== "verified" && <div className="notice" style={{ marginBottom: 10 }}>{t("my.not_verified")}</div>}
+      {data.university && <StudentUniFeed />}
 
       {data.university && (
         <>

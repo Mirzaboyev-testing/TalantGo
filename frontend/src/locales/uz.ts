@@ -1,9 +1,15 @@
+import { company } from "./parts/company";
+import { university } from "./parts/university";
 import { partner } from "./parts/partner";
 import { student } from "./parts/student";
+import { student2 } from "./parts/student2";
 // Uzbek (Latin): the source language. Every key here must exist in ru.ts and en.ts.
 export const uz = {
   ...student.uz,
+  ...student2.uz,
   ...partner.uz,
+  ...company.uz,
+  ...university.uz,
   "common.loading": "Yuklanmoqda…",
   "common.close": "Yopish",
   "common.save": "Saqlash",

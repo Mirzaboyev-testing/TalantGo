@@ -33,13 +33,27 @@ async def make_student(client, make_user, name: str, open_to_work=True) -> dict:
 COMPANY = {"name": "Data Solutions MChJ", "stir": "301234567", "legal_form": "llc", "industry": "it",
            "size": "11-50", "city": "Toshkent shahri",
            "description": "Ma'lumotlar tahlili bo'yicha xizmatlar, talabalar uchun amaliyot dasturi"}
-EMPLOYER = {**COMPANY, "full_name": "Nigora Karimova", "job_title": "HR menejer", "consent": True}
+EMPLOYER = {**COMPANY, "full_name": "Nigora Karimova", "job_title": "HR menejer", "consent": True,
+            "ownership": "private", "contact_role": "director", "cooperation": ["internship", "projects"],
+            "data_pledge": True}
+
+
+async def upload_doc(client, headers, name: str = "guvohnoma.pdf", data: bytes = b"%PDF-1.4 test") -> int:
+    r = await client.post("/api/v1/uploads", files={"file": (name, data)}, headers=headers)
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+async def employer_body(client, headers, **changes) -> dict:
+    """The sign-up form as sent: the company's registration document is uploaded first."""
+    return {**EMPLOYER, "registration_doc_id": await upload_doc(client, headers), **changes}
 
 
 async def make_employer(client, make_user, name: str = "HR Nigora", stir: str = "301234567") -> dict:
     hr = await make_user(name)
     await client.patch("/api/v1/me", json={"phone": "+998901234567"}, headers=hr["headers"])
-    r = await client.post("/api/v1/me/company", json={**EMPLOYER, "stir": stir}, headers=hr["headers"])
+    r = await client.post("/api/v1/me/company", json=await employer_body(client, hr["headers"], stir=stir),
+                          headers=hr["headers"])
     assert r.status_code == 201, r.text
     hr["company_id"] = r.json()["company"]["id"]
     return hr

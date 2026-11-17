@@ -61,6 +61,33 @@ async def save(user_id: int, upload: UploadFile) -> SubmissionFile:
     return SubmissionFile(user_id=user_id, filename=name, stored_name=stored, mime=mime, size=size)
 
 
+# --------------------------------------------------------------------------- company documents and logo
+
+DOC_TYPES = {"application/pdf", "image/png", "image/jpeg", "image/webp"}
+LOGO_TYPES = {"image/png", "image/jpeg", "image/webp"}           # never SVG: a logo is served on our domain
+
+
+async def company_file(session, user_id: int, file_id: int | None, kinds: set[str], what: str) -> int | None:
+    """A file the person uploaded themselves, of an allowed type, to keep on the company (None stays None)."""
+    if file_id is None:
+        return None
+    row = await session.get(SubmissionFile, file_id)
+    if row is None or row.user_id != user_id or row.submission_id is not None:
+        raise HTTPException(422, f"{what}: fayl topilmadi, qayta yuklang")
+    if row.mime not in kinds:
+        raise HTTPException(422, f"{what}: faqat " + ("PNG, JPG yoki WEBP rasm" if kinds == LOGO_TYPES else "PDF yoki rasm"))
+    return row.id
+
+
+def logo_url(company_id: int, file_id: int | None, status: str) -> str | None:
+    """Public once the company is approved (cached by browsers); before that a signed link for its own staff."""
+    if not file_id:
+        return None
+    if status == "approved":
+        return f"/api/v1/public/companies/{company_id}/logo?v={file_id}"
+    return f"/api/v1/files/{file_id}/logo?t={create_token(str(file_id), 'file', LINK_HOURS)}"
+
+
 def file_out(f: SubmissionFile) -> dict:
     token = create_token(str(f.id), "file", LINK_HOURS)
     return {"id": f.id, "name": f.filename, "size": f.size, "mime": f.mime,

@@ -1,11 +1,17 @@
 import type { MsgKey } from "./uz";
+import { company } from "./parts/company";
+import { university } from "./parts/university";
 import { partner } from "./parts/partner";
 import { student } from "./parts/student";
+import { student2 } from "./parts/student2";
 
 // Russian. Machine-assisted: a native speaker should review before a public launch.
 export const ru: Record<MsgKey, string> = {
   ...student.ru,
+  ...student2.ru,
   ...partner.ru,
+  ...company.ru,
+  ...university.ru,
   "common.loading": "Загрузка…",
   "common.close": "Закрыть",
   "common.save": "Сохранить",

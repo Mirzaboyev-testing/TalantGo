@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, JOB_KIND, salary, type Company, type Job, type PendingStudent, type StaffRequest } from "../../api";
+import { api, JOB_KIND, salary, type Company, type Job, type PendingStudent } from "../../api";
+import AdminStaffQueue from "../university/AdminStaffQueue";
 import { loadCatalog, type Catalog } from "../../api";
 import { openLink } from "../../tg";
 import { ErrorText, message, toast } from "../../ui";
@@ -135,27 +136,6 @@ function Jobs({ onChanged }: { onChanged: () => void }) {
 }
 
 function Staff({ ctx, onChanged }: { ctx: AdminCtx; onChanged: () => void }) {
-  const [rows, setRows] = useState<StaffRequest[] | null>(null);
-  const [error, setError] = useState("");
-  const load = useCallback(() => api.admin.staff().then(setRows, () => setRows([])), []);
-  useEffect(() => { void load(); }, [load]);
-  return (
-    <div>
-      <p className="hint">Universitet xodimi talabalarni tasdiqlay oladi, shuning uchun so'rovni faqat ilova egasi tasdiqlaydi. Tasdiqlashdan oldin universitetga qo'ng'iroq qilib, odam haqiqatan u yerda ishlashini aniqlang.</p>
-      <ErrorText error={error} />
-      {rows?.length === 0 && <div className="center hint">Navbat bo'sh</div>}
-      {rows?.map((s) => (
-        <div key={s.id} className="card">
-          <b>{s.full_name}</b>{s.username && <span className="hint"> · @{s.username}</span>}
-          <div className="hint">{s.university} · {s.position}</div>
-          {ctx.isOwner ? (
-            <div className="row" style={{ marginTop: 8 }}>
-              <button className="btn bad" onClick={async () => { try { await api.admin.reviewStaff(s.id, false); void load(); onChanged(); } catch (e) { setError(message(e)); } }}>Rad etish</button>
-              <button className="btn ok" onClick={async () => { try { await api.admin.reviewStaff(s.id, true); void load(); onChanged(); } catch (e) { setError(message(e)); } }}>Tasdiqlash</button>
-            </div>
-          ) : <div className="hint">Ilova egasi tasdiqlaydi</div>}
-        </div>
-      ))}
-    </div>
-  );
+  // university staff requests with their documents and the three decisions (screens/university/AdminStaffQueue.tsx)
+  return <AdminStaffQueue isOwner={ctx.isOwner} onChanged={onChanged} />;
 }

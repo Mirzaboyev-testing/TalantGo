@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { api, APPLICATION_STATUS, JOB_KIND, loadCatalog, QUESTION_KIND, salary, TEST_STATUS, type AdminApplication, type Catalog,
-         type Company, type CompanyTestFull, type Job } from "../../api";
+import { absoluteUrl, api, APPLICATION_STATUS, JOB_KIND, loadCatalog, QUESTION_KIND, salary, TEST_STATUS, type AdminApplication,
+         type AdminCompany, type Catalog, type CompanyTestFull, type Job } from "../../api";
 import { openLink } from "../../tg";
 import { ErrorText, message } from "../../ui";
 
@@ -29,7 +29,7 @@ export function Companies() {
   const [status, setStatus] = useState("pending");
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   useEffect(() => { loadCatalog().then(setCatalog, () => {}); }, []);
-  const [rows, setRows] = useState<Company[] | null>(null);
+  const [rows, setRows] = useState<AdminCompany[] | null>(null);
   const [error, setError] = useState("");
   const load = useCallback(() => { setRows(null); api.admin.companies(status).then(setRows, (e) => setError(message(e))); }, [status]);
   useEffect(() => { load(); }, [load]);
@@ -45,13 +45,25 @@ export function Companies() {
       {rows?.length === 0 && <div className="hint">Bo'sh</div>}
       {rows && rows.length > 0 && (
         <div className="table-scroll"><table className="data-table">
-          <thead><tr><th>Kompaniya</th><th>STIR</th><th>Turi</th><th>Soha</th><th>Xodimlar</th><th>Shahar</th><th>Holat</th><th>Sana</th><th /></tr></thead>
+          <thead><tr><th>Kompaniya</th><th>Mas'ul shaxs</th><th>Hujjatlar</th><th>STIR</th><th>Turi</th><th>Soha</th><th>Xodimlar</th><th>Shahar</th><th>Holat</th><th>Sana</th><th /></tr></thead>
           <tbody>{rows.map((c) => (
             <tr key={c.id}>
               <td><b>{c.name}</b>{c.description && <div className="hint" style={{ maxWidth: 320 }}>{c.description.slice(0, 140)}</div>}
                 {c.website && <div><a href={c.website} target="_blank" rel="noreferrer">{c.website}</a></div>}
-                {(c.telegram || c.email) && <div className="hint">{[c.telegram, c.email].filter(Boolean).join(" · ")}</div>}</td>
-              <td>{c.stir ?? "—"}</td><td>{catalog?.legal_forms[c.legal_form] ?? (c.legal_form || "—")}</td>
+                {(c.telegram || c.email) && <div className="hint">{[c.telegram, c.email].filter(Boolean).join(" · ")}</div>}
+                {c.cooperation.length > 0 && <div className="hint">Hamkorlik: {c.cooperation.map((k) => catalog?.cooperation[k] ?? k).join(", ")}</div>}</td>
+              <td>{c.contact ? <>
+                <b>{c.contact.full_name}</b><div className="hint">{c.contact.job_title}</div>
+                <div className="hint">{[c.contact.phone, c.contact.email, c.contact.username && `@${c.contact.username}`].filter(Boolean).join(" · ")}</div>
+                {c.contact_role && <span className={`badge ${c.contact_role === "director" ? "peer_verified" : "pending"}`}>{catalog?.contact_roles[c.contact_role] ?? c.contact_role}</span>}
+              </> : "—"}</td>
+              <td style={{ minWidth: 150 }}>{c.documents.filter((d) => d.kind !== "logo").length === 0
+                ? <span className="badge rejected">Hujjat yo'q</span>
+                : c.documents.filter((d) => d.kind !== "logo").map((d) => (
+                  <div key={d.id}><a href={absoluteUrl(d.url)} target="_blank" rel="noreferrer" onClick={(e) => { e.preventDefault(); openLink(absoluteUrl(d.url)); }}>
+                    {d.kind === "registration" ? "Guvohnoma / ustav" : "Vakolat xati"}</a></div>
+                ))}</td>
+              <td>{c.stir ?? "—"}</td><td>{catalog?.legal_forms_all?.[c.legal_form] ?? (c.legal_form || "—")}{c.ownership && <div className="hint">{catalog?.ownership[c.ownership] ?? c.ownership}</div>}</td>
               <td>{catalog?.industries[c.industry] ?? c.industry}</td><td>{c.size || "—"}</td><td>{c.city}</td><td><Badge s={c.status} /></td>
               <td>{when(c.created_at)}</td>
               <td style={{ whiteSpace: "nowrap" }}>

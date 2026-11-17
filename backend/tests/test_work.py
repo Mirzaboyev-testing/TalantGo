@@ -28,7 +28,8 @@ async def _finish_signup(client, user: dict, full_name: str) -> None:
         uni = (await s.execute(select(University.id).where(University.short_name == "TDIU"))).scalar_one()
     r = await client.patch("/api/v1/me", json={
         "full_name": full_name, "phone": "+998901112233", "university_id": uni, "faculty": "Iqtisodiyot", "course": 2,
-        "group_name": "114-25", "work_industries": ["it"], "job_types": ["internship"], "consent": True}, headers=user["headers"])
+        "group_name": "114-25", "work_industries": ["it"], "job_fields": ["software"], "job_types": ["internship"],
+        "city": "Toshkent shahri", "consent": True}, headers=user["headers"])
     assert r.json()["signup_missing"] == [], r.text
 
 

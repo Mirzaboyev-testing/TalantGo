@@ -7,14 +7,18 @@ import { ACTIVE_STATES, statusBadge, statusLabel } from "../pipeline";
 import { ask, haptic } from "../tg";
 import { ErrorText, Sheet, message } from "../ui";
 import StudentTests from "./StudentTests";
+import { PageHead } from "./employer/kit";
 
 const KINDS: (JobKind | "")[] = ["", "internship", "part_time", "junior", "project"];
 
-export default function JobsScreen({ me, onOpenProfile, initialView = "jobs" }: {
-  me: Me; onOpenProfile: () => void; initialView?: "jobs" | "mine" | "saved";
+type JobsView = "jobs" | "mine" | "saved" | "tests";
+
+/** Student panel v2: "Vakansiyalar" shows jobs and saved jobs, "Arizalarim" applications and company tests. */
+export default function JobsScreen({ me, onOpenProfile, initialView = "jobs", views = ["jobs", "mine", "saved", "tests"] }: {
+  me: Me; onOpenProfile: () => void; initialView?: JobsView; views?: JobsView[];
 }) {
   useLang();
-  const [view, setView] = useState<"jobs" | "mine" | "saved" | "tests">(initialView);
+  const [view, setView] = useState<JobsView>(initialView);
   const [saved, setSaved] = useState<Job[] | null>(null);
   const [kind, setKind] = useState<JobKind | "">("");
   const [paidOnly, setPaidOnly] = useState(false);
@@ -46,18 +50,18 @@ export default function JobsScreen({ me, onOpenProfile, initialView = "jobs" }: 
   const notReady = me.verification === "none" || me.verification === "rejected";
 
   return (
-    <div>
-      <h1>{t("jobs.title")}</h1>
-      <div className="segmented">
-        <button className={view === "jobs" ? "on" : ""} onClick={() => setView("jobs")}>{t("jobs.tab.jobs")}</button>
-        <button className={view === "mine" ? "on" : ""} onClick={() => setView("mine")}>{t("jobs.tab.mine")}</button>
-        <button className={view === "saved" ? "on" : ""} onClick={() => setView("saved")}>{t("jobs.tab.saved")}</button>
-        <button className={view === "tests" ? "on" : ""} onClick={() => setView("tests")}>{t("jobs.tab.tests")}</button>
+    <div className="co-page st-page">
+      <PageHead title={views.includes("jobs") ? t("jobs.title") : t("st.nav.applications")}
+                sub={views.includes("jobs") ? t("st.jobs.sub") : t("st.apps.sub")} />
+      <div className="co-tabs">
+        {views.map((v) => (
+          <button key={v} className={view === v ? "on" : ""} onClick={() => setView(v)}>{t(`jobs.tab.${v}`)}</button>
+        ))}
       </div>
 
-      {pending.map((c) => <ContactCard key={c.id} contact={c} onAnswered={loadContacts} />)}
+      {!views.includes("jobs") && pending.map((c) => <ContactCard key={c.id} contact={c} onAnswered={loadContacts} />)}
 
-      {notReady && (
+      {notReady && views.includes("jobs") && (
         <div className="notice" style={{ marginBottom: 10 }}>
           {t("s.jobs.not_ready")}{" "}
           <a href="#" onClick={(e) => { e.preventDefault(); onOpenProfile(); }}>{t("s.jobs.fill_profile")}</a>
@@ -80,7 +84,7 @@ export default function JobsScreen({ me, onOpenProfile, initialView = "jobs" }: 
           <ErrorText error={error} />
           {!jobs && !error && <div className="hint">{t("common.loading")}</div>}
           {jobs?.length === 0 && <div className="center hint">{t("s.jobs.empty")}</div>}
-          {jobs?.map((j) => <JobCard key={j.id} job={j} onOpen={() => setOpen(j)} />)}
+          <div className="st-card-grid">{jobs?.map((j) => <JobCard key={j.id} job={j} onOpen={() => setOpen(j)} />)}</div>
         </>
       )}
 
@@ -89,7 +93,7 @@ export default function JobsScreen({ me, onOpenProfile, initialView = "jobs" }: 
         <>
           {!saved && !error && <div className="hint">{t("common.loading")}</div>}
           {saved?.length === 0 && <div className="center hint">{t("jobs.saved_empty")}</div>}
-          {saved?.map((j) => (
+          <div className="st-card-grid">{saved?.map((j) => (
             <div key={j.id} style={{ position: "relative" }}>
               <JobCard job={j} onOpen={() => setOpen(j)} />
               <button className="icon-btn heart on saved-remove" title={t("job.saved")} aria-label={t("job.saved")}
@@ -101,18 +105,18 @@ export default function JobsScreen({ me, onOpenProfile, initialView = "jobs" }: 
                      aria-hidden="true"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10Z" /></svg>
               </button>
             </div>
-          ))}
+          ))}</div>
         </>
       )}
       {view === "mine" && (
         <>
           {!mine && !error && <div className="hint">{t("common.loading")}</div>}
           {mine?.length === 0 && <div className="center hint">{t("app.mine.empty")}</div>}
-          {mine?.map((a) => (
+          <div className="st-card-grid">{mine?.map((a) => (
             <ApplicationCard key={a.id} app={a} onOpen={() => setOpen({ ...a.job, application_status: a.status })}
                              onWithdrawn={(updated) => setMine((cur) => cur?.map((x) => (x.id === updated.id ? updated : x)) ?? null)}
                              onError={setError} />
-          ))}
+          ))}</div>
         </>
       )}
 

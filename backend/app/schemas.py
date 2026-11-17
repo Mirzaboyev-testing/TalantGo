@@ -2,10 +2,13 @@ from datetime import date, datetime, timedelta
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
+from pydantic import (AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, computed_field, field_validator,
+                      model_validator)
 
 from .models import ReviewKind, Role, Status
-from .services.catalog import COMPANY_SIZES, INDUSTRIES, LEGAL_FORMS, REGIONS
+from .services.catalog import (COMPANY_SIZES, CONTACT_ROLES, COOPERATION, INDUSTRIES, JOB_FIELDS, LEGAL_FORMS, OWNERSHIP,
+                               REGIONS)
+from .services.files import logo_url
 
 
 def _http_url(value: str) -> str:
@@ -38,6 +41,7 @@ def _one_of(values, what: str):
 
 
 Industry = Annotated[str, _one_of(INDUSTRIES, "Sohani")]
+JobField = Annotated[str, _one_of(JOB_FIELDS, "Kasb yo'nalishini")]
 
 
 class ORM(BaseModel):
@@ -211,6 +215,7 @@ class MeOut(ORM):
     completeness: dict
     consent_current: bool = False
     work_industries: list[str] = []
+    job_fields: list[str] = []
     job_title: str = ""
     signup_missing: list[str] = []
     email: str | None = None
@@ -218,6 +223,7 @@ class MeOut(ORM):
     has_telegram: bool = True
     language: str = "uz"
     visible_to_employers: bool = True
+    staff: dict | None = None          # a university staff request: role, details, review note (api/university.py)
 
 
 class MeUpdate(BaseModel):
@@ -247,6 +253,7 @@ class MeUpdate(BaseModel):
     phone: Phone | None = None
     show_phone: bool | None = None
     work_industries: list[Industry] | None = Field(default=None, max_length=6)
+    job_fields: list[JobField] | None = Field(default=None, max_length=5)
     job_title: str | None = Field(default=None, max_length=120)
     language: Literal["uz", "ru", "en"] | None = None
     visible_to_employers: bool | None = None
@@ -257,6 +264,7 @@ class UniversityOut(ORM):
     name: str
     short_name: str
     city: str
+    faculties: list[str] = []
 
 
 class CompanyOut(ORM):
@@ -275,6 +283,37 @@ class CompanyOut(ORM):
     status: str
     review_note: str
     created_at: datetime
+    ownership: str = ""
+    contact_role: str = ""
+    cooperation: list[str] = []
+    wanted_track_ids: list[int] = []
+    show_as_partner: bool = False
+    registration_doc_id: int | None = None
+    authority_doc_id: int | None = None
+    logo_file_id: int | None = None
+    submitted_at: datetime | None = None
+    reviewed_at: datetime | None = None
+
+    @computed_field
+    @property
+    def logo_url(self) -> str | None:
+        return logo_url(self.id, self.logo_file_id, self.status)
+
+
+def _optional_one_of(values, what: str):
+    def check(value: str) -> str:
+        if value and value not in values:
+            raise ValueError(f"{what} ro'yxatdan tanlang")
+        return value
+    return AfterValidator(check)
+
+
+def _all_in(values, what: str):
+    def check(items: list[str]) -> list[str]:
+        if any(i not in values for i in items):
+            raise ValueError(f"{what} ro'yxatdan tanlang")
+        return list(dict.fromkeys(items))
+    return AfterValidator(check)
 
 
 class CompanyIn(BaseModel):
@@ -291,24 +330,66 @@ class CompanyIn(BaseModel):
     address: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] = ""
     email: Annotated[str, StringConstraints(strip_whitespace=True, max_length=120,
                                             pattern=r"^([^@\s]+@[^@\s]+\.[^@\s]+)?$")] = ""
+    # asked since 2026-11-17; an edit that leaves them out keeps what is saved
+    ownership: Annotated[str, _optional_one_of(OWNERSHIP, "Kompaniya turini")] = ""
+    contact_role: Annotated[str, _optional_one_of(CONTACT_ROLES, "Kompaniyadagi rolingizni")] = ""
+    cooperation: Annotated[list[str], Field(max_length=len(COOPERATION)), _all_in(COOPERATION, "Hamkorlik turini")] = []
+    wanted_track_ids: Annotated[list[int], Field(max_length=20)] = []
+    show_as_partner: bool = False
+    registration_doc_id: int | None = None
+    authority_doc_id: int | None = None
+    logo_file_id: int | None = None
 
 
 class EmployerSignupIn(CompanyIn):
-    """Sign-up as an employer: the person (name, position) and the company in one form."""
+    """Sign-up as an employer, in steps on the form: the person, the company, documents, what it wants from
+    students. Everything starred there is required here: an admin checks the STIR against the document."""
     full_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=128)]
     job_title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=120)]
+    description: Annotated[str, StringConstraints(strip_whitespace=True, min_length=50, max_length=2000)]
+    ownership: Annotated[str, _one_of(OWNERSHIP, "Kompaniya turini")]
+    contact_role: Annotated[str, _one_of(CONTACT_ROLES, "Kompaniyadagi rolingizni")]
+    cooperation: Annotated[list[str], Field(min_length=1, max_length=len(COOPERATION)),
+                           _all_in(COOPERATION, "Hamkorlik turini")]
+    registration_doc_id: int
     consent: bool
+    data_pledge: bool          # student data only for hiring, never passed on
 
     @model_validator(mode="after")
     def _consent(self):
         if not self.consent:
             raise ValueError("Shaxsiy ma'lumotlarni qayta ishlashga rozilik bering")
+        if not self.data_pledge:
+            raise ValueError("Talabalar ma'lumotlaridan faqat ishga olish uchun foydalanishga rozilik bering")
+        if self.contact_role == "representative" and not self.authority_doc_id:
+            raise ValueError("Direktor bo'lmasangiz, vakolat xati yoki ishonchnomani yuklang")
         return self
 
 
 class StaffRequestIn(BaseModel):
-    university_id: int
+    """University career-centre staff ask for access. Older clients send only the university and position;
+    the website form (2026-11-17) sends the rest. A university not in the list is proposed by name."""
+    university_id: int | None = None
+    new_university: str | None = Field(default=None, min_length=3, max_length=200)
+    new_university_region: str = Field(default="", max_length=60)
     position: str = Field(min_length=3, max_length=120)
+    full_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=128)] | None = None
+    department: str = Field(default="", max_length=120)
+    work_email: str = Field(default="", max_length=120)
+    doc_id: int | None = None
+    mou_id: int | None = None
+    cooperation: list[str] = Field(default_factory=list, max_length=12)
+    website: str = Field(default="", max_length=256)
+    telegram: str = Field(default="", max_length=128)
+    social: str = Field(default="", max_length=256)
+    data_pledge: bool = False          # "only my own students; personal data only with their consent"
+    show_as_partner: bool = False
+
+    @model_validator(mode="after")
+    def _one_university(self):
+        if not self.university_id and not self.new_university:
+            raise ValueError("Universitetni tanlang yoki nomini yozing")
+        return self
 
 
 class JobIn(BaseModel):
@@ -324,6 +405,7 @@ class JobIn(BaseModel):
     requirements: str = Field(default="", max_length=3000)
     skills: list[Tag] = Field(default_factory=list, max_length=15)
     track_ids: list[int] = Field(default_factory=list, max_length=10)
+    job_fields: list[JobField] = Field(default_factory=list, max_length=3)
     counts_as_practice: bool = False
     deadline: date | None = None
     # Platform rule (as on Handshake): no MLM, no commission-only pay, no fees charged to students
@@ -357,6 +439,7 @@ class JobOut(ORM):
     requirements: str
     skills: list[str]
     track_ids: list[int]
+    job_fields: list[str] = []
     counts_as_practice: bool
     deadline: date | None
     status: str
@@ -633,3 +716,4 @@ class UniversityPatch(BaseModel):
     short_name: str | None = Field(default=None, min_length=2, max_length=40)
     city: str | None = Field(default=None, max_length=60)
     is_active: bool | None = None
+    faculties: list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=120)]] | None = Field(default=None, max_length=60)

@@ -2,10 +2,13 @@
 
 Inserted once per track slug. Later edits made in the admin page are never overwritten.
 """
+import re
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Group, Task, Track, University
+from .seed_catalog import ALL_UNIVERSITIES, FACULTIES
 
 POINTS_BY_WEEK = {1: 10, 2: 15, 3: 20, 4: 30}
 
@@ -177,9 +180,47 @@ async def add_starters(session: AsyncSession) -> None:
     await session.commit()
 
 
+def _key(name: str) -> str:
+    """A university name compared without case or apostrophe style (O'zbekiston = O‘zbekiston)."""
+    return re.sub(r"[‘’ʻʼ`']", "", name).lower().strip()
+
+
+def _short_from(name: str) -> str:
+    """A short name for a university the list gives none for: the name itself, cut at a word within 40 chars."""
+    if len(name) <= 40:
+        return name
+    cut = name[:40].rsplit(" ", 1)[0]
+    return cut.rstrip(",(—-– ")
+
+
+# a university renamed after it was seeded: the new name is not added again next to the old record
+RENAMED = {"O'zMPU": "TDPU"}         # TDPU became Nizomiy nomidagi O'zbekiston milliy pedagogika universiteti (2025)
+
+
+async def add_universities(session: AsyncSession) -> None:
+    """Every Uzbek OTM for the sign-up search (seed_catalog.ALL_UNIVERSITIES), skipping ones already there under the
+    same name or short name, then faculty lists for universities whose list is still empty."""
+    rows = (await session.execute(select(University))).scalars().all()
+    names = {_key(u.name) for u in rows}
+    shorts = {_key(u.short_name) for u in rows if u.short_name}
+    for name, short, city in ALL_UNIVERSITIES:
+        if _key(name) in names or (short and _key(short) in shorts) or _key(RENAMED.get(short, "-")) in shorts:
+            continue
+        session.add(University(name=name, short_name=short or _short_from(name), city=city))
+        names.add(_key(name))
+        if short:
+            shorts.add(_key(short))
+    for uni in rows:
+        if not uni.faculties and uni.short_name in FACULTIES:
+            uni.faculties = list(FACULTIES[uni.short_name])
+    await session.commit()
+
+
 async def seed(session: AsyncSession) -> None:
     known = set((await session.execute(select(University.name))).scalars())
     session.add_all(University(name=n, short_name=sh, city=c) for n, sh, c in UNIVERSITIES if n not in known)
+    await session.flush()
+    await add_universities(session)
     existing = set((await session.execute(select(Track.slug))).scalars())
     for order, spec in enumerate(TRACKS):
         if spec["slug"] in existing:

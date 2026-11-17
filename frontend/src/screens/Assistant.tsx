@@ -31,6 +31,12 @@ export default function Assistant({ audience = "student" }: { audience?: AiAudie
 
   const [loaded, setLoaded] = useState(false);
   useEffect(() => { api.assistantStatus().then((s) => setAvailable(s.available), () => {}); }, []);
+  // other screens open the chat with window.dispatchEvent(new Event("cf-open-ai"))
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener("cf-open-ai", show);
+    return () => window.removeEventListener("cf-open-ai", show);
+  }, []);
   // while the person types anywhere in the app, the corner button steps aside so it never covers the field
   const [typing, setTyping] = useState(false);
   useEffect(() => {

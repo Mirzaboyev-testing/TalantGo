@@ -9,6 +9,8 @@ import { Icon } from "../../icons";
 import { ask, haptic } from "../../tg";
 import { ErrorText, message, toast } from "../../ui";
 import { downloadCv, StudentSheet } from "./Students";
+import { navigate, useSearch } from "../../router";
+import { EmptyState, PageHead, Tabs } from "./kit";
 
 const audience = () => ({ all: t("task.audience.all"), tracks: t("p.tests.audience_tracks"), applicants: t("p.tests.audience_applicants") });
 const when = (s: string | null) => (s ? formatDateTime(s) : "—");
@@ -16,8 +18,10 @@ const when = (s: string | null) => (s ? formatDateTime(s) : "—");
 type View = { kind: "list" } | { kind: "edit"; test?: CompanyTestFull } | { kind: "results"; id: number } | { kind: "attempt"; id: number; back: View };
 
 export default function Tests({ openAttempt }: { openAttempt?: number | null }) {
-  const [view, setView] = useState<View>(openAttempt ? { kind: "attempt", id: openAttempt, back: { kind: "list" } } : { kind: "list" });
-  if (view.kind === "edit") return <TestBuilder test={view.test} onDone={() => setView({ kind: "list" })} />;
+  const search = useSearch();
+  const [view, setView] = useState<View>(openAttempt ? { kind: "attempt", id: openAttempt, back: { kind: "list" } }
+    : search.yangi ? { kind: "edit" } : { kind: "list" });
+  if (view.kind === "edit") return <TestBuilder test={view.test} onDone={() => { setView({ kind: "list" }); if (search.yangi) navigate("/korxona/testlar", { replace: true }); }} />;
   if (view.kind === "results") return <Results id={view.id} onBack={() => setView({ kind: "list" })} onOpen={(a) => setView({ kind: "attempt", id: a, back: view })} />;
   if (view.kind === "attempt") return <Grading id={view.id} onBack={() => setView(view.back)} />;
   return <TestList onNew={() => setView({ kind: "edit" })} onEdit={(t) => setView({ kind: "edit", test: t })}
@@ -26,9 +30,12 @@ export default function Tests({ openAttempt }: { openAttempt?: number | null }) 
 
 // --------------------------------------------------------------------------- list
 
+type TestFilter = "all" | "approved" | "pending" | "draft" | "rejected" | "closed";
+
 function TestList({ onNew, onEdit, onResults }: { onNew: () => void; onEdit: (t: CompanyTestFull) => void; onResults: (id: number) => void }) {
   useLang();
   const [tests, setTests] = useState<CompanyTestSummary[] | null>(null);
+  const [filter, setFilter] = useState<TestFilter>("all");
   const [error, setError] = useState("");
   const load = useCallback(() => api.employer.tests().then(setTests, (e) => setError(message(e))), []);
   useEffect(() => { void load(); }, [load]);
@@ -36,46 +43,75 @@ function TestList({ onNew, onEdit, onResults }: { onNew: () => void; onEdit: (t:
   async function act(action: () => Promise<unknown>) {
     try { await action(); void load(); } catch (e) { setError(message(e)); }
   }
+  const count = (f: TestFilter) => (tests ?? []).filter((x) => f === "all" || x.status === f).length;
+  const shown = (tests ?? []).filter((x) => filter === "all" || x.status === filter);
+  const attempts = (tests ?? []).reduce((n, x) => n + x.attempts, 0);
+  const toGrade = (tests ?? []).reduce((n, x) => n + x.to_grade, 0);
 
   return (
-    <div>
-      <h1>{t("nav.company.tests")}</h1>
-      <button className="btn" onClick={onNew}><Icon name="plus" size={18} />{t("p.tests.create")}</button>
-      <p className="hint">{t("p.tests.hint")}</p>
-      <ErrorText error={error} />
-      {!tests && !error && <div className="hint">{t("common.loading")}</div>}
-      {tests?.length === 0 && <div className="center hint">{t("p.tests.empty")}</div>}
-      {tests?.map((x) => (
-        <div key={x.id} className="card">
-          <div className="row between">
-            <span className="hint">{x.is_survey ? t("p.tests.survey") : t("p.tests.test_points", { n: x.max_score })} · {t("p.tests.questions_n", { n: x.questions_count })}</span>
-            <span className={`badge ${testStatus(x.status)[1]}`}>{testStatus(x.status)[0]}</span>
-          </div>
-          <b>{x.title}</b>
-          <div className="hint">
-            {audience()[x.audience]}{x.job_title ? ` · ${x.job_title}` : ""}{x.deadline ? ` · ${t("p.tests.deadline", { date: x.deadline })}` : ""}
-            {x.time_limit_min ? ` · ${t("p.tests.minutes", { n: x.time_limit_min })}` : ""}
-          </div>
-          <div className="hint">{t("p.tests.attempts", { n: x.attempts })}{x.to_grade ? ` · ${t("p.tests.to_grade", { n: x.to_grade })}` : ""}</div>
-          {x.status === "rejected" && x.review_note && <div className="error">{t("p.tests.admin_note", { note: x.review_note })}</div>}
-          <div className="row wrap" style={{ marginTop: 8 }}>
-            <button className="btn small" onClick={() => onResults(x.id)}>{t("p.tests.results_n", { n: x.attempts })}{x.to_grade ? ` · ${t("p.tests.grade_n", { n: x.to_grade })}` : ""}</button>
-            {x.attempts === 0 && x.status !== "closed" && (
-              <button className="btn small ghost" onClick={() => act(async () => onEdit(await api.employer.test(x.id)))}>{t("p.common.edit")}</button>
-            )}
-            {x.status !== "closed" && x.status !== "draft" && (
-              <button className="btn small ghost" onClick={async () => {
-                if (await ask(t("p.tests.close_confirm"))) void act(() => api.employer.closeTest(x.id));
-              }}>{t("common.close")}</button>
-            )}
-            {x.attempts === 0 && (
-              <button className="btn small ghost" onClick={async () => {
-                if (await ask(t("p.tests.delete_confirm"))) void act(() => api.employer.deleteTest(x.id));
-              }}>{t("p.tests.delete")}</button>
-            )}
-          </div>
+    <div className="co-page">
+      <PageHead title={t("nav.company.tests")} sub={t("p.tests.hint")}
+                actions={<button className="btn" onClick={onNew}><Icon name="plus" size={18} />{t("p.tests.create")}</button>} />
+      {tests && tests.length > 0 && (
+        <div className="co-mini-stats">
+          <div><b>{count("approved")}</b><span>{t("co.tests.live")}</span></div>
+          <div><b>{attempts}</b><span>{t("co.tests.attempts")}</span></div>
+          <div className={toGrade ? "warn" : ""}><b>{toGrade}</b><span>{t("co.tests.to_grade")}</span></div>
+          <div><b>{count("draft") + count("pending")}</b><span>{t("co.tests.drafts")}</span></div>
         </div>
-      ))}
+      )}
+      {tests && tests.length > 0 && (
+        <Tabs items={(["all", "approved", "pending", "draft", "rejected", "closed"] as TestFilter[]).map((f) =>
+          [f, f === "all" ? t("co.all") : testStatus(f)[0], count(f)] as [TestFilter, string, number])}
+              value={filter} onChange={setFilter} />
+      )}
+      <ErrorText error={error} />
+      {!tests && !error && <div className="co-grid">{[0, 1, 2].map((i) => <div key={i} className="co-sk-block" style={{ height: 200 }} />)}</div>}
+      {tests?.length === 0 && (
+        <EmptyState icon="check" title={t("co.tests.empty_title")} text={t("p.tests.empty")}
+                    action={<button className="btn" style={{ width: "auto" }} onClick={onNew}><Icon name="plus" size={18} />{t("p.tests.create")}</button>} />
+      )}
+      {tests && tests.length > 0 && shown.length === 0 && <div className="co-card hint">{t("co.nothing_here")}</div>}
+      <div className="co-grid">
+        {shown.map((x) => (
+          <div key={x.id} className={`co-test st-${x.status}`}>
+            <div className="co-job-top">
+              <span className="co-tag">{x.is_survey ? t("p.tests.survey") : t("p.tests.test_points", { n: x.max_score })}</span>
+              <span className={`badge ${testStatus(x.status)[1]}`}>{testStatus(x.status)[0]}</span>
+            </div>
+            <h3>{x.title}</h3>
+            <div className="hint">
+              {audience()[x.audience]}{x.job_title ? ` · ${x.job_title}` : ""}
+            </div>
+            <div className="co-job-metrics">
+              <div><b>{x.questions_count}</b><span>{t("co.tests.questions")}</span></div>
+              <div><b>{x.attempts}</b><span>{t("co.tests.attempts")}</span></div>
+              <div className={x.to_grade ? "warn" : ""}><b>{x.to_grade}</b><span>{t("co.tests.to_grade")}</span></div>
+            </div>
+            <div className="co-test-meta">
+              {x.time_limit_min ? <span><Icon name="flame" size={14} />{t("p.tests.minutes", { n: x.time_limit_min })}</span> : null}
+              {x.deadline ? <span><Icon name="flag" size={14} />{t("p.tests.deadline", { date: x.deadline })}</span> : null}
+            </div>
+            {x.status === "rejected" && x.review_note && <div className="co-note bad">{t("p.tests.admin_note", { note: x.review_note })}</div>}
+            <div className="co-job-actions">
+              <button className="btn small" onClick={() => onResults(x.id)}>{t("p.tests.results_n", { n: x.attempts })}{x.to_grade ? ` · ${t("p.tests.grade_n", { n: x.to_grade })}` : ""}</button>
+              {x.attempts === 0 && x.status !== "closed" && (
+                <button className="btn small ghost" onClick={() => act(async () => onEdit(await api.employer.test(x.id)))}>{t("p.common.edit")}</button>
+              )}
+              {x.status !== "closed" && x.status !== "draft" && (
+                <button className="icon-btn" title={t("common.close")} aria-label={t("common.close")} onClick={async () => {
+                  if (await ask(t("p.tests.close_confirm"))) void act(() => api.employer.closeTest(x.id));
+                }}><Icon name="close" size={16} /></button>
+              )}
+              {x.attempts === 0 && (
+                <button className="icon-btn" title={t("p.tests.delete")} aria-label={t("p.tests.delete")} onClick={async () => {
+                  if (await ask(t("p.tests.delete_confirm"))) void act(() => api.employer.deleteTest(x.id));
+                }}><Icon name="trash" size={16} /></button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -151,8 +187,8 @@ function TestBuilder({ test, onDone }: { test?: CompanyTestFull; onDone: () => v
   }
 
   return (
-    <div>
-      <button className="btn small ghost" onClick={onDone}><Icon name="back" size={16} />{t("nav.company.tests")}</button>
+    <div className="co-page co-narrow">
+      <button className="btn small ghost co-back" onClick={onDone}><Icon name="back" size={16} />{t("nav.company.tests")}</button>
       <h1>{test ? t("p.tests.edit_title") : t("p.tests.new_title")}</h1>
       <p className="form-note"><Req />{t("p.common.required_note")}</p>
       <div className="card">
@@ -277,8 +313,8 @@ function Results({ id, onBack, onOpen }: { id: number; onBack: () => void; onOpe
   useEffect(() => { api.employer.testResults(id).then(setData, (e) => setError(message(e))); }, [id]);
 
   return (
-    <div>
-      <button className="btn small ghost" onClick={onBack}><Icon name="back" size={16} />{t("nav.company.tests")}</button>
+    <div className="co-page co-narrow">
+      <button className="btn small ghost co-back" onClick={onBack}><Icon name="back" size={16} />{t("nav.company.tests")}</button>
       <h1>{data?.test.title ?? t("p.tests.results")}</h1>
       <ErrorText error={error} />
       {data && (
@@ -349,8 +385,8 @@ function Grading({ id, onBack }: { id: number; onBack: () => void }) {
   }
 
   return (
-    <div>
-      <button className="btn small ghost" onClick={onBack}><Icon name="back" size={16} />{t("p.tests.results")}</button>
+    <div className="co-page co-narrow">
+      <button className="btn small ghost co-back" onClick={onBack}><Icon name="back" size={16} />{t("p.tests.results")}</button>
       <ErrorText error={error} />
       {!a && !error && <div className="hint">{t("common.loading")}</div>}
       {a && (

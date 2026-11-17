@@ -3,6 +3,10 @@ import os
 
 os.environ["APP_ENV"] = "test"
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://careerflow:careerflow_dev@db:5432/careerflow_test")
+# The api container sets DATABASE_URL to the dev database, and every test drops all tables: never run against a
+# database whose name does not say "test" (a plain `pytest` in the container used to point at the dev data).
+if "test" not in os.environ["DATABASE_URL"].rsplit("/", 1)[-1]:
+    os.environ["DATABASE_URL"] = os.environ["DATABASE_URL"].rsplit("/", 1)[0] + "/careerflow_test"
 os.environ["SECRETS_DIR"] = "/tmp/careerflow-test-secrets"
 os.environ["UPLOADS_DIR"] = "/tmp/careerflow-test-uploads"
 os.environ["ADMIN_PASSWORD"] = "test-admin-password"
