@@ -525,7 +525,7 @@ export const api = {
     register: (b: { name: string; email: string; password: string; setup_code?: string }) =>
       request<{ status: "active" | "pending"; token?: string }>("POST", "/admin-auth/register", b),
     login: (email: string, password: string) => request<{ token: string }>("POST", "/admin-auth/login", { email, password }),
-    me: () => request<{ id: number; name: string; email: string; role: string; is_owner: boolean }>("GET", "/admin-auth/me", undefined, true),
+    me: () => request<AdminMe>("GET", "/admin-auth/me", undefined, true),
     changePassword: (current_password: string, new_password: string) =>
       request<{ token: string }>("PUT", "/admin-auth/password", { current_password, new_password }, true),
   },
@@ -666,8 +666,9 @@ export const api = {
     applications: (params: Record<string, string>) => request<AdminApplication[]>("GET", `/admin/applications?${new URLSearchParams(params)}`, undefined, true),
     allJobs: (status: string) => request<Job[]>("GET", `/admin/jobs${status ? `?status=${status}` : ""}`, undefined, true),
     accounts: () => request<AdminAccount[]>("GET", "/admin/accounts", undefined, true),
-    updateAccount: (id: number, changes: { role?: AdminRole; status?: "active" | "disabled" }) =>
+    updateAccount: (id: number, changes: { role?: AdminRole; status?: "active" | "disabled"; permissions?: string[]; reset_permissions?: boolean }) =>
       request<AdminAccount>("PATCH", `/admin/accounts/${id}`, changes, true),
+    permissions: () => request<AdminPermissionCatalog>("GET", "/admin/permissions", undefined, true),
     complaints: (status = "open") => request<AdminComplaint[]>("GET", `/admin/complaints?status=${status}`, undefined, true),
     decideComplaint: (id: number, status: "resolved" | "dismissed", note: string) =>
       request<{ status: string }>("POST", `/admin/complaints/${id}`, { status, note }, true),
@@ -800,7 +801,13 @@ export const courseLabel = (c: number | null | undefined) => (!c ? "" : c === 7 
 export interface AdminAccount {
   id: number; name: string; email: string; role: AdminRole; status: "pending" | "active" | "disabled";
   created_at: string; last_login_at: string | null;
+  permissions: string[]; custom_permissions: boolean;      // what the owner switched on (or the role's defaults)
 }
+export interface AdminPermissionCatalog {
+  permissions: { key: string; group: string; label: string }[];
+  defaults: Record<string, string[]>;
+}
+export interface AdminMe { id: number; name: string; email: string; role: string; is_owner: boolean; permissions: string[] }
 export interface AdminApplication {
   id: number; candidate: string; username: string | null; phone: string; university: string | null; job: string;
   kind: JobKind; company: string; status: string; note: string; created_at: string; updated_at: string;

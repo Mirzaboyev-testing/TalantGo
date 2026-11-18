@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import aliased
 
@@ -21,7 +21,7 @@ from ..schemas import (AdminSubmissionOut, AdminTaskOut, AdminTrackOut, AdminUse
                        AnnouncementOut, AuditOut, BotStatusOut, BotTokenIn, CompanyOut, PointsAdjustIn,
                        ReviewDecisionIn, ReviewOut, TaskIn, TaskPatch, TrackIn, TrackPatch, UniversityIn,
                        UniversityOut, UniversityPatch, UserPatch)
-from ..services import ai_review, announcements, bots, files, settings_store, telegram_bot
+from ..services import admin_access, ai_review, announcements, bots, files, settings_store, telegram_bot
 from ..services import inbox as user_inbox
 from ..services.applications import company_staff_ids
 from ..services.admin_accounts import hash_password
@@ -642,8 +642,9 @@ class StaffDecisionIn(BaseModel):
 
 
 @router.post("/staff/{user_id}/review")
-async def review_staff(user_id: int, body: StaffDecisionIn, actor: OwnerActor, session: Session) -> dict:
-    """Owner only: staff can verify students, so this access is checked by a person (call the university).
+async def review_staff(user_id: int, body: StaffDecisionIn, actor: AdminActor, session: Session) -> dict:
+    """Owner, or an account the owner gave "universities": staff can verify students, so this access is checked
+    by a person (call the university).
     "needs_info" sends the request back with a question; the person edits and sends it again."""
     from ..services import staff as staff_service
     user = await session.get(User, user_id)
@@ -659,7 +660,7 @@ async def review_staff(user_id: int, body: StaffDecisionIn, actor: OwnerActor, s
 
 
 @router.post("/staff/{user_id}/revoke")
-async def revoke_staff(user_id: int, body: StaffDecisionIn, actor: OwnerActor, session: Session) -> dict:
+async def revoke_staff(user_id: int, body: StaffDecisionIn, actor: AdminActor, session: Session) -> dict:
     from ..services import staff as staff_service
     user = await session.get(User, user_id)
     if user is None or user.account_type != "university":
@@ -816,7 +817,14 @@ async def applications(_: AdminActor, session: Session, status: str | None = Non
 
 def _account_out(a: AdminAccount) -> dict:
     return {"id": a.id, "name": a.name, "email": a.email, "role": a.role, "status": a.status,
-            "created_at": a.created_at, "last_login_at": a.last_login_at}
+            "created_at": a.created_at, "last_login_at": a.last_login_at,
+            "permissions": sorted(admin_access.effective(a)), "custom_permissions": a.permissions is not None}
+
+
+@router.get("/permissions")
+async def permissions(_: AdminActor) -> dict:
+    """The permissions the owner can switch on, grouped, and each role's defaults."""
+    return admin_access.catalog()
 
 
 @router.get("/accounts")
@@ -829,6 +837,8 @@ async def accounts(_: OwnerActor, session: Session) -> list[dict]:
 class AccountPatch(BaseModel):
     role: Literal["owner", "admin", "moderator", "analyst"] | None = None
     status: Literal["active", "disabled"] | None = None
+    permissions: list[str] | None = Field(default=None, max_length=50)     # the owner's choice for this account
+    reset_permissions: bool = False                                          # back to the role's defaults
 
 
 @router.patch("/accounts/{account_id}")
@@ -842,9 +852,22 @@ async def update_account(account_id: int, body: AccountPatch, actor: OwnerActor,
     if losing_owner and await session.scalar(select(func.count()).select_from(AdminAccount).where(
             AdminAccount.role == "owner", AdminAccount.status == "active")) <= 1:
         raise HTTPException(400, "Kamida bitta faol ega qolishi kerak")
+    perms = changes.pop("permissions", None)
+    reset = changes.pop("reset_permissions", False)
+    if perms is not None and (unknown := set(perms) - set(admin_access.PERMISSIONS)):
+        raise HTTPException(422, f"Noma'lum ruxsat: {', '.join(sorted(unknown))}")
+    before = admin_access.effective(account)
     for field, value in changes.items():
         setattr(account, field, value)
-    audit(session, actor, "account.update", account.email, ", ".join(f"{k}: {v}" for k, v in changes.items()))
+    if perms is not None:
+        account.permissions = sorted(set(perms))
+    elif reset or "role" in changes:            # a new role starts from that role's defaults
+        account.permissions = None
+    after = admin_access.effective(account)
+    details = [f"{k}: {v}" for k, v in changes.items()]
+    if after != before:
+        details += [f"+{p}" for p in sorted(after - before)] + [f"-{p}" for p in sorted(before - after)]
+    audit(session, actor, "account.update", account.email, ", ".join(details))
     await session.commit()
     return _account_out(account)
 

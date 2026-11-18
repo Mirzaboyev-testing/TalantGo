@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { absoluteUrl, api, APPLICATION_STATUS, JOB_KIND, loadCatalog, QUESTION_KIND, salary, TEST_STATUS, type AdminApplication,
          type AdminCompany, type Catalog, type CompanyTestFull, type Job } from "../../api";
 import { openLink } from "../../tg";
+import { useCan } from "./AdminSite";
 import { ErrorText, message } from "../../ui";
 
 const when = (s: string) => new Date(s).toLocaleDateString("uz");
@@ -26,6 +27,7 @@ async function decide(action: () => Promise<unknown>, reload: () => void, setErr
 // --------------------------------------------------------------------------- companies
 
 export function Companies() {
+  const can = useCan();
   const [status, setStatus] = useState("pending");
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   useEffect(() => { loadCatalog().then(setCatalog, () => {}); }, []);
@@ -67,8 +69,8 @@ export function Companies() {
               <td>{catalog?.industries[c.industry] ?? c.industry}</td><td>{c.size || "—"}</td><td>{c.city}</td><td><Badge s={c.status} /></td>
               <td>{when(c.created_at)}</td>
               <td style={{ whiteSpace: "nowrap" }}>
-                {c.status !== "approved" && <button className="btn small ok" onClick={() => decide(() => api.admin.reviewCompany(c.id, true, ""), load, setError)}>Tasdiqlash</button>}{" "}
-                {c.status !== "rejected" && <button className="btn small ghost" onClick={() => {
+                {can("companies") && c.status !== "approved" && <button className="btn small ok" onClick={() => decide(() => api.admin.reviewCompany(c.id, true, ""), load, setError)}>Tasdiqlash</button>}{" "}
+                {can("companies") && c.status !== "rejected" && <button className="btn small ghost" onClick={() => {
                   const note = prompt("Rad etish sababi (kompaniyaga yuboriladi):") ?? "";
                   if (note.trim()) void decide(() => api.admin.reviewCompany(c.id, false, note.trim()), load, setError);
                 }}>Rad etish</button>}
@@ -84,6 +86,7 @@ export function Companies() {
 // --------------------------------------------------------------------------- jobs
 
 export function Jobs() {
+  const can = useCan();
   const [status, setStatus] = useState("pending");
   const [rows, setRows] = useState<Job[] | null>(null);
   const [open, setOpen] = useState<number | null>(null);
@@ -109,8 +112,8 @@ export function Jobs() {
                 <td>{j.company_name}</td><td>{JOB_KIND[j.kind]}</td><td>{salary(j)}</td><td><Badge s={j.status} /></td>
                 <td className="num">{j.views}</td><td>{when(j.created_at)}</td>
                 <td style={{ whiteSpace: "nowrap" }}>
-                  {j.status !== "approved" && j.status !== "closed" && <button className="btn small ok" onClick={() => decide(() => api.admin.reviewJob(j.id, true, ""), load, setError)}>E'lon qilish</button>}{" "}
-                  {j.status !== "rejected" && j.status !== "closed" && <button className="btn small ghost" onClick={() => {
+                  {can("jobs") && j.status !== "approved" && j.status !== "closed" && <button className="btn small ok" onClick={() => decide(() => api.admin.reviewJob(j.id, true, ""), load, setError)}>E'lon qilish</button>}{" "}
+                  {can("jobs") && j.status !== "rejected" && j.status !== "closed" && <button className="btn small ghost" onClick={() => {
                     const note = prompt("Qaytarish sababi (kompaniyaga yuboriladi):") ?? "";
                     if (note.trim()) void decide(() => api.admin.reviewJob(j.id, false, note.trim()), load, setError);
                   }}>Qaytarish</button>}
@@ -184,6 +187,7 @@ export function Applications() {
 const AUDIENCE: Record<string, string> = { all: "Barcha talabalar", tracks: "Tanlangan yo'nalishlar", applicants: "Ariza berganlar" };
 
 export function Tests() {
+  const can = useCan();
   const [status, setStatus] = useState("pending");
   const [rows, setRows] = useState<CompanyTestFull[] | null>(null);
   const [open, setOpen] = useState<number | null>(null);
@@ -212,8 +216,8 @@ export function Tests() {
                 <td><span className={`badge ${TEST_STATUS[t.status][1]}`}>{TEST_STATUS[t.status][0]}</span></td>
                 <td>{when(t.updated_at)}</td>
                 <td style={{ whiteSpace: "nowrap" }}>
-                  {(t.status === "pending" || t.status === "rejected") && <button className="btn small ok" onClick={() => decide(() => api.admin.reviewTest(t.id, true, ""), load, setError)}>Tasdiqlash</button>}{" "}
-                  {(t.status === "pending" || t.status === "approved") && <button className="btn small ghost" onClick={() => {
+                  {can("tests") && (t.status === "pending" || t.status === "rejected") && <button className="btn small ok" onClick={() => decide(() => api.admin.reviewTest(t.id, true, ""), load, setError)}>Tasdiqlash</button>}{" "}
+                  {can("tests") && (t.status === "pending" || t.status === "approved") && <button className="btn small ghost" onClick={() => {
                     const note = prompt("Qaytarish sababi (kompaniyaga yuboriladi):") ?? "";
                     if (note.trim()) void decide(() => api.admin.reviewTest(t.id, false, note.trim()), load, setError);
                   }}>{t.status === "approved" ? "Yashirish" : "Qaytarish"}</button>}

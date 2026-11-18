@@ -682,6 +682,8 @@ class AdminAccount(Base):
     name: Mapped[str] = mapped_column(String(120))
     password_hash: Mapped[str] = mapped_column(String(200))
     role: Mapped[str] = mapped_column(String(16), default="admin")
+    # what the owner switched on for this account (services/admin_access.py); null = the role's defaults
+    permissions: Mapped[list[str] | None] = mapped_column(JSONB)
     status: Mapped[str] = mapped_column(String(16), default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

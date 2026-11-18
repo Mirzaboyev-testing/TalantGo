@@ -13,7 +13,7 @@ const COOP: Record<string, string> = { invite_students: "Talabalarni taklif qili
 const STATES: [string, string][] = [["open", "Navbat"], ["approved", "Tasdiqlangan"], ["rejected", "Rad etilgan"]];
 
 /** Owner decides: approve, ask for more (the person edits and re-sends), or reject with a reason. */
-export default function AdminStaffQueue({ isOwner, onChanged }: { isOwner: boolean; onChanged: () => void }) {
+export default function AdminStaffQueue({ canDecide, onChanged }: { canDecide: boolean; onChanged: () => void }) {
   const [status, setStatus] = useState("open");
   const [rows, setRows] = useState<StaffRow[] | null>(null);
   const [noteFor, setNoteFor] = useState<{ id: number; action: "needs_info" | "reject" | "revoke" } | null>(null);
@@ -61,7 +61,7 @@ export default function AdminStaffQueue({ isOwner, onChanged }: { isOwner: boole
             {s.reviewed_at && ` · Qaror: ${formatDateTime(s.reviewed_at)} (${s.reviewed_by})`}
           </div>
           {s.review_note && <div className="hint">Izoh: {s.review_note}</div>}
-          {!isOwner ? <div className="hint">Qarorni ilova egasi qabul qiladi</div> : noteFor?.id === s.id ? (
+          {!canDecide ? <div className="hint">Qaror uchun "Universitetlarni tasdiqlash" ruxsati kerak (ilova egasi beradi)</div> : noteFor?.id === s.id ? (
             <div style={{ marginTop: 8 }}>
               <input value={note} placeholder={noteFor.action === "needs_info" ? "Nima yetishmayapti? (xodimga boradi)" : "Sababi (xodimga boradi)"} onChange={(e) => setNote(e.target.value)} />
               <div className="row" style={{ marginTop: 6 }}>

@@ -7,10 +7,13 @@ import { ErrorText, message, toast } from "../../ui";
 import type { AdminCtx } from "./AdminSite";
 
 type Kind = "verifications" | "companies" | "jobs" | "staff";
-const KINDS: [Kind, string][] = [["verifications", "Talabalik tasdig'i"], ["companies", "Kompaniyalar"], ["jobs", "Vakansiyalar"], ["staff", "Universitet xodimlari"]];
+// each list shows only to accounts the owner gave that permission
+const KINDS: [Kind, string, string][] = [["verifications", "Talabalik tasdig'i", "students"], ["companies", "Kompaniyalar", "companies"],
+  ["jobs", "Vakansiyalar", "jobs"], ["staff", "Universitet xodimlari", "universities"]];
 
 export default function Queue({ ctx }: { ctx: AdminCtx }) {
-  const [kind, setKind] = useState<Kind>("verifications");
+  const kinds = KINDS.filter(([, , permission]) => ctx.can(permission));
+  const [kind, setKind] = useState<Kind>(kinds[0]?.[0] ?? "verifications");
   const [counts, setCounts] = useState<Record<Kind, number> | null>(null);
   const refreshCounts = useCallback(() => api.admin.inbox().then(setCounts, () => {}), []);
   useEffect(() => { void refreshCounts(); }, [refreshCounts]);
@@ -18,7 +21,7 @@ export default function Queue({ ctx }: { ctx: AdminCtx }) {
   return (
     <div>
       <div className="chips" style={{ marginBottom: 8 }}>
-        {KINDS.map(([k, label]) => (
+        {kinds.map(([k, label]) => (
           <button key={k} className={`chip ${kind === k ? "on" : ""}`} onClick={() => setKind(k)}>
             {label}{counts && counts[k] > 0 && <span className="dot">{counts[k]}</span>}
           </button>
@@ -137,5 +140,5 @@ function Jobs({ onChanged }: { onChanged: () => void }) {
 
 function Staff({ ctx, onChanged }: { ctx: AdminCtx; onChanged: () => void }) {
   // university staff requests with their documents and the three decisions (screens/university/AdminStaffQueue.tsx)
-  return <AdminStaffQueue isOwner={ctx.isOwner} onChanged={onChanged} />;
+  return <AdminStaffQueue canDecide={ctx.can("universities")} onChanged={onChanged} />;
 }

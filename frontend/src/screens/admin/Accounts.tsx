@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { api, type AdminAccount, type AdminRole } from "../../api";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import { api, type AdminAccount, type AdminPermissionCatalog, type AdminRole } from "../../api";
 import { saveToken } from "./session";
 import { ErrorText, message } from "../../ui";
 
@@ -11,10 +11,12 @@ const when = (s: string | null) => (s ? new Date(s).toLocaleString("uz") : "hali
 /** Owner only: approve new admins, make owners, disable, reset passwords. */
 export function Accounts({ meId }: { meId: number }) {
   const [rows, setRows] = useState<AdminAccount[] | null>(null);
+  const [catalog, setCatalog] = useState<AdminPermissionCatalog | null>(null);
+  const [open, setOpen] = useState<number | null>(null);
   const [temp, setTemp] = useState<{ email: string; password: string } | null>(null);
   const [error, setError] = useState("");
   const load = useCallback(() => api.admin.accounts().then(setRows, (e) => setError(message(e))), []);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); api.admin.permissions().then(setCatalog, () => {}); }, [load]);
 
   async function run(action: () => Promise<unknown>) {
     setError("");
@@ -25,7 +27,9 @@ export function Accounts({ meId }: { meId: number }) {
     <div className="panel">
       <p className="hint" style={{ marginTop: 0 }}>
         Yangi admin saytdagi «Ro'yxatdan o'tish» orqali email va parol bilan so'rov yuboradi. Siz tasdiqlaguningizcha u kira olmaydi.
-        Ega hamma narsani qiladi. Admin ilovani boshqaradi, lekin adminlarni tayinlay olmaydi va bot hamda qoidalarni o'zgartira olmaydi.
+        Ega hamma narsani qiladi. Boshqalarga nima ruxsat berilishini «Ruxsatlar» tugmasi orqali o'zingiz yoqasiz yoki o'chirasiz:
+        yangi rol tanlanganda o'sha rolning standart ruxsatlari qo'yiladi. Adminlarni tayinlash, bot tokeni, AI kalitlari va qoidalarni
+        o'zgartirish har doim faqat egada qoladi.
       </p>
       <ErrorText error={error} />
       {temp && (
@@ -35,9 +39,10 @@ export function Accounts({ meId }: { meId: number }) {
       )}
       {rows && (
         <div className="table-scroll"><table className="data-table">
-          <thead><tr><th>Ism</th><th>Email</th><th>Rol</th><th>Holat</th><th>Oxirgi kirish</th><th /></tr></thead>
+          <thead><tr><th>Ism</th><th>Email</th><th>Rol</th><th>Ruxsatlar</th><th>Holat</th><th>Oxirgi kirish</th><th /></tr></thead>
           <tbody>{rows.map((a) => (
-            <tr key={a.id}>
+            <Fragment key={a.id}>
+            <tr>
               <td><b>{a.name}</b>{a.id === meId && <span className="hint"> (siz)</span>}</td>
               <td>{a.email}</td>
               <td>
@@ -45,6 +50,13 @@ export function Accounts({ meId }: { meId: number }) {
                   <option value="admin">Admin</option><option value="moderator">Moderator</option>
                   <option value="analyst">Tahlilchi (faqat ko'radi)</option><option value="owner">Ega</option>
                 </select>
+              </td>
+              <td style={{ whiteSpace: "nowrap" }}>
+                {a.role === "owner" ? <span className="hint">Hammasi</span> : (
+                  <button className={`btn small ghost ${open === a.id ? "on" : ""}`} onClick={() => setOpen(open === a.id ? null : a.id)}>
+                    {summary(a, catalog)}{a.custom_permissions && <span className="badge pending" style={{ marginLeft: 6 }}>sozlangan</span>}
+                  </button>
+                )}
               </td>
               <td><span className={`badge ${STATUS[a.status][1]}`}>{STATUS[a.status][0]}</span></td>
               <td>{when(a.last_login_at)}</td>
@@ -60,6 +72,12 @@ export function Accounts({ meId }: { meId: number }) {
                 )}
               </td>
             </tr>
+            {open === a.id && a.role !== "owner" && catalog && (
+              <tr className="perm-row"><td colSpan={7}>
+                <Permissions account={a} catalog={catalog} onChange={(changes) => run(() => api.admin.updateAccount(a.id, changes))} />
+              </td></tr>
+            )}
+            </Fragment>
           ))}</tbody>
         </table></div>
       )}
@@ -67,7 +85,58 @@ export function Accounts({ meId }: { meId: number }) {
   );
 }
 
-export function MyAccount({ me }: { me: { name: string; email: string; role: string } }) {
+function summary(a: AdminAccount, catalog: AdminPermissionCatalog | null): string {
+  const total = catalog?.permissions.length ?? 0;
+  if (a.permissions.length === 0) return "Faqat ko'radi";
+  if (total && a.permissions.length >= total) return "Hammasi";
+  return `${a.permissions.length} ta ruxsat`;
+}
+
+/** The owner switches each permission on or off for one account; saved at once. */
+function Permissions({ account, catalog, onChange }: {
+  account: AdminAccount; catalog: AdminPermissionCatalog;
+  onChange: (changes: { permissions?: string[]; reset_permissions?: boolean }) => void;
+}) {
+  const on = new Set(account.permissions);
+  const groups = [...new Set(catalog.permissions.map((p) => p.group))];
+  const toggle = (key: string) => {
+    const next = new Set(on);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    onChange({ permissions: [...next] });
+  };
+  const roleName = ({ admin: "Admin", moderator: "Moderator", analyst: "Tahlilchi" } as Record<string, string>)[account.role] ?? account.role;
+  return (
+    <div className="perm-box">
+      <div className="row between" style={{ gap: 10, flexWrap: "wrap" }}>
+        <div className="hint">
+          {account.name}: {account.custom_permissions ? "siz sozlagan ruxsatlar" : `«${roleName}» rolining standart ruxsatlari`}. Belgilash darhol saqlanadi.
+        </div>
+        <div className="row" style={{ gap: 6 }}>
+          <button className="btn small ghost" onClick={() => onChange({ permissions: catalog.permissions.map((p) => p.key) })}>Hammasini yoqish</button>
+          <button className="btn small ghost" onClick={() => onChange({ permissions: [] })}>Faqat ko'rish</button>
+          {account.custom_permissions && <button className="btn small ghost" onClick={() => onChange({ reset_permissions: true })}>Rol standartiga qaytarish</button>}
+        </div>
+      </div>
+      <div className="perm-groups">
+        {groups.map((g) => (
+          <div key={g} className="perm-group">
+            <b>{g}</b>
+            {catalog.permissions.filter((p) => p.group === g).map((p) => (
+              <label key={p.key} className="perm-item">
+                <input type="checkbox" checked={on.has(p.key)} onChange={() => toggle(p.key)} />
+                <span>{p.label}</span>
+              </label>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function MyAccount({ me }: { me: { name: string; email: string; role: string; permissions: string[] } }) {
+  const [catalog, setCatalog] = useState<AdminPermissionCatalog | null>(null);
+  useEffect(() => { api.admin.permissions().then(setCatalog, () => {}); }, []);
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [repeat, setRepeat] = useState("");
@@ -90,6 +159,14 @@ export function MyAccount({ me }: { me: { name: string; email: string; role: str
       <div className="panel">
         <h3 style={{ marginTop: 0 }}>{me.name}</h3>
         <div className="hint">{me.email} · {({ owner: "Ega", admin: "Admin", moderator: "Moderator", analyst: "Tahlilchi" } as Record<string, string>)[me.role] ?? me.role}</div>
+        {catalog && me.role !== "owner" && (
+          <>
+            <b style={{ display: "block", marginTop: 12 }}>Ruxsatlaringiz</b>
+            {me.permissions.length === 0
+              ? <div className="hint">Siz faqat ko'ra olasiz. Ruxsatni ilova egasi beradi.</div>
+              : <div className="chips" style={{ marginTop: 6 }}>{catalog.permissions.filter((p) => me.permissions.includes(p.key)).map((p) => <span key={p.key} className="chip on">{p.label}</span>)}</div>}
+          </>
+        )}
       </div>
       <div className="panel">
         <h3 style={{ marginTop: 0 }}>Parolni o'zgartirish</h3>

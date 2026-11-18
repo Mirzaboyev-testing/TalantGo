@@ -134,3 +134,12 @@
 .site-contacts { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0 12px; }
 .site-thumb.wide { width: 104px; height: 52px; }
 .site-choice .site-thumb.wide { width: 72px; height: 40px; }
+
+/* admin accounts: permissions the owner switches on and off */
+.perm-row td { background: var(--bg2); }
+.perm-box { display: flex; flex-direction: column; gap: 12px; padding: 6px 2px; white-space: normal; }
+.perm-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.perm-group { display: flex; flex-direction: column; gap: 6px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.perm-group b { font-size: 13px; color: var(--hint); text-transform: uppercase; letter-spacing: .04em; }
+.perm-item { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; margin: 0; }
+.perm-item input { width: auto; margin: 0; }

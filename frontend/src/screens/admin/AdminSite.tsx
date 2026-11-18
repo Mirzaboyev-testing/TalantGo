@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { api, setAdminUnauthorizedHandler } from "../../api";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { api, setAdminUnauthorizedHandler, type AdminMe } from "../../api";
 import "./admin.css";
 import { Icon, type IconName } from "../../icons";
 import { Accounts, MyAccount } from "./Accounts";
@@ -20,50 +20,54 @@ import { Complaints, Outcomes, Partnerships, Ranking } from "./Trust";
 import { clearToken, loadToken, saveToken } from "./session";
 import { BrandLogo } from "../../brand";
 
-export interface AdminCtx { isOwner: boolean; name: string }
-type Me = { id: number; name: string; email: string; role: string; is_owner: boolean };
+export interface AdminCtx { isOwner: boolean; name: string; can: (permission: string) => boolean }
+type Me = AdminMe;
 
-// `limited`: which of the two limited roles also see the page (owner and admin see everything not ownerOnly)
-type Page = { id: string; label: string; icon: IconName; ownerOnly?: boolean; limited?: ("moderator" | "analyst")[] };
-const M = "moderator" as const, A = "analyst" as const;
+/** What the signed-in account may do (switched on by the owner in "Adminlar"); the server checks it again. */
+const CanContext = createContext<(permission: string) => boolean>(() => false);
+export const useCan = () => useContext(CanContext);
+
+// `need`: the page shows only with one of these permissions; without it every active account sees the page
+type Page = { id: string; label: string; icon: IconName; ownerOnly?: boolean; need?: string[] };
+const APPROVALS = ["students", "companies", "universities", "jobs"];
 const ROLE_LABEL: Record<string, string> = { owner: "Ega", admin: "Admin", moderator: "Moderator", analyst: "Tahlilchi" };
 const MENU: { group: string; pages: Page[] }[] = [
-  { group: "", pages: [{ id: "dashboard", label: "Bosh sahifa", icon: "chart", limited: [M, A] }] },
+  { group: "", pages: [{ id: "dashboard", label: "Bosh sahifa", icon: "chart" }] },
   { group: "Moderatsiya", pages: [
-    { id: "queue", label: "Tasdiqlash navbati", icon: "inbox", limited: [M] },
-    { id: "complaints", label: "Shikoyatlar", icon: "flag", limited: [M] },
+    { id: "queue", label: "Tasdiqlash navbati", icon: "inbox", need: APPROVALS },
+    { id: "complaints", label: "Shikoyatlar", icon: "flag", need: ["complaints"] },
   ] },
   { group: "Talabalar", pages: [
-    { id: "users", label: "Talabalar va mentorlar", icon: "school", limited: [M, A] },
-    { id: "submissions", label: "Topshirilgan ishlar", icon: "check", limited: [M, A] },
-    { id: "tracks", label: "Yo'nalishlar va topshiriqlar", icon: "path" },
-    { id: "challenges", label: "Chellenjlar va vazifalar", icon: "flag", limited: [M, A] },
+    { id: "users", label: "Talabalar va mentorlar", icon: "school" },
+    { id: "submissions", label: "Topshirilgan ishlar", icon: "check" },
+    { id: "tracks", label: "Yo'nalishlar va topshiriqlar", icon: "path", need: ["content"] },
+    { id: "challenges", label: "Chellenjlar va vazifalar", icon: "flag" },
   ] },
   { group: "Ish bozori", pages: [
-    { id: "companies", label: "Kompaniyalar", icon: "building", limited: [M, A] },
-    { id: "jobs", label: "Vakansiyalar", icon: "briefcase", limited: [M, A] },
-    { id: "tests", label: "Testlar", icon: "check", limited: [M, A] },
-    { id: "applications", label: "Arizalar", icon: "inbox", limited: [M, A] },
+    { id: "companies", label: "Kompaniyalar", icon: "building" },
+    { id: "jobs", label: "Vakansiyalar", icon: "briefcase" },
+    { id: "tests", label: "Testlar", icon: "check" },
+    { id: "applications", label: "Arizalar", icon: "inbox" },
   ] },
   { group: "Ta'lim", pages: [
-    { id: "universities", label: "Universitetlar", icon: "building", limited: [M, A] },
-    { id: "outcomes", label: "Bandlik yozuvlari", icon: "briefcase", limited: [M, A] },
-    { id: "partnerships", label: "Hamkorliklar", icon: "users", limited: [M, A] },
-    { id: "ranking", label: "Reyting", icon: "chart", limited: [M, A] },
+    { id: "universities", label: "Universitetlar", icon: "building" },
+    { id: "outcomes", label: "Bandlik yozuvlari", icon: "briefcase" },
+    { id: "partnerships", label: "Hamkorliklar", icon: "users" },
+    { id: "ranking", label: "Reyting", icon: "chart" },
   ] },
   { group: "Aloqa", pages: [
-    { id: "groups", label: "Guruhlar", icon: "chat", limited: [M] },
-    { id: "site", label: "Sayt kontenti", icon: "globe" },
-    { id: "announcements", label: "E'lonlar (bot)", icon: "send" },
+    { id: "groups", label: "Guruhlar", icon: "chat", need: ["groups"] },
+    { id: "site", label: "Sayt kontenti", icon: "globe", need: ["site"] },
+    { id: "announcements", label: "E'lonlar (bot)", icon: "send", need: ["announcements"] },
     { id: "bot", label: "Telegram bot", icon: "chat", ownerOnly: true },
-    { id: "ai", label: "AI yordamchi", icon: "spark" },
+    { id: "ai", label: "AI yordamchi", icon: "spark", need: ["settings", "ai_chats"] },
   ] },
   { group: "Tizim", pages: [
-    { id: "reports", label: "Hisobotlar", icon: "copy" },
-    { id: "settings", label: "Sozlamalar", icon: "lock" },
+    { id: "reports", label: "Hisobotlar", icon: "copy", need: ["reports"] },
+    { id: "settings", label: "Sozlamalar", icon: "lock", need: ["settings"] },
     { id: "accounts", label: "Adminlar", icon: "verified", ownerOnly: true },
-    { id: "audit", label: "Audit jurnali", icon: "copy" },
-    { id: "me", label: "Profilim", icon: "user", limited: [M, A] },
+    { id: "audit", label: "Audit jurnali", icon: "copy", need: ["audit"] },
+    { id: "me", label: "Profilim", icon: "user" },
   ] },
 ];
 const ALL = MENU.flatMap((g) => g.pages);
@@ -106,13 +110,13 @@ export default function AdminSite() {
   if (checking) return <div className="admin-site"><div className="auth-wrap hint">Yuklanmoqda…</div></div>;
   if (!me) return <div className="admin-site"><AuthScreen onSignedIn={loadMe} /></div>;
 
-  const ctx: AdminCtx = { isOwner: me.is_owner, name: me.name };
-  const limitedRole = me.role === "moderator" || me.role === "analyst" ? me.role : null;
-  const visible = (p: Page) => (limitedRole ? (p.limited ?? []).includes(limitedRole) : !p.ownerOnly || me.is_owner);
+  const can = (permission: string) => me.is_owner || me.permissions.includes(permission);
+  const ctx: AdminCtx = { isOwner: me.is_owner, name: me.name, can };
+  const visible = (p: Page) => (p.ownerOnly ? me.is_owner : !p.need || p.need.some(can));
   const current = ALL.find((p) => p.id === page && visible(p)) ?? ALL[0];
-  const fullAdmin = !limitedRole;
 
   return (
+    <CanContext.Provider value={can}>
     <div className="admin-site">
       <div className="admin-shell">
         {menuOpen && <div className="admin-backdrop" onClick={() => setMenuOpen(false)} />}
@@ -161,19 +165,20 @@ export default function AdminSite() {
             {current.id === "announcements" && <div className="narrow"><Announcements /></div>}
             {current.id === "site" && <div className="narrow"><SiteContent /></div>}
             {current.id === "bot" && <div className="narrow"><BotCard /></div>}
-            {current.id === "ai" && <div className="narrow"><AiCard canEdit={me.is_owner} /><AiConversations /></div>}
+            {current.id === "ai" && <div className="narrow">{can("settings") && <AiCard canEdit={me.is_owner} />}{can("ai_chats") && <AiConversations />}</div>}
             {current.id === "reports" && <div className="narrow"><ExportCard /></div>}
             {current.id === "settings" && <div className="narrow"><RulesCard canEdit={me.is_owner} /><PartnerLinks /></div>}
             {current.id === "accounts" && <Accounts meId={me.id} />}
             {current.id === "audit" && <div className="narrow"><AuditCard /></div>}
             {current.id === "me" && <MyAccount me={me} />}
-            {current.id === "complaints" && <Complaints canDecide={me.role !== "analyst"} />}
-            {current.id === "ranking" && <Ranking canEdit={fullAdmin} />}
+            {current.id === "complaints" && <Complaints canDecide={can("complaints")} />}
+            {current.id === "ranking" && <Ranking canEdit={can("ranking")} />}
             {current.id === "partnerships" && <Partnerships />}
             {current.id === "outcomes" && <Outcomes />}
           </div>
         </main>
       </div>
     </div>
+    </CanContext.Provider>
   );
 }

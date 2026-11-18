@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.db import get_session
 from ..core.security import read_token
 from ..models import AdminAccount, AuditLog, User
+from ..services import admin_access
 from ..services.admin_accounts import fingerprint
 
 Session = Annotated[AsyncSession, Depends(get_session)]
@@ -42,22 +43,9 @@ class Actor:
         return self.account.role == "owner"
 
 
-# what moderators may change, and what neither moderators nor analysts may open (paths after /api/v1)
-MODERATION_WRITES = ("/admin/verifications/", "/admin/companies/", "/admin/jobs/", "/admin/tests/", "/admin/group-messages/",
-                     "/admin/groups/", "/admin/challenges/", "/admin/complaints/")
-PRIVATE_AREAS = ("/admin/export/", "/admin/assistant/", "/admin/bot", "/admin/ai", "/admin/accounts", "/admin/audit",
-                 "/admin/rules", "/admin/announcements", "/admin/ranking/")
-
-
 def check_role(account: AdminAccount, method: str, path: str) -> None:
-    """Least privilege for the two limited roles; owner and admin keep their current rights."""
-    if account.role not in ("moderator", "analyst") or path.startswith("/admin-auth/"):
-        return
-    if path.startswith(PRIVATE_AREAS) or (path.startswith("/admin/ranking") and method != "GET"):
-        raise HTTPException(403, "Bu bo'lim sizning rolingiz uchun yopiq")
-    if method != "GET" and (account.role == "analyst" or not path.startswith(MODERATION_WRITES)):
-        raise HTTPException(403, "Rolingiz faqat ko'rishga ruxsat beradi" if account.role == "analyst"
-                            else "Moderator faqat tekshiruv va moderatsiya qiladi")
+    """What an account may do comes from the permissions the owner switched on (services/admin_access.py)."""
+    admin_access.check(account, method, path)
 
 
 async def admin_actor(request: Request, session: Session, authorization: Annotated[str | None, Header()] = None) -> Actor:

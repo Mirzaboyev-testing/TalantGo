@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from ..core import ratelimit
 from ..models import AdminAccount
 from ..services import admin_password
+from ..services import admin_access
 from ..services.admin_accounts import (check_password, hash_password, issue_token, normalize_email, owners_count,
                                        touch_login)
 from .deps import AdminActor, Session, audit
@@ -83,7 +84,8 @@ async def login(body: LoginIn, request: Request, session: Session) -> dict:
 @router.get("/me")
 async def me(actor: AdminActor) -> dict:
     a = actor.account
-    return {"id": a.id, "name": a.name, "email": a.email, "role": a.role, "is_owner": actor.is_owner}
+    return {"id": a.id, "name": a.name, "email": a.email, "role": a.role, "is_owner": actor.is_owner,
+            "permissions": sorted(admin_access.effective(a))}
 
 
 @router.put("/password")

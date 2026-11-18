@@ -171,6 +171,8 @@ STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS ix_university_events_company_id ON university_events (company_id)",
     # TalantGo became Careerup (2026-11-17): university staff decided by the platform admin
     "UPDATE users SET staff_reviewed_by = 'Careerup' WHERE staff_reviewed_by = 'TalantGo'",
+    # per-account permissions switched on and off by the owner (2026-11-18); null keeps the role's defaults
+    "ALTER TABLE admin_accounts ADD COLUMN IF NOT EXISTS permissions jsonb",
 ]
 
 
