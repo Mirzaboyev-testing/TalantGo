@@ -303,7 +303,7 @@ async def send_announcement(body: AnnouncementIn, actor: AdminActor, session: Se
     if not people:
         raise HTTPException(400, "Bu auditoriyada hech kim yo'q")
     has_bot = bool(await settings_store.get_value(session, settings_store.BOT_TOKEN))
-    recipients = [(tg, kind) for _, tg, kind in people if tg] if has_bot else []
+    recipients = await announcements.bot_recipients(session, people) if has_bot else []
     audience = " · ".join(filter(None, [announcements.KINDS[body.audience], track.title if track else None,
                                         uni.short_name if uni else None, f"guruh {group}" if group else None]))
     row = Announcement(text=body.text.strip(), audience=audience, created_by=actor.name, total=len(recipients),

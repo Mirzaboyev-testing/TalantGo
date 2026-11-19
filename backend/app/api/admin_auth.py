@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 
 from ..core import ratelimit
 from ..models import AdminAccount, PasswordRequest
-from ..services import admin_inbox, admin_password
+from ..services import admin_inbox, admin_password, bots, telegram_bot, web_login
 from ..services import admin_access
 from ..services.admin_accounts import (check_password, hash_password, issue_token, normalize_email, owners_count,
                                        touch_login)
@@ -111,7 +111,40 @@ async def password_request(body: ForgotIn, request: Request, session: Session) -
 async def me(actor: AdminActor) -> dict:
     a = actor.account
     return {"id": a.id, "name": a.name, "email": a.email, "role": a.role, "is_owner": actor.is_owner,
-            "permissions": sorted(admin_access.effective(a))}
+            "permissions": sorted(admin_access.effective(a)), "telegram_linked": a.telegram_id is not None}
+
+
+# --------------------------------------------------------------------------- Telegram for the bell (services/admin_inbox.py)
+
+class PinIn(BaseModel):
+    pin: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+@router.post("/telegram-link")
+async def telegram_link_start(actor: AdminActor, session: Session) -> dict:
+    """A one-time bot link: confirm in the bot, then type the PIN it shows (the same flow as the panels)."""
+    username = await bots.username(session)
+    if not username:
+        raise HTTPException(503, "Bot hali sozlanmagan")
+    code = await web_login.create(session, purpose="admin", link_admin_id=actor.account.id)
+    return {"code": code, "url": telegram_bot.start_link(username, web_login.PREFIX + code),
+            "expires_in": int(web_login.TTL.total_seconds())}
+
+
+@router.post("/telegram-link/{code}/verify")
+async def telegram_link_verify(code: str, body: PinIn, actor: AdminActor, session: Session) -> dict:
+    await web_login.verify_admin_link(session, code[:40], body.pin, actor.account)
+    audit(session, actor, "account.telegram", actor.account.email, "linked")
+    await session.commit()
+    return await me(actor)
+
+
+@router.delete("/telegram-link")
+async def telegram_unlink(actor: AdminActor, session: Session) -> dict:
+    actor.account.telegram_id = None
+    audit(session, actor, "account.telegram", actor.account.email, "unlinked")
+    await session.commit()
+    return await me(actor)
 
 
 @router.put("/password")

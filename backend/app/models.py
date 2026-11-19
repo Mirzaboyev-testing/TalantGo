@@ -182,6 +182,9 @@ class User(Base):
     # raised by a password change or reset: every session token made before it stops working (core/security.py)
     token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")  # temporary one
+    # what the bot may send (services/notify.py): {"telegram": false} stops copies, "muted" lists categories
+    notify_prefs: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    tg_blocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))   # the bot could not reach them
     username: Mapped[str | None] = mapped_column(String(64))
     full_name: Mapped[str] = mapped_column(String(128))
     photo_url: Mapped[str | None] = mapped_column(String(512))
@@ -691,6 +694,7 @@ class AdminAccount(Base):
     role: Mapped[str] = mapped_column(String(16), default="admin")
     # what the owner switched on for this account (services/admin_access.py); null = the role's defaults
     permissions: Mapped[list[str] | None] = mapped_column(JSONB)
+    telegram_id: Mapped[int | None] = mapped_column(BigInteger, unique=True)   # linked in "Profilim": bot copies of the bell
     status: Mapped[str] = mapped_column(String(16), default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -942,11 +946,12 @@ class LoginRequest(Base):
     The website shows a t.me link carrying `code`; the person confirms in the bot; the website polls."""
     __tablename__ = "login_requests"
     __table_args__ = (_in("status", ("pending", "claimed", "confirmed", "rejected", "conflict", "used"), "login_request_status_valid"),
-                      _in("purpose", ("login", "link"), "login_request_purpose_valid"))
+                      _in("purpose", ("login", "link", "admin"), "login_request_purpose_valid"))
 
     code: Mapped[str] = mapped_column(String(32), primary_key=True)
     purpose: Mapped[str] = mapped_column(String(8), default="login")
     link_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))   # purpose=link
+    link_admin_id: Mapped[int | None] = mapped_column(ForeignKey("admin_accounts.id", ondelete="CASCADE"))   # purpose=admin
     telegram_id: Mapped[int | None] = mapped_column(BigInteger, index=True)     # who opened the link in the bot
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))        # the result
     status: Mapped[str] = mapped_column(String(12), default="pending")

@@ -43,14 +43,23 @@ def store(session, row: Announcement, people: list) -> None:
                     for uid, _, kind in people)
 
 
-def start(announcement_id: int, recipients: list[tuple[int, str]]) -> None:
-    """`recipients`: (telegram id, account type) of the people who have Telegram."""
+async def bot_recipients(session, people: list) -> list[tuple[int, str, str]]:
+    """(telegram id, account type, language) of the people the bot may write to: Telegram linked, not flagged as
+    unreachable, and not muted "news" in their bot settings."""
+    ids = [tg for _, tg, _ in people if tg]
+    readers = await notify.readers(session, ids)
+    return [(tg, r.account_type, r.language) for tg in ids
+            if (r := readers.get(tg)) and not r.blocked and notify.allows(r.prefs, "admin_announcement")]
+
+
+def start(announcement_id: int, recipients: list[tuple[int, str, str]]) -> None:
+    """`recipients`: from bot_recipients()."""
     task = asyncio.create_task(_send(announcement_id, recipients))
     _running.add(task)
     task.add_done_callback(_running.discard)
 
 
-async def _send(announcement_id: int, recipients: list[tuple[int, str]]) -> None:
+async def _send(announcement_id: int, recipients: list[tuple[int, str, str]]) -> None:
     async with SessionLocal() as session:
         row = await session.get(Announcement, announcement_id)
         tokens = await bots.tokens(session)
@@ -60,17 +69,21 @@ async def _send(announcement_id: int, recipients: list[tuple[int, str]]) -> None
                 row.finished_at = datetime.now(UTC)
                 await session.commit()
             return
-        for chat_id, kind in recipients:
+        lost = []
+        for chat_id, kind, lang in recipients:
             try:
                 # plain text, no parse_mode: nothing typed by an admin is interpreted as markup
                 await telegram_bot.send_any(tokens, "sendMessage", note, chat_id=chat_id, text=row.text,
-                                            reply_markup=notify.markup_for(kind, "Ilovani ochish", LINK.get(kind, "")))
+                                            reply_markup=notify.markup_for(kind, "", LINK.get(kind, ""), lang))
                 row.sent += 1
             except telegram_bot.BotError as exc:   # blocked the bot, never started it, ...
                 row.failed += 1
                 log.info("announcement %s to one user failed: %s", announcement_id, exc)
+                if notify.unreachable(exc):
+                    lost.append(chat_id)
             if (row.sent + row.failed) % 20 == 0:          # progress visible in the admin page
                 await session.commit()
             await asyncio.sleep(PAUSE)
         row.finished_at = datetime.now(UTC)
         await session.commit()
+        await notify.mark_unreachable(session, lost)

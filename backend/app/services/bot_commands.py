@@ -17,7 +17,7 @@ from ..core import ratelimit
 from ..core.brand import BRAND
 from ..core.config import settings
 from ..models import Notification, User
-from . import notify, password_reset, telegram_bot
+from . import notif_i18n, notify, password_reset, telegram_bot
 from .progress import TASHKENT
 
 log = logging.getLogger("careerflow.bot")
@@ -94,9 +94,11 @@ async def notifications_text(session: AsyncSession, user: User) -> str:
         return "🔔 Hozircha bildirishnoma yo'q. Yangilari shu yerga keladi."
     unread = [n.id for n in rows if n.read_at is None]
     lines = ["🔔 So'nggi bildirishnomalar" + (f" ({len(unread)} ta yangi)" if unread else "")]
+    lang = notif_i18n.lang_of(user)
     for n in rows:
         when = n.created_at.astimezone(TASHKENT).strftime("%d.%m %H:%M")
-        text = n.text if len(n.text) <= 350 else n.text[:347] + "…"
+        text = notif_i18n.render(n.kind, n.params, lang, n.text)
+        text = text if len(text) <= 350 else text[:347] + "…"
         lines.append(f"\n{'🆕 ' if n.read_at is None else ''}{when}\n{text}")
     if unread:                                   # read in the bot = read in the bell
         await session.execute(update(Notification).where(Notification.id.in_(unread)).values(read_at=datetime.now(UTC)))
@@ -124,7 +126,8 @@ async def handle(session: AsyncSession, token: str, chat_id: int, sender: dict, 
         return
     if command == "bildirishnomalar":
         path = "/" + PANEL.get(user.account_type, PANEL["student"])[0]
-        await reply(await notifications_text(session, user), notify.markup_for(user.account_type, "Ilovani ochish", path))
+        await reply(await notifications_text(session, user),
+                    notify.markup_for(user.account_type, "", path, notif_i18n.lang_of(user)))
     elif command == "akkaunt":
         await reply(await account_text(session, user), _site_button(user))
     else:

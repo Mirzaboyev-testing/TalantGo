@@ -16,7 +16,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import LoginRequest, Submission, User
+from ..models import AdminAccount, LoginRequest, Submission, User
 from . import telegram_bot
 
 TTL = timedelta(minutes=10)
@@ -30,10 +30,11 @@ def _expired(req: LoginRequest) -> bool:
     return datetime.now(UTC) - req.created_at > TTL
 
 
-async def create(session: AsyncSession, purpose: str = "login", link_user_id: int | None = None) -> str:
+async def create(session: AsyncSession, purpose: str = "login", link_user_id: int | None = None,
+                 link_admin_id: int | None = None) -> str:
     await session.execute(delete(LoginRequest).where(LoginRequest.created_at < datetime.now(UTC) - timedelta(days=1)))
     code = secrets.token_urlsafe(16)                 # 22 characters of [A-Za-z0-9_-]: valid in a start payload
-    session.add(LoginRequest(code=code, purpose=purpose, link_user_id=link_user_id))
+    session.add(LoginRequest(code=code, purpose=purpose, link_user_id=link_user_id, link_admin_id=link_admin_id))
     await session.commit()
     return code
 
@@ -52,7 +53,11 @@ async def on_start(session: AsyncSession, token: str, chat_id: int, sender: dict
     req.telegram_id, req.tg_username, req.status = int(sender["id"]), sender.get("username"), "claimed"
     await session.commit()
     warning = "Agar bu havolani sizga boshqa odam yuborgan bo'lsa, «Yo'q» ni bosing."
-    if req.purpose == "link":
+    if req.purpose == "admin":
+        account = await session.get(AdminAccount, req.link_admin_id)
+        text = (f"Careerup admin hisobini ({account.email if account else 'admin sayti'}) shu Telegram akkauntga ulash "
+                "so'rovi. Ulangach, admin bildirishnomalari shu botga ham keladi.\n\n" + warning)
+    elif req.purpose == "link":
         target = await session.get(User, req.link_user_id)
         text = (f"Careerup profilini ({target.email if target else 'sayt akkaunti'}) shu Telegram akkauntga ulash so'rovi. "
                 f"Ulangach bot va sayt bitta akkaunt bilan ishlaydi.\n\n{warning}")
@@ -147,4 +152,22 @@ async def verify_link(session: AsyncSession, code: str, pin: str, user: User) ->
         await session.flush()
     user.telegram_id, user.username = tg_id, req.tg_username
     req.user_id, req.status = user.id, "used"
+    await session.commit()
+
+
+async def verify_admin_link(session: AsyncSession, code: str, pin: str, account: AdminAccount) -> None:
+    """Ties the Telegram account that confirmed in the bot to an admin-site account (bot copies of its bell)."""
+    from fastapi import HTTPException
+    req = await session.get(LoginRequest, code)
+    if req is not None and req.link_admin_id != account.id:
+        req = None
+    req = await _check_pin(session, req, pin, "admin")
+    other = await session.scalar(select(AdminAccount.id).where(AdminAccount.telegram_id == req.telegram_id,
+                                                               AdminAccount.id != account.id))
+    if other:
+        req.status, req.note = "conflict", "Bu Telegram boshqa admin hisobiga ulangan."
+        await session.commit()
+        raise HTTPException(409, req.note)
+    account.telegram_id = req.telegram_id
+    req.status = "used"
     await session.commit()

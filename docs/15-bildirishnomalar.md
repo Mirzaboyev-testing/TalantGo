@@ -109,12 +109,43 @@ Xabar kimga borishi admin ruxsatlariga qarab tanlanadi (`admin_access.effective`
 eslatmalari va ro'yxatdan o'tishni yakunlash eslatmasi. Har bir eslatma yuborishdan oldin belgilab qo'yiladi
 (`interview_reminded_for`, `deadline_reminded_at`), shuning uchun qayta ishga tushganda ikki marta bormaydi.
 
-## Keyingi bosqich (3-bosqich)
-- Telegram xabari o'quvchi tilida bo'ladi.
-- Panellarda "Bildirishnomalar" sozlamalari: Telegram nusxasini yoqish yoki o'chirish, turkumlarni tanlash.
-- Botni bloklagan foydalanuvchilar belgilanadi.
-- Eski xabarlar tozalanadi.
-- Admin hisobini Telegram'ga ulash mumkin bo'ladi.
+## 3-bosqich: qilingan ishlar (2026-11-19)
+
+### Bot o'quvchi tilida
+- Bot xabari o'quvchining tilida boradi (uz/ru/en). So'zlar ilovadagi bildirishnomalar bilan bir xil.
+  - Ruscha va inglizcha shablonlar frontend locale fayllaridan `backend/app/assets/notif_templates.json` ga
+    ko'chiriladi. Buning uchun: `cd frontend && npm run notif-templates`.
+  - Yangi `notif.*` kalit qo'shilganda shu buyruqni qayta ishlatish kerak. Test (`test_notifications_phase3.py`)
+    har bir xabar turi uchun ruscha va inglizcha shablon borligini tekshiradi.
+- Shablon topilmasa, xabar o'zbekcha boradi. Universitet va admin e'lonlari, dushanba dayjesti yozilganidek boradi.
+- Tugmalar va `/bildirishnomalar` ro'yxati ham o'quvchining tilida.
+
+### Bot sozlamalari (uchala panel)
+- "Bot xabarlari" kartasida: Telegram'ga yuborishni yoqish yoki o'chirish va turkumlarni o'chirish.
+  - Talaba: Xabarlar, Imkoniyatlar, Eslatmalar, Yangiliklar.
+  - Korxona: Xabarlar, Yangiliklar.
+  - Universitet: Yangiliklar.
+- Kartaning joyi: talaba "Sozlamalar"ida (Maxfiylik ostida); korxonada "Kirish usullari"da; universitetda
+  "Kirish va bot" tabida.
+- Ilovadagi ro'yxat o'zgarmaydi. Muhim xabarlar (ariza holati, tasdiqlar, parol) har doim boradi.
+- Texnik joyi: `users.notify_prefs`, `PUT /me/notify-prefs`, `services/notify.py` (CATEGORY).
+
+### Botni bloklaganlar
+- Telegram "Forbidden / chat not found / user is deactivated" deb javob bersa, `users.tg_blocked_at` belgilanadi
+  va bot o'sha odamga boshqa urinmaydi. Bu bildirishnomalar, e'lonlar va eslatmalarning hammasiga tegishli.
+- Odam botga yana yozsa (masalan, "Start" bossa), belgi olib tashlanadi.
+- Sozlamalar kartasida ogohlantirish chiqadi: "Bot sizga yoza olmayapti, botni ochib «Start» ni bosing".
+
+### Eski xabarlarni tozalash
+Kuniga bir marta eslatmalar siklida ishlaydi. O'qilgan xabarlar 180 kundan, o'qilmaganlari 365 kundan keyin
+o'chiriladi. Bu foydalanuvchilar va adminlarning qo'ng'iroqchasiga tegishli.
+
+### Admin akkaunti Telegram'da
+- "Profilim → Telegram → Telegram'ni ulash": bot havolasi, botda "Ha", keyin PIN. Bu panellardagi oqimning o'zi.
+- Ulangan admin o'z ruxsatlariga mos bildirishnomalarni botda ham oladi. Tugma admin saytining kerakli sahifasini
+  ochadi (`/admin#queue` kabi).
+- "Uzish" bilan o'chiriladi. Bitta Telegram faqat bitta admin hisobiga ulanadi.
+- Texnik joyi: `admin_accounts.telegram_id`, `login_requests.link_admin_id`, purpose "admin".
 
 ## Testlar
 - `backend/tests/test_notifications_and_password.py`: ruxsat bo'yicha yo'naltirish, bot kodi va havolasi, 5 marta
@@ -122,3 +153,5 @@ eslatmalari va ro'yxatdan o'tishni yakunlash eslatmasi. Har bir eslatma yuborish
 - `backend/tests/test_notifications_phase2.py`: chatni yig'ish va bitta Telegram xabari, vazifa ishlarini yig'ish,
   korxona tadbiri auditoriyasi, suhbat eslatmasi (yangi vaqt bilan qayta), muddat eslatmalari, yo'nalishsiz
   talabaga dayjest va admin e'loni auditoriyalari.
+- `backend/tests/test_notifications_phase3.py`: har bir xabar turi uchun shablonlar, til va variant tanlash,
+  sozlamalar, bloklagan odam belgisi va uning olib tashlanishi, eski xabarlarni tozalash, admin Telegram'ni ulash.

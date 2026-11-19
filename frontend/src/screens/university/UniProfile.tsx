@@ -8,6 +8,7 @@ import { Avatar, ErrorText, message, toast } from "../../ui";
 import { COOPERATION, uapi, type StaffRow, type UniProfile as Profile } from "./uapi";
 import type { Go } from "./UniversityApp";
 import LoginMethods from "../LoginMethods";
+import NotificationSettings from "../NotificationSettings";
 import { posLabel } from "./UniPending";
 import { CopyField, Empty, FileDrop, PageHead, Panel, Pill, Ring, Tabs, UIcon, UniLogo, ago, pct } from "./ukit";
 
@@ -29,7 +30,8 @@ export default function UniProfile({ me, sub, go, onChanged, onMe }: { me: Me; s
       {view === "profile" && <ProfileForm />}
       {view === "team" && <Team onChanged={() => { onChanged(); setTeamCount(0); }} />}
       {view === "invite" && <Invite me={me} />}
-      {view === "login" && <div style={{ maxWidth: 640 }}><LoginMethods me={me} onChanged={onMe} /></div>}
+      {view === "login" && <div style={{ maxWidth: 640 }}><LoginMethods me={me} onChanged={onMe} />
+        <NotificationSettings me={me} onChanged={onMe} /></div>}
     </>
   );
 }

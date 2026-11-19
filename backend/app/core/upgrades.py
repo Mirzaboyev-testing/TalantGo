@@ -184,6 +184,12 @@ STATEMENTS = [
     "ALTER TABLE challenges ADD COLUMN IF NOT EXISTS deadline_reminded_at timestamptz",
     "ALTER TABLE company_tests ADD COLUMN IF NOT EXISTS deadline_reminded_at timestamptz",
     "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS in_app integer NOT NULL DEFAULT 0",
+    # notifications phase 3 (2026-11-19): bot settings, unreachable people, admin accounts on Telegram
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_prefs jsonb NOT NULL DEFAULT '{}'",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS tg_blocked_at timestamptz",
+    "ALTER TABLE admin_accounts ADD COLUMN IF NOT EXISTS telegram_id bigint UNIQUE",
+    "ALTER TABLE login_requests ADD COLUMN IF NOT EXISTS link_admin_id integer REFERENCES admin_accounts(id) ON DELETE CASCADE",
+    _replace_check("login_requests", "login_request_purpose_valid", "purpose", ("login", "link", "admin"), "admin"),
 
     # company tests and tasks aimed at job functions instead of a track (2026-11-19)
     "ALTER TABLE challenges ADD COLUMN IF NOT EXISTS job_fields varchar(24)[] NOT NULL DEFAULT '{}'",

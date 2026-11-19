@@ -41,9 +41,12 @@ export interface Me {
   email: string | null; has_password: boolean; has_telegram: boolean;
   language: "uz" | "ru" | "en"; visible_to_employers: boolean;
   must_change_password?: boolean;        // signed in with the owner's temporary password: a new one comes first
+  notify_prefs?: { telegram: boolean; muted: NotifyCategory[] };   // what the bot may send (services/notify.py)
+  telegram_blocked?: boolean;            // the bot could not reach them last time
   token?: string | null;                 // a fresh session after a password change (every other one ended)
 }
 export interface BotLink { code: string; url: string; expires_in: number }
+export type NotifyCategory = "chat" | "opportunities" | "news" | "reminders";
 export type BotLoginStatus = { status: "pending" | "claimed" | "awaiting_pin" | "rejected" | "conflict" | "used" | "expired"; note?: string };
 export type AccountType = "student" | "employer" | "university";
 export type Verification = "none" | "pending" | "verified" | "rejected";
@@ -489,6 +492,7 @@ export const api = {
   passwordHelp: (b: { email: string; full_name: string; phone: string; note: string }) =>
     request<{ ok: boolean }>("POST", "/auth/password/help", b),
   telegramLinkStart: () => request<BotLink>("POST", "/me/telegram-link"),
+  setNotifyPrefs: (p: { telegram: boolean; muted: NotifyCategory[] }) => request<Me>("PUT", "/me/notify-prefs", p),
   updateMe: (changes: Partial<Omit<Me, "track" | "university_ref" | "company" | "staff_university" | "completeness">> &
     { track_id?: number | null; university_id?: number | null; consent?: boolean }) => request<Me>("PATCH", "/me", changes),
   tracks: () => request<Track[]>("GET", "/tracks"),
@@ -573,6 +577,11 @@ export const api = {
     changePassword: (current_password: string, new_password: string) =>
       request<{ token: string }>("PUT", "/admin-auth/password", { current_password, new_password }, true),
     passwordRequest: (email: string) => request<{ ok: boolean }>("POST", "/admin-auth/password-request", { email }),
+    // Telegram for the admin bell's bot copies (the same bot link + PIN as the panels)
+    telegramLinkStart: () => request<BotLink>("POST", "/admin-auth/telegram-link", undefined, true),
+    telegramLinkVerify: (code: string, pin: string) =>
+      request<AdminMe>("POST", `/admin-auth/telegram-link/${encodeURIComponent(code)}/verify`, { pin }, true),
+    telegramUnlink: () => request<AdminMe>("DELETE", "/admin-auth/telegram-link", undefined, true),
   },
 
   mentor: {
@@ -890,7 +899,7 @@ export interface AdminPermissionCatalog {
   permissions: { key: string; group: string; label: string }[];
   defaults: Record<string, string[]>;
 }
-export interface AdminMe { id: number; name: string; email: string; role: string; is_owner: boolean; permissions: string[] }
+export interface AdminMe { id: number; name: string; email: string; role: string; is_owner: boolean; permissions: string[]; telegram_linked?: boolean }
 export interface AdminApplication {
   id: number; candidate: string; username: string | null; phone: string; university: string | null; job: string;
   kind: JobKind; company: string; status: string; note: string; created_at: string; updated_at: string;

@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { api, type AdminAccount, type AdminPermissionCatalog, type AdminRole } from "../../api";
+import { api, type AdminAccount, type AdminMe, type AdminPermissionCatalog, type AdminRole } from "../../api";
+import { BotWaiting, useBotLink } from "../BotLink";
 import { saveToken } from "./session";
 import { ErrorText, message } from "../../ui";
 
@@ -134,7 +135,7 @@ function Permissions({ account, catalog, onChange }: {
   );
 }
 
-export function MyAccount({ me }: { me: { name: string; email: string; role: string; permissions: string[] } }) {
+export function MyAccount({ me }: { me: { name: string; email: string; role: string; permissions: string[]; telegram_linked?: boolean } }) {
   const [catalog, setCatalog] = useState<AdminPermissionCatalog | null>(null);
   useEffect(() => { api.admin.permissions().then(setCatalog, () => {}); }, []);
   const [current, setCurrent] = useState("");
@@ -181,6 +182,34 @@ export function MyAccount({ me }: { me: { name: string; email: string; role: str
         {done && <p className="notice">Parol o'zgartirildi.</p>}
         <button className="btn small" style={{ marginTop: 10 }} disabled={!current || next.length < 10 || !repeat} onClick={save}>Saqlash</button>
       </div>
+      <AdminTelegram linked={Boolean(me.telegram_linked)} />
+    </div>
+  );
+}
+
+/** Bot copies of this account's bell: link a Telegram account through the bot (link, "Ha" in the bot, the PIN here). */
+function AdminTelegram({ linked: initial }: { linked: boolean }) {
+  const [linked, setLinked] = useState(initial);
+  const [error, setError] = useState("");
+  const link = useBotLink(api.adminAuth.telegramLinkStart, api.adminAuth.telegramLinkVerify,
+                          useCallback((m: AdminMe) => setLinked(Boolean(m.telegram_linked)), []));
+  return (
+    <div className="panel">
+      <h3 style={{ marginTop: 0 }}>Telegram</h3>
+      <p className="hint">Ulangan bo'lsa, admin bildirishnomalari (yangi korxona, vakansiya, shikoyat, parol so'rovi va boshqalar)
+        botga ham keladi. Tugma admin saytining kerakli sahifasini ochadi.</p>
+      {linked ? (
+        <div className="row between">
+          <span className="badge peer_verified">Ulangan</span>
+          <button className="btn small ghost" onClick={async () => {
+            try { setLinked(Boolean((await api.adminAuth.telegramUnlink()).telegram_linked)); } catch (e) { setError(message(e)); }
+          }}>Uzish</button>
+        </div>
+      ) : (
+        <button className="btn small" disabled={link.state !== "idle"} onClick={link.begin}>Telegram'ni ulash</button>
+      )}
+      {link.link && link.state !== "idle" && <BotWaiting link={link.link} state={link.state} onCancel={link.stop} onPin={link.submitPin} />}
+      <ErrorText error={error || link.error} />
     </div>
   );
 }

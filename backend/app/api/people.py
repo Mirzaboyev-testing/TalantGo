@@ -50,6 +50,8 @@ async def me_out(session: Session, user: User) -> MeOut:
         signup_missing=signup_missing(user),
         email=user.email, has_password=bool(user.password_hash), has_telegram=user.telegram_id is not None,
         must_change_password=user.must_change_password,
+        notify_prefs={"telegram": (user.notify_prefs or {}).get("telegram", True), "muted": (user.notify_prefs or {}).get("muted", [])},
+        telegram_blocked=user.tg_blocked_at is not None,
         language=user.language, visible_to_employers=user.visible_to_employers,
         staff=await staff_info(session, user) if user.account_type == "university" and user.staff_status else None)
 
@@ -312,6 +314,20 @@ async def set_password(body: PasswordIn, user: CurrentUser, session: Session) ->
     out = await me_out(session, user)
     out.token = user_token(user) if changing else None
     return out
+
+
+class NotifyPrefsIn(BaseModel):
+    telegram: bool = True                                                   # bot copies at all
+    muted: list[Literal["chat", "opportunities", "news", "reminders"]] = Field(default_factory=list, max_length=4)
+
+
+@router.put("/me/notify-prefs", response_model=MeOut)
+async def set_notify_prefs(body: NotifyPrefsIn, user: CurrentUser, session: Session) -> MeOut:
+    """What the bot may send. The bell keeps everything; important notices (applications, checks, passwords) always go."""
+    user.notify_prefs = {"telegram": body.telegram, "muted": sorted(set(body.muted))}
+    await session.commit()
+    await session.refresh(user)
+    return await me_out(session, user)
 
 
 class LinkPinIn(BaseModel):

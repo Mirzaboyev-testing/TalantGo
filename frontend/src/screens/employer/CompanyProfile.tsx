@@ -7,6 +7,7 @@ import { navigate } from "../../router";
 import { ask, haptic } from "../../tg";
 import { ErrorText, isFullName, message, toast } from "../../ui";
 import LoginMethods from "../LoginMethods";
+import NotificationSettings from "../NotificationSettings";
 import PhoneField from "../PhoneField";
 import { coopLabel, industryLabel, legalLabel, ownershipLabel, sizeLabel } from "./CompanySignup";
 import { CompanyMark, FileDrop, PageHead, Tabs } from "./kit";
@@ -264,7 +265,8 @@ export default function CompanyProfile({ me, onChanged }: { me: Me; onChanged: (
         </div>
       )}
 
-      {section === "login" && <div className="co-narrow-block"><LoginMethods me={me} onChanged={onChanged} /></div>}
+      {section === "login" && <div className="co-narrow-block"><LoginMethods me={me} onChanged={onChanged} />
+        <NotificationSettings me={me} onChanged={onChanged} /></div>}
     </div>
   );
 }

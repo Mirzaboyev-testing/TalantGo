@@ -277,7 +277,7 @@ async def _notify_members(session: Session, group: Group, author: User, text: st
         m.notified_at = now
     await session.commit()
     notify.send([m.user.telegram_id for m in to_notify if m.user],
-                f"💬 {group.name}\n{author.full_name}: {text[:200]}", button="Guruhni ochish")
+                f"💬 {group.name}\n{author.full_name}: {text[:200]}", button="Guruhni ochish", kind="group_message")
 
 
 @router.delete("/{group_id}/messages/{message_id}", status_code=204)

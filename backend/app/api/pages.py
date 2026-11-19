@@ -7,6 +7,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
+from sqlalchemy import update as sql_update
 
 from ..core.config import settings
 from ..models import User
@@ -62,6 +63,10 @@ async def _handle(update: dict, session: Session, token: str, old_bot: bool) -> 
         return {"ok": True}
     text = message.get("text", "")
     private = message.get("chat", {}).get("type") == "private"
+    if private and sender and not old_bot:        # writing to the bot again: it can reach them, the flag goes
+        await session.execute(sql_update(User).where(User.telegram_id == sender, User.tg_blocked_at.isnot(None))
+                              .values(tg_blocked_at=None))
+        await session.commit()
     if old_bot:
         # the old bot only points to the new one; an invite code (/start r12, g<code>, hr) is carried over
         new_username = await bots.username(session)

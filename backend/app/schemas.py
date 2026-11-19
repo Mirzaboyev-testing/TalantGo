@@ -225,6 +225,8 @@ class MeOut(ORM):
     has_password: bool = False
     must_change_password: bool = False   # signed in with a temporary password from the owner: set a new one first
     token: str | None = None             # a fresh session after a password change (the old ones end)
+    notify_prefs: dict = {}              # bot settings: {"telegram": bool, "muted": [category, ...]} (services/notify.py)
+    telegram_blocked: bool = False       # the bot could not reach them last time (blocked it or deleted the chat)
     has_telegram: bool = True
     language: str = "uz"
     visible_to_employers: bool = True

@@ -14,13 +14,13 @@ from datetime import UTC, datetime, timedelta
 
 from typing import NamedTuple
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 
 from ..core.config import settings
 from ..core.db import SessionLocal
-from ..models import (AppConfig, Application, Challenge, ChallengeEntry, CompanyTest, Job, Notification, Status,
-                      Submission, Task, TestAttempt, User)
-from . import bots, inbox, telegram_bot
+from ..models import (AdminNotification, AppConfig, Application, Challenge, ChallengeEntry, CompanyTest, Job,
+                      Notification, Status, Submission, Task, TestAttempt, User)
+from . import bots, inbox, notify, telegram_bot
 from .career import signup_missing
 from .progress import TASHKENT
 
@@ -107,19 +107,25 @@ async def run_once(now: datetime) -> int:
         # the bell first: people without Telegram get the digest too
         session.add_all(Notification(user_id=m.user_id, kind="weekly_digest", text=m.text, link="/talaba") for m in messages)
         await session.commit()
+        readers = await notify.readers(session, [m.telegram_id for m in messages if m.telegram_id])
     if not tokens:
         return 0
-    markup = {"inline_keyboard": [[{"text": "Ilovani ochish", "web_app": {"url": settings.public_url}}]]}
-    sent = 0
+    sent, lost = 0, []
     for _, chat_id, text in messages:
-        if not chat_id:
+        r = readers.get(chat_id) if chat_id else None
+        if r is None or r.blocked or not notify.allows(r.prefs, "weekly_digest"):
             continue
         try:
-            await telegram_bot.send_any(tokens, "sendMessage", note, chat_id=chat_id, text=text, reply_markup=markup)
+            await telegram_bot.send_any(tokens, "sendMessage", note, chat_id=chat_id, text=text,
+                                        reply_markup=notify.markup_for(r.account_type, "", "/talaba", r.language))
             sent += 1
         except telegram_bot.BotError as exc:
             log.info("reminder not delivered: %s", exc)
+            if notify.unreachable(exc):
+                lost.append(chat_id)
         await asyncio.sleep(0.05)
+    async with SessionLocal() as session:
+        await notify.mark_unreachable(session, lost)
     log.info("weekly reminder sent to %s of %s students", sent, len(messages))
     return sent
 
@@ -143,7 +149,8 @@ async def nudge_unfinished(now: datetime) -> int:
             return 0
         since = max(datetime.fromisoformat(row.value["since"]), now - NUDGE_WINDOW)
         people = unfinished_signup((await session.execute(select(User).where(
-            User.account_type == "student", User.is_blocked.is_(False), User.onboarding_nudged_at.is_(None), User.telegram_id.isnot(None),
+            User.account_type == "student", User.is_blocked.is_(False), User.onboarding_nudged_at.is_(None),
+            User.telegram_id.isnot(None), User.tg_blocked_at.is_(None),
             User.created_at >= since, User.created_at <= now - NUDGE_AFTER))).scalars().all())
         for user in people:
             user.onboarding_nudged_at = now      # marked before sending: a crash never sends twice
@@ -229,13 +236,41 @@ async def remind_deadlines(now: datetime) -> int:
     return sent
 
 
+CLEANUP_KEY = "notif_cleanup"      # {"day": "2026-11-19"}: the cleanup runs once a day
+KEEP_READ = timedelta(days=180)    # read notices are kept half a year
+KEEP_UNREAD = timedelta(days=365)  # unread ones a year
+
+
+async def cleanup_old(now: datetime) -> int:
+    """Old notices go: the bell stays quick and the table small. Admin bells the same way."""
+    day = now.astimezone(TASHKENT).date().isoformat()
+    async with SessionLocal() as session:
+        row = await session.get(AppConfig, CLEANUP_KEY)
+        if row and row.value.get("day") == day:
+            return 0
+        if row:
+            row.value = {"day": day}
+        else:
+            session.add(AppConfig(key=CLEANUP_KEY, value={"day": day}))
+        gone = 0
+        for model in (Notification, AdminNotification):
+            result = await session.execute(delete(model).where(or_(
+                and_(model.read_at.isnot(None), model.created_at < now - KEEP_READ),
+                model.created_at < now - KEEP_UNREAD)))
+            gone += result.rowcount or 0
+        await session.commit()
+    if gone:
+        log.info("old notifications removed: %s", gone)
+    return gone
+
+
 async def loop() -> None:
     while True:
         try:
             await run_once(datetime.now(TASHKENT))
         except Exception:                        # a reminder must never take the API down
             log.exception("weekly reminder failed")
-        for job, name in ((remind_interviews, "interview"), (remind_deadlines, "deadline")):
+        for job, name in ((remind_interviews, "interview"), (remind_deadlines, "deadline"), (cleanup_old, "cleanup")):
             try:
                 await job(datetime.now(UTC))
             except Exception:

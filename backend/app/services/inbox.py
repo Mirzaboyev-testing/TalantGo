@@ -35,7 +35,7 @@ async def push(session: AsyncSession, user_ids: Iterable[int | None], kind: str,
         session.add_all(Notification(user_id=uid, kind=kind, text=text, link=link, params=params or {}) for uid, _ in rows)
         await session.commit()
         if telegram:
-            notify.send([tg for _, tg in rows if tg], text, path=link)
+            notify.send([tg for _, tg in rows if tg], text, path=link, kind=kind, params=params)
         return
 
     now = datetime.now(UTC)
@@ -62,4 +62,4 @@ async def push(session: AsyncSession, user_ids: Iterable[int | None], kind: str,
         await session.execute(delete(Notification).where(Notification.id.in_([n.id for n in earlier.values()])))
     await session.commit()
     if telegram:
-        notify.send(ping, text, path=link)
+        notify.send(ping, text, path=link, kind=kind, params=params)

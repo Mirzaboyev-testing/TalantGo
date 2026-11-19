@@ -20,7 +20,7 @@ API = "/api/v1"
 @pytest.fixture
 def pings(monkeypatch):
     sent: list[tuple[list[int], str]] = []
-    monkeypatch.setattr(notify, "send", lambda ids, text, button="", path="": sent.append(([i for i in ids if i], text)))
+    monkeypatch.setattr(notify, "send", lambda ids, text, **kw: sent.append(([i for i in ids if i], text)))
     return sent
 
 

@@ -7,6 +7,7 @@ import { message, toast } from "../../ui";
 import { PageHead } from "../employer/kit";
 import InviteCard from "../InviteCard";
 import LoginMethods from "../LoginMethods";
+import NotificationSettings from "../NotificationSettings";
 import PhoneField from "../PhoneField";
 
 /** "Sozlamalar" (student panel v2): account, sign-in, privacy, CV and language, apart from the profile itself. */
@@ -51,6 +52,7 @@ export default function StudentSettings({ me, onSaved, onLogout }: { me: Me; onS
             {sw(t("profile.visible.title"), t("profile.visible.hint"), me.visible_to_employers,
                 (v) => set({ visible_to_employers: v }, t(v ? "profile.visible.on" : "profile.visible.off")))}
           </div>
+          <NotificationSettings me={me} onChanged={onSaved} className="co-card" />
           <div className="co-card">
             <div className="co-card-head">
               <b className="row" style={{ gap: 8 }}><Icon name="file" size={18} />{t("s.profile.my_cv")}</b>
