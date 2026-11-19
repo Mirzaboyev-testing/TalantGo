@@ -66,11 +66,20 @@ export function Tabs<T extends string>({ value, onChange, items }: {
   // on a phone the row scrolls sideways: keep the open tab in view (e.g. the last one opened from a link)
   const row = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const box = row.current, on = box?.querySelector<HTMLElement>("button.on");
-    if (!box || !on) return;
-    const b = box.getBoundingClientRect(), r = on.getBoundingClientRect();
-    if (r.left < b.left || r.right > b.right) box.scrollBy({ left: r.left - b.left - 8, behavior: "smooth" });
-  }, [value]);
+    const box = row.current;
+    if (!box) return;
+    const reveal = () => {
+      const on = box.querySelector<HTMLElement>("button.on");
+      if (!on) return;
+      const b = box.getBoundingClientRect(), r = on.getBoundingClientRect();
+      if (r.left < b.left || r.right > b.right) box.scrollLeft += r.left - b.left - 8;
+    };
+    reveal();
+    // a count that loads later (e.g. team requests) widens a tab after the first look
+    const watch = new ResizeObserver(reveal);
+    Array.from(box.children).forEach((c) => watch.observe(c));
+    return () => watch.disconnect();
+  }, [value, items.length]);
   return (
     <div ref={row} className="u-tabs" role="tablist">
       {items.map((it) => (
