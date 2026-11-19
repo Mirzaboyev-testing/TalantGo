@@ -1,4 +1,6 @@
-// "Lenta": the posts feed of Hamjamiyat (docs/12-talaba-postlar.md, phase 1: text and up to 4 images).
+// "Postlar" (called "Lenta" until 2026-11-19): the posts of Hamjamiyat (docs/12-talaba-postlar.md, phase 1: text and
+// up to 4 images). ?yoz=<kind>&matn=<text> opens the composer prefilled (e.g. "share" on an accepted company task);
+// on a phone a round button opens the composer full screen.
 // Students, companies and universities post; everyone on the platform reads. A centred column with the composer,
 // scope chips and the posts (20 at a time, "Ko'proq yuklash"); on a computer a right column with ideas and rules.
 // A link /talaba/hamjamiyat?post=<id> (from a notification) shows that post on top with its comments open.
@@ -8,7 +10,7 @@ import { api, type FeedScope, type Me, type Post, type PostInput, type PostKind 
 import { t, useLang, type MsgKey } from "../../i18n";
 import { Icon } from "../../icons";
 import { navigate, useSearch } from "../../router";
-import { ErrorText, message } from "../../ui";
+import { ErrorText, Sheet, message } from "../../ui";
 import PostCard, { type PostPatch } from "./PostCard";
 import PostComposer, { type ComposerPreset } from "./PostComposer";
 import { KIND_ICON, KindChip, TimeAgo, identityOf, kindsFor } from "./feedKit";
@@ -119,7 +121,18 @@ export default function Feed({ me }: { me: Me }) {
     }
   }, [me]);
 
-  const startPost = (kind?: PostKind) => setPreset((p) => ({ kind, n: (p?.n ?? 0) + 1 }));
+  const startPost = (kind?: PostKind, text?: string) => setPreset((p) => ({ kind, text, n: (p?.n ?? 0) + 1 }));
+  const org = identityOf(me).org;
+  const [phoneComposer, setPhoneComposer] = useState(false);
+  const [composerKey, setComposerKey] = useState(0);          // a post from the phone sheet empties the page box too
+
+  // a "share" link from elsewhere in the app: /talaba/hamjamiyat?yoz=achievement&matn=...
+  useEffect(() => {
+    const kind = search.yoz as PostKind | undefined;
+    if (!kind && !search.matn) return;
+    startPost(kind && kindsFor(me).includes(kind) ? kind : undefined, search.matn);
+    navigate(window.location.pathname, { replace: true });
+  }, [search.yoz, search.matn]); // eslint-disable-line react-hooks/exhaustive-deps
   const shown = (items ?? []).filter((p) => p.id !== focused?.id);
   const card = (p: Post, extra: { highlight?: boolean; openComments?: boolean } = {}) => (
     <PostCard key={p.id} post={p} me={me} onPatch={patch} onReplace={replace} onRemove={remove} {...extra} />
@@ -140,7 +153,7 @@ export default function Feed({ me }: { me: Me }) {
           </section>
         )}
 
-        <PostComposer me={me} preset={preset} onCreate={create} />
+        <PostComposer key={composerKey} me={me} preset={preset} onCreate={create} />
 
         <div className="fd-scopes" role="group" aria-label={t("fd.title")}>
           {scopes.map((s) => (
@@ -157,7 +170,7 @@ export default function Feed({ me }: { me: Me }) {
           </div>
         )}
         {!items && !error && <><SkeletonPost /><SkeletonPost /><SkeletonPost /></>}
-        {items && shown.length === 0 && (
+        {items && items.length === 0 && (
           <div className="fd-empty">
             <span className="fd-empty-icon"><Icon name="megaphone" size={26} /></span>
             <b>{t(`fd.empty.${scope}` as MsgKey)}</b>
@@ -174,14 +187,25 @@ export default function Feed({ me }: { me: Me }) {
         {items && !next && shown.length > 3 && <div className="fd-end hint">{t("fd.end")}</div>}
       </div>
 
+      {/* phones: one tap to a full-screen composer, wherever the reader is in the list */}
+      <button type="button" className="fd-fab" aria-label={t("fd.fab")} onClick={() => setPhoneComposer(true)}>
+        <Icon name="edit" size={20} /><span>{t("fd.fab")}</span>
+      </button>
+      {phoneComposer && (
+        <Sheet onClose={() => setPhoneComposer(false)}>
+          <PostComposer me={me} autoFocus plain onCreate={async (input, media) => { await create(input, media); setPhoneComposer(false); setComposerKey((k) => k + 1); }} />
+        </Sheet>
+      )}
+
       <aside className="fd-side">
         <div className="co-card fd-tips">
           <b>{t("fd.side.title")}</b>
-          <p className="hint">{t("fd.side.sub")}</p>
+          <p className="hint">{t(org ? "fd.side.sub_org" : "fd.side.sub")}</p>
           {kindsFor(me).map((k) => (
             <button key={k} type="button" className={`fd-tip k-${k}`} onClick={() => startPost(k)}>
               <span className="fd-tip-icon"><Icon name={KIND_ICON[k]} size={17} /></span>
-              <span className="fd-tip-text"><b>{t(`fd.tip.${k}` as MsgKey)}</b><small>{t(`fd.tip.${k}_d` as MsgKey)}</small></span>
+              <span className="fd-tip-text"><b>{t(`fd.tip.${k}` as MsgKey)}</b>
+                <small>{t((org && k !== "news" ? `fd.tip.org.${k}_d` : `fd.tip.${k}_d`) as MsgKey)}</small></span>
             </button>
           ))}
         </div>

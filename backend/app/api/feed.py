@@ -62,11 +62,13 @@ async def _bump(session: Session, post_id: int, **delta: int) -> None:
 
 
 async def _push_one(session: Session, user_id: int, kind: str, text: str, post_id: int, params: dict) -> None:
-    """One notice; students get a link to the post in their Hamjamiyat, other panels open their own feed."""
+    """One notice with a link to the post in the recipient's own panel feed."""
     u = await session.get(User, user_id)
     if u is None:
         return
-    link = f"/talaba/hamjamiyat?post={post_id}" if u.account_type == "student" else ""
+    # each panel opens the post in its own posts section (company /korxona/postlar, university /universitet/postlar)
+    base = {"student": "/talaba/hamjamiyat", "employer": "/korxona/postlar", "university": "/universitet/postlar"}.get(u.account_type)
+    link = f"{base}?post={post_id}" if base else ""
     await inbox.push(session, [user_id], kind, text, link=link, params=params)
 
 

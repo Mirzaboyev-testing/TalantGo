@@ -3,17 +3,26 @@
 // and a one-line rule. A new post is handed to the feed, which shows it at once and swaps in the saved one.
 import { useEffect, useRef, useState } from "react";
 import { api, type Me, type Post, type PostInput, type PostKind, type PostVisibility } from "../../api";
-import { t, useLang } from "../../i18n";
+import { t, useLang, type MsgKey } from "../../i18n";
 import { Icon } from "../../icons";
 import { haptic } from "../../tg";
 import { Avatar, ErrorText, autoGrow, message, toast } from "../../ui";
 import { KIND_ICON, MAX_IMAGES, MAX_TEXT, identityOf, kindLabel, kindsFor } from "./feedKit";
 
 type Img = { key: string; url: string; id: number | null; local: boolean };
-export type ComposerPreset = { kind?: PostKind; n: number };
+export type ComposerPreset = { kind?: PostKind; text?: string; n: number };
 
-export default function PostComposer({ me, editing, preset, onCreate, onSaved, onCancel }: {
+// a student starts from a familiar first line instead of a blank box (2026-11-19: posting made quicker)
+const STARTERS: PostKind[] = ["experience", "project", "achievement", "question"];
+const draftKey = (userId: number) => `cf_post_draft_${userId}`;
+function readDraft(userId: number): { text: string; kind: PostKind } | null {
+  try { const raw = localStorage.getItem(draftKey(userId)); return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+
+export default function PostComposer({ me, editing, preset, onCreate, onSaved, onCancel, autoFocus, plain }: {
   me: Me;
+  autoFocus?: boolean;                     // opened from the phone button or a "share" link: write straight away
+  plain?: boolean;                         // already inside a card (the home page): no card of its own
   editing?: Post;
   preset?: ComposerPreset | null;          // a tip or the empty state asks to start a post (with a kind)
   onCreate?: (input: PostInput, media: { id: number; url: string }[]) => Promise<void>;
@@ -27,11 +36,13 @@ export default function PostComposer({ me, editing, preset, onCreate, onSaved, o
   const canLimit = me.account_type === "student" ? Boolean(me.university_ref)
     : me.account_type === "university" ? Boolean(me.staff_university ?? me.university_ref) : false;
 
-  const [text, setText] = useState(editing?.text ?? "");
-  const [kind, setKind] = useState<PostKind>(editing?.kind ?? kinds[0]);
+  // an unsent post survives a reload or a closed tab (text and kind; images are re-picked)
+  const [draft] = useState(() => (editing ? null : readDraft(me.id)));
+  const [text, setText] = useState(editing?.text ?? draft?.text ?? "");
+  const [kind, setKind] = useState<PostKind>(editing?.kind ?? (draft && kinds.includes(draft.kind) ? draft.kind : kinds[0]));
   const [vis, setVis] = useState<PostVisibility>(editing?.visibility ?? "all");
   const [imgs, setImgs] = useState<Img[]>(() => (editing?.media ?? []).map((m) => ({ key: `m${m.id}`, url: m.url, id: m.id, local: false })));
-  const [active, setActive] = useState(Boolean(editing));
+  const [active, setActive] = useState(Boolean(editing) || Boolean(autoFocus) || Boolean(draft?.text));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const area = useRef<HTMLTextAreaElement>(null);
@@ -39,10 +50,33 @@ export default function PostComposer({ me, editing, preset, onCreate, onSaved, o
   const card = useRef<HTMLDivElement>(null);
 
   useEffect(() => { if (editing && area.current) autoGrow(area.current); }, [editing]);
+  useEffect(() => { if (autoFocus) area.current?.focus(); }, [autoFocus]);
+  useEffect(() => {
+    if (editing) return;
+    try {
+      if (text.trim()) localStorage.setItem(draftKey(me.id), JSON.stringify({ text, kind }));
+      else localStorage.removeItem(draftKey(me.id));
+    } catch { /* storage blocked: the draft simply is not kept */ }
+  }, [text, kind, editing, me.id]);
+
+  function start(k: PostKind) {
+    setKind(k);
+    setActive(true);
+    const opening = t(`fd.start.${k}_t` as MsgKey);
+    setText((cur) => (cur.trim() ? cur : opening));
+    requestAnimationFrame(() => {
+      const el = area.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+      autoGrow(el);
+    });
+  }
   useEffect(() => {
     if (!preset) return;
     setActive(true);
     if (preset.kind && kinds.includes(preset.kind)) setKind(preset.kind);
+    if (preset.text) setText((cur) => (cur.trim() ? cur : preset.text!));
     card.current?.scrollIntoView({ block: "center" });
     area.current?.focus({ preventScroll: true });
   }, [preset?.n]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -106,6 +140,7 @@ export default function PostComposer({ me, editing, preset, onCreate, onSaved, o
     setBusy(true);
     try {
       await onCreate?.(input, imgs.map((i) => ({ id: i.id!, url: i.url })));
+      try { localStorage.removeItem(draftKey(me.id)); } catch { /* storage blocked */ }
       haptic("success");
       toast(t("fd.compose.posted"));
     } catch (e) {
@@ -116,8 +151,9 @@ export default function PostComposer({ me, editing, preset, onCreate, onSaved, o
   }
 
   const placeholder = who.org ? t("fd.compose.ph_org") : t("fd.compose.ph_student");
+  const showStarters = !editing && !who.org && !text.trim();
   return (
-    <div ref={card} className={`fd-composer ${editing ? "editing" : "co-card"} ${active ? "active" : ""}`}>
+    <div ref={card} className={`fd-composer ${editing ? "editing" : plain ? "plain" : "co-card"} ${active ? "active" : ""}`}>
       <div className="fd-compose-top">
         <Avatar name={who.name} url={who.photo} className={who.org ? "square" : ""} />
         <div className="fd-compose-field">
@@ -127,6 +163,16 @@ export default function PostComposer({ me, editing, preset, onCreate, onSaved, o
                     onChange={(e) => { setText(e.target.value); autoGrow(e.target); }} />
         </div>
       </div>
+
+      {showStarters && (
+        <div className="fd-starters" role="group" aria-label={t("fd.start.title")}>
+          {STARTERS.map((k) => (
+            <button key={k} type="button" className={`fd-starter k-${k}`} onClick={() => start(k)}>
+              <Icon name={KIND_ICON[k]} size={14} />{t(`fd.start.${k}` as MsgKey)}
+            </button>
+          ))}
+        </div>
+      )}
 
       {active && (
         <>

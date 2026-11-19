@@ -153,6 +153,12 @@ function TaskDetail({ id, onBack }: { id: number; onBack: () => void }) {
               <>
                 <div style={{ marginTop: 8 }}><EntryBadge c={c} /></div>
                 {e.score != null && <div className="st-score"><b>{e.score}</b>/100</div>}
+                {e.status === "accepted" && c.company && (
+                  <button className="btn small soft" style={{ marginTop: 8 }}
+                          onClick={() => navigate(`/talaba/hamjamiyat?yoz=achievement&matn=${encodeURIComponent(t("fd.share.task_t", { task: c.title, company: c.company! }))}`)}>
+                    <Icon name="megaphone" size={15} />{t("fd.share")}
+                  </button>
+                )}
                 {e.points_awarded > 0 && <div className="hint">+{e.points_awarded} {t("home.points")}</div>}
                 {e.comment && <blockquote className="co-quote">«{e.comment}»</blockquote>}
                 {e.proof_url && <button className="link-btn" onClick={() => openLink(e.proof_url)}><Icon name="link" size={14} /> {t("s.common.open_link")}</button>}

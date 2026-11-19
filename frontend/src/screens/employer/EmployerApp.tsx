@@ -43,7 +43,7 @@ const tabs = (n: EmployerCounters | null, chats = 0): ShellTab<Tab>[] => [
 ];
 // /korxona/<segment>
 const ROUTES: Record<Tab, string> = {
-  home: "", candidates: "nomzodlar", jobs: "vakansiyalar", students: "talabalar", messages: "xabarlar", tasks: "vazifalar", events: "tadbirlar", feed: "lenta",
+  home: "", candidates: "nomzodlar", jobs: "vakansiyalar", students: "talabalar", messages: "xabarlar", tasks: "vazifalar", events: "tadbirlar", feed: "postlar",
   universities: "universitetlar", tests: "testlar",
   groups: "guruhlar", profile: "profil",
 };
@@ -51,7 +51,8 @@ const JOB_BADGE: Record<string, string> = { pending: "pending", approved: "peer_
 
 export default function EmployerApp({ me, onChanged, onLogout }: { me: Me; onChanged: (m: Me) => void; onLogout: () => void }) {
   useLang();
-  const [tab, setTab] = useRouteTab<Tab>("/korxona", ROUTES, "home");
+  // "lenta" was the posts section's address until 2026-11-19: old links still open it
+  const [tab, setTab] = useRouteTab<Tab>("/korxona", ROUTES, "home", { lenta: "feed" });
   const search = useSearch();
   const [attempt, setAttempt] = useState<number | null>(null);
   const [counters, setCounters] = useState<EmployerCounters | null>(null);

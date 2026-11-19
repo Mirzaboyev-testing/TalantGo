@@ -8,6 +8,7 @@ import { PublicJobCard } from "../public/PublicJobs";
 import { Avatar, ErrorText, message } from "../ui";
 import { StatTile } from "./employer/kit";
 import { BRAND } from "../brand";
+import PostComposer from "./student/PostComposer";
 
 const go = (path: string) => (e?: React.MouseEvent) => { e?.preventDefault(); navigate(path); };
 export const missingLabel = (m: string) => tMaybe(`st.missing.${m}`) ?? tMaybe(`s.career.missing.${m}`) ?? m;
@@ -83,6 +84,14 @@ export default function StudentHome({ me }: { me: Me }) {
 
       <div className="co-dash-grid">
         <div className="co-col">
+          {/* posting is one step from the home page: a short line about today, no need to open Hamjamiyat */}
+          <div className="co-card st-post-quick">
+            <div className="co-card-head">
+              <div><b>{t("fd.home.title")}</b><p className="hint">{t("fd.home.sub")}</p></div>
+              <a href="/talaba/hamjamiyat" onClick={go("/talaba/hamjamiyat")}>{t("fd.home.open")}</a>
+            </div>
+            <PostComposer me={me} plain onCreate={async (input) => { await api.feed.create(input); }} />
+          </div>
           {step && (
             <div className="co-card st-next">
               <span className="st-next-icon"><Icon name={step.icon} size={22} /></span>

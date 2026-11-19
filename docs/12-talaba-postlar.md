@@ -1,7 +1,21 @@
 # Talaba postlari (lenta): tahlil va ish prompti
 
-Sana: 2026-11-19. Holat: **taklif, foydalanuvchi qarorini kutmoqda**. G'oya foydalanuvchidan: talaba o'zi haqida post
+Sana: 2026-11-19. Holat: **1-bosqich qurildi (2026-11-19)**, 2-bosqich keyin. G'oya foydalanuvchidan: talaba o'zi haqida post
 joylasin (rasm, video, amaliyotdagi jarayon), Instagram yoki LinkedIn'dagidek repost va izohlar bo'lsin.
+
+## 0. Qarorlar va natija (2026-11-19)
+
+| Savol | Qaror |
+|---|---|
+| Boshlaymizmi | Ha, 1-bosqich |
+| Kim yozadi | Talaba, korxona, universitet; asosiy e'tibor talabalarga |
+| Kim ko'radi | Platformadagi hamma (talaba, tasdiqlangan korxona, universitet xodimi) |
+| Video, moderatsiya | Video keyin; post darhol chiqadi, 3 ta shikoyatdan keyin yashiriladi, admin hal qiladi |
+
+Qurilgani: `api/feed.py`, `services/feed.py`, `tests/test_feed.py` (9 test); `screens/student/Feed.tsx`, `PostCard`,
+`PostComposer`, `PostComments`, `feedKit`, `feed.css`, `locales/parts/feed.ts`, `screens/admin/PostsAdmin.tsx`.
+Talaba panelida «Hamjamiyat → Lenta» birinchi yorliq, profilda «Faoliyat». Admin: «Postlar» (ruxsat: complaints).
+Korxona va universitet panellariga `<Feed me={me} />` ni ularning sessiyalari ulaydi.
 
 ## 1. Kerakmi? (loyiha menejeri nigohi)
 

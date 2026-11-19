@@ -277,3 +277,33 @@ label.fd-reason.on { border-color: var(--brand); background: var(--brand-soft); 
   .fd-thumb-x { width: 34px; height: 34px; }
   .fd-replying button { width: 40px; height: 40px; }
 }
+
+/* a phone: the resting composer is one clean line (the long hint no longer wraps into a scrolled box) */
+@media (max-width: 640px) {
+  .fd-composer:not(.active) textarea { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .fd-composer:not(.active) textarea::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
+
+/* ------------------------------------------------------------------ quicker posting (2026-11-19) */
+/* starter lines: a tap fills the first words and the kind, so a student never faces a blank box */
+.fd-starters { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: -2px 0 0; padding-bottom: 2px; }
+.fd-starters::-webkit-scrollbar { display: none; }
+.fd-starter { flex: none; display: inline-flex; align-items: center; gap: 6px; border: 1px dashed var(--fd-k, var(--line)); background: var(--fd-k-bg, var(--bg2));
+  color: var(--fd-k-ink, var(--text)); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; min-height: 34px; }
+.fd-starter:hover { border-style: solid; }
+@media (pointer: coarse) { .fd-starter { min-height: 40px; } }
+/* inside another card (home page) or a sheet: no card of its own */
+.fd-composer.plain { padding: 0; background: none; border: 0; box-shadow: none; }
+/* phones: a round "write" button above the bottom bar opens the composer full screen */
+.fd-fab { display: none; }
+@media (max-width: 899px) {
+  .fd-fab { display: inline-flex; align-items: center; gap: 8px; position: fixed; z-index: 6; border: 0; cursor: pointer;
+    right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+    background: var(--brand); color: #fff; font: inherit; font-weight: 700; font-size: 14.5px; padding: 13px 18px; border-radius: 999px;
+    box-shadow: 0 14px 28px -12px rgba(22, 163, 74, .8); }
+  .fd-fab:active { transform: scale(.97); }
+}
+@media (max-width: 380px) { .fd-fab span { display: none; } .fd-fab { padding: 15px; } }
+/* the home page card */
+.st-post-quick .fd-composer { margin-top: 8px; }
+.st-post-quick .co-card-head p { margin: 2px 0 0; }

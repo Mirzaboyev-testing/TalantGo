@@ -220,7 +220,7 @@ async def test_comments_replies_notifications_and_deleting(client, make_user):
     hp = await post(client, hr, "Amaliyot e'loni", kind="news")
     await client.post(f"{API}/posts/{hp['id']}/comments", json={"text": "Qiziqaman"}, headers=b["headers"])
     hr_note = (await bell(client, hr))[0]
-    assert hr_note["kind"] == "post_comment" and hr_note["link"] == ""
+    assert hr_note["kind"] == "post_comment" and hr_note["link"].startswith("/korxona/postlar?post=")
 
     listed = (await client.get(url, headers=a["headers"])).json()
     assert [x["id"] for x in listed] == [c1["id"], c2["id"], c3["id"], h1["id"]]
