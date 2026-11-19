@@ -5,8 +5,24 @@ import { t, useLang } from "./i18n";
 import { workStatusLabel } from "./labels";
 import { insideTelegram, openLink } from "./tg";
 
-export function Avatar({ name, url }: { name: string; url?: string | null }) {
-  return url ? <img className="avatar" src={url} alt="" /> : <div className="avatar">{name.slice(0, 1).toUpperCase()}</div>;
+/** Up to two capital letters from a name ("Azizbek O'rinboyev" → "AO"), for avatars without a photo. */
+export function initials(name: string): string {
+  return name.split(/\s+/).map((w) => w.match(/\p{L}|\p{N}/u)?.[0] ?? "").filter(Boolean).slice(0, 2).join("").toUpperCase() || "?";
+}
+
+// soft background hues for initials avatars; the name picks one, so a person keeps the same colour everywhere
+const TONES = [145, 205, 28, 265, 340, 178, 48, 228, 302, 8, 95, 248];
+/** Background and text colour for a name's initials avatar (same name, same colour, in every panel). */
+export function nameTone(name: string): { background: string; color: string } {
+  let h = 0;
+  for (const ch of name.trim().toLowerCase()) h = (h * 31 + (ch.codePointAt(0) ?? 0)) >>> 0;
+  const hue = TONES[h % TONES.length];
+  return { background: `hsl(${hue} 72% 91%)`, color: `hsl(${hue} 62% 27%)` };
+}
+
+export function Avatar({ name, url, className = "" }: { name: string; url?: string | null; className?: string }) {
+  return url ? <img className={`avatar ${className}`} src={url} alt="" />
+    : <div className={`avatar ${className}`} style={nameTone(name)} aria-hidden="true">{initials(name)}</div>;
 }
 
 export function StatusBadge({ status }: { status: Status | null }) {

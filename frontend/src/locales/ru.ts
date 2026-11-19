@@ -5,6 +5,8 @@ import { partner } from "./parts/partner";
 import { student } from "./parts/student";
 import { student2 } from "./parts/student2";
 import { site } from "./parts/site";
+import { account } from "./parts/account";
+import { feed } from "./parts/feed";
 
 // Russian. Machine-assisted: a native speaker should review before a public launch.
 export const ru: Record<MsgKey, string> = {
@@ -14,6 +16,8 @@ export const ru: Record<MsgKey, string> = {
   ...company.ru,
   ...university.ru,
   ...site.ru,
+  ...account.ru,
+  ...feed.ru,
   "common.loading": "Загрузка…",
   "common.close": "Закрыть",
   "common.save": "Сохранить",
@@ -39,7 +43,7 @@ export const ru: Record<MsgKey, string> = {
   "notif.earlier": "Ранее",
   "notif.empty_sub": "Здесь появятся новости об откликах, сообщениях, подтверждениях и мероприятиях.",
   "notif.application_status.shortlisted": "«{job}» ({company}): ваша заявка прошла на следующий этап.",
-  "notif.application_status.interview": "«{job}» ({company}): вас пригласили на собеседование.",
+  "notif.application_status.interview": "«{job}» ({company}): вас пригласили на собеседование {when}",
   "notif.application_status.offer": "«{job}» ({company}): вам сделали предложение о работе.",
   "notif.application_status.hired": "Поздравляем! «{job}» ({company}): вас приняли на работу.",
   "notif.application_status.rejected": "«{job}» ({company}): на этот раз заявка не принята.",
@@ -63,8 +67,9 @@ export const ru: Record<MsgKey, string> = {
   "notif.test_new": "{company} опубликовала новый тест: «{test}».",
   "notif.task_new": "Новое задание: «{task}» ({points} баллов).",
   "notif.challenge_new": "Новый челлендж: «{challenge}».",
-  "notif.challenge_result.ok": "Ваша работа в челлендже «{challenge}» принята.",
-  "notif.challenge_result.no": "Ваша работа в челлендже «{challenge}» не принята.",
+  "notif.challenge_result.ok": "Ваша работа по «{challenge}» принята: +{points} баллов.",
+  "notif.challenge_result.no": "Ваша работа по «{challenge}» не принята. Комментарий: {comment}",
+  "notif.task_resubmitted": "«{task}»: {student} исправил(а) работу и отправил(а) снова.",
   "notif.question_new": "Новый вопрос по «{task}»: {student}.",
   "notif.question_answered": "Ментор ответил на ваш вопрос по «{task}».",
   "notif.work_result.peer_verified": "Работа «{task}» подтверждена: +{points} баллов.",
@@ -482,6 +487,7 @@ export const ru: Record<MsgKey, string> = {
   "notif.outcome_review.ok": "Университет подтвердил вашу работу в «{company}».",
   "notif.outcome_review.no": "Университет не подтвердил запись о «{company}».",
   "notif.job_recommended": "{university} рекомендует: «{job}» ({company}).",
+  "notif.job_recommended_company": "{university} рекомендовал(а) вашу вакансию «{job}» подтверждённым студентам: {count}.",
 
   "emp.interned": "На стажировке",
   "emp.interned_hint": "{n} студентов на подтверждённой стажировке",

@@ -206,16 +206,19 @@ async def admin_site(_: AdminActor, session: Session) -> dict:
 
 @admin_router.get("/choices")
 async def choices(_: AdminActor, session: Session, kind: Literal["company", "university"], q: str = "") -> list[dict]:
-    """Approved companies or active universities to pick for the strip (their logo comes along)."""
+    """Approved companies or active universities to pick for the strip (their logo comes along). Those that
+    switched on "show us as a partner on the site" come first and are marked, so the admin asks the rest first."""
     like = f"%{q.strip()[:80]}%"
     if kind == "company":
         rows = await session.scalars(select(Company).where(Company.status == "approved", Company.name.ilike(like))
-                                     .order_by(Company.logo_file_id.is_(None), Company.name).limit(20))
-        return [{"id": c.id, "name": c.name, "logo_url": files.logo_url(c.id, c.logo_file_id, c.status)} for c in rows]
+                                     .order_by(Company.show_as_partner.desc(), Company.logo_file_id.is_(None), Company.name).limit(20))
+        return [{"id": c.id, "name": c.name, "logo_url": files.logo_url(c.id, c.logo_file_id, c.status),
+                 "consented": c.show_as_partner} for c in rows]
     rows = await session.scalars(select(University).where(
         University.is_active.is_(True), or_(University.name.ilike(like), University.short_name.ilike(like)))
-        .order_by(University.logo_file_id.is_(None), University.name).limit(20))
-    return [{"id": u.id, "name": u.name, "short": u.short_name, "logo_url": university_logo_url(u)} for u in rows]
+        .order_by(University.show_as_partner.desc(), University.logo_file_id.is_(None), University.name).limit(20))
+    return [{"id": u.id, "name": u.name, "short": u.short_name, "logo_url": university_logo_url(u),
+             "consented": u.show_as_partner} for u in rows]
 
 
 @admin_router.post("/media")

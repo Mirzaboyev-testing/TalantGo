@@ -5,12 +5,12 @@ import { kindLabel, modeLabel, salaryText } from "../format";
 import { formatDateTime, t, useLang } from "../i18n";
 import { ACTIVE_STATES, statusBadge, statusLabel } from "../pipeline";
 import { ask, haptic } from "../tg";
-import { ErrorText, Sheet, message } from "../ui";
+import { Avatar, ErrorText, Sheet, message, toast } from "../ui";
 import StudentTests from "./StudentTests";
 import { PageHead } from "./employer/kit";
 import { Icon } from "../icons";
-import { navigate } from "../router";
-import { fieldLabel } from "./student/StudentSignup";
+import { navigate, useSearch } from "../router";
+import { FIELD_ICONS, fieldLabel } from "./student/StudentSignup";
 
 const KINDS: (JobKind | "")[] = ["", "internship", "part_time", "junior", "project"];
 const inStage = (a: MyApplication, k: "all" | "active" | "interview" | "closed") =>
@@ -32,15 +32,21 @@ export default function JobsScreen({ me, onOpenProfile, initialView = "jobs", vi
   const [sort, setSort] = useState<"match" | "new">("match");
   const [paidOnly, setPaidOnly] = useState(false);
   const [practiceOnly, setPracticeOnly] = useState(false);
-  const [q, setQ] = useState("");
+  // links from the home page and notifications: ?q=<search>, ?ish=<job id>, ?bosqich=interview
+  const search = useSearch();
+  const [q, setQ] = useState(search.q ?? "");
   const [catalog, setCatalog] = useState<Catalog | null>(null);
-  const [stage, setStage] = useState<"all" | "active" | "interview" | "closed">("all");
+  const [stage, setStage] = useState<"all" | "active" | "interview" | "closed">(
+    search.bosqich === "interview" || search.bosqich === "active" || search.bosqich === "closed" ? search.bosqich : "all");
   const [showFilters, setShowFilters] = useState(false);
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [mine, setMine] = useState<MyApplication[] | null>(null);
   const [contacts, setContacts] = useState<StudentContact[]>([]);
   const [open, setOpen] = useState<Job | null>(null);
   const [error, setError] = useState("");
+  useEffect(() => { if (search.ish) api.job(Number(search.ish)).then(setOpen, (e) => setError(message(e))); }, [search.ish]);
+  // a job opened from a link drops ?ish= when closed, so a reload does not open it again
+  const closeJob = () => { setOpen(null); if (search.ish) navigate(window.location.pathname, { replace: true }); };
 
   const loadJobs = useCallback(() => {
     const params: Record<string, string> = {};
@@ -200,8 +206,8 @@ export default function JobsScreen({ me, onOpenProfile, initialView = "jobs", vi
         </>
       )}
 
-      {open && <JobSheet job={open} canApply={!notReady} onClose={() => setOpen(null)} onApplied={() => {
-        setOpen(null);
+      {open && <JobSheet job={open} canApply={!notReady} myFields={me.job_fields} catalog={catalog} onClose={closeJob} onApplied={() => {
+        closeJob();
         if (view === "mine") api.myApplications().then(setMine, (e) => setError(message(e)));
         else loadJobs();
       }} />}
@@ -258,7 +264,7 @@ function JobCard({ job, onOpen, onSave }: { job: Job; onOpen: () => void; onSave
   return (
     <div className="card tap st-jobcard" onClick={onOpen}>
       <div className="row" style={{ alignItems: "flex-start", gap: 10 }}>
-        <span className="avatar company-mark">{job.company_name.slice(0, 1).toUpperCase()}</span>
+        <Avatar name={job.company_name} url={job.company_logo_url} className="company-mark" />
         <div className="grow" style={{ minWidth: 0 }}>
           <b className="job-title">{job.title}</b>
           <div className="job-salary">{salaryText(job)}</div>
@@ -286,7 +292,9 @@ function JobCard({ job, onOpen, onSave }: { job: Job; onOpen: () => void; onSave
   );
 }
 
-function JobSheet({ job, canApply, onClose, onApplied }: { job: Job; canApply: boolean; onClose: () => void; onApplied: () => void }) {
+function JobSheet({ job, canApply, myFields, catalog, onClose, onApplied }: {
+  job: Job; canApply: boolean; myFields: string[]; catalog: Catalog | null; onClose: () => void; onApplied: () => void;
+}) {
   useLang();
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -297,6 +305,7 @@ function JobSheet({ job, canApply, onClose, onApplied }: { job: Job; canApply: b
     try {
       await api.apply(job.id, note.trim());
       haptic("success");
+      toast(t("st.jobs.applied_toast"));
       onApplied();
     } catch (e) {
       haptic("error");
@@ -307,15 +316,33 @@ function JobSheet({ job, canApply, onClose, onApplied }: { job: Job; canApply: b
 
   return (
     <Sheet onClose={onClose}>
-      <span className="hint">{job.company_name}</span>
+      <div className="st-sheet-company">
+        <Avatar name={job.company_name} url={job.company_logo_url} className="company-mark" />
+        <div className="grow" style={{ minWidth: 0 }}>
+          <b className="ellipsis" style={{ display: "block" }}>{job.company_name}</b>
+          {job.company_industry && <span className="hint">{job.company_industry}</span>}
+        </div>
+        <button className="btn small ghost" style={{ width: "auto" }} onClick={() => navigate(`/korxonalar/${job.company_id}`)}>
+          {t("st.jobs.company_page")}<Icon name="arrow" size={15} />
+        </button>
+      </div>
       <h1>{job.title}</h1>
       <div className="chips">
         <span className="chip">{kindLabel(job.kind)}</span>
         <span className="chip">{modeLabel(job.work_mode)}{job.city ? ` · ${job.city}` : ""}</span>
         <span className="chip">{salaryText(job)}</span>
         {job.hours_per_week && <span className="chip">{t("job.hours", { n: job.hours_per_week })}</span>}
-        {job.deadline && <span className="chip">{t("s.jobs.deadline", { date: job.deadline })}</span>}
+        {job.deadline && <span className="chip"><Icon name="calendar" size={13} /> {t("st.jobs.deadline", { date: formatDateTime(job.deadline, false) })}</span>}
       </div>
+      {(job.job_fields ?? []).length > 0 && (
+        <div className="st-sheet-fields">
+          {(job.job_fields ?? []).map((k) => (
+            <span key={k} className={`co-tag ${myFields.includes(k) ? "match" : ""}`} title={myFields.includes(k) ? t("st.jobs.your_field") : undefined}>
+              <Icon name={FIELD_ICONS[k] ?? "spark"} size={14} />{fieldLabel(k, catalog)}{myFields.includes(k) && <Icon name="tick" size={13} />}
+            </span>
+          ))}
+        </div>
+      )}
       {job.counts_as_practice && <p className="notice">{t("s.jobs.practice_notice")}</p>}
       {!job.is_paid && <p className="hint">{t("s.jobs.unpaid_hint")}</p>}
       <div className="card">
@@ -333,6 +360,8 @@ function JobSheet({ job, canApply, onClose, onApplied }: { job: Job; canApply: b
       )}
       {job.applied && job.application_status !== "withdrawn" ? (
         <p className="notice">{t("app.mine.applied", { status: statusLabel(job.application_status ?? "new") })}</p>
+      ) : job.status === "closed" ? (
+        <p className="notice">{t("st.jobs.closed")}</p>
       ) : (
         <div className="card">
           <b>{t("job.apply")}</b>

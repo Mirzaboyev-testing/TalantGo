@@ -6,8 +6,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from ..core import ratelimit
-from ..models import AdminAccount
-from ..services import admin_password
+from ..models import AdminAccount, PasswordRequest
+from ..services import admin_inbox, admin_password
 from ..services import admin_access
 from ..services.admin_accounts import (check_password, hash_password, issue_token, normalize_email, owners_count,
                                        touch_login)
@@ -62,6 +62,9 @@ async def register(body: RegisterIn, session: Session) -> dict:
     session.add(AdminAccount(email=email, name=body.name.strip(), password_hash=hash_password(body.password),
                              role="admin", status="pending"))
     await session.commit()
+    await admin_inbox.push(session, None, "admin_account_new",
+                           f"Admin saytiga kirish so'rovi: {body.name.strip()} ({email}). «Adminlar» bo'limida tasdiqlang.",
+                           "accounts")
     return {"status": "pending"}
 
 
@@ -79,6 +82,29 @@ async def login(body: LoginIn, request: Request, session: Session) -> dict:
         raise HTTPException(403, "Hisobingiz o'chirilgan")
     await touch_login(session, account)
     return {"token": issue_token(account)}
+
+
+class ForgotIn(BaseModel):
+    email: str = Field(max_length=254)
+
+
+@router.post("/password-request")
+async def password_request(body: ForgotIn, request: Request, session: Session) -> dict:
+    """An admin who forgot the password asks the owner, who resets it in "Adminlar". Same answer either way.
+    The owner's own password is reset on the server: `python -m app.manage reset-admin-password <email>`."""
+    ratelimit.limit(f"admin-pw:{ratelimit.client_ip(request)}", 5, 60 * 60)
+    account = (await session.execute(select(AdminAccount).where(
+        AdminAccount.email == body.email.strip().lower()))).scalar_one_or_none()
+    if account is not None and account.status == "active" and account.role != "owner":
+        if not await session.scalar(select(PasswordRequest.id).where(
+                PasswordRequest.admin_account_id == account.id, PasswordRequest.status == "open")):
+            session.add(PasswordRequest(kind="admin", email=account.email, full_name=account.name,
+                                        admin_account_id=account.id))
+            await session.commit()
+            await admin_inbox.push(session, None, "password_request",
+                                   f"Admin parolini tiklashni so'radi: {account.name} ({account.email}). "
+                                   "«Adminlar» bo'limida «Parolni tiklash» ni bosing.", "accounts")
+    return {"ok": True}
 
 
 @router.get("/me")

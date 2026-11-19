@@ -181,12 +181,12 @@ async def test_messages_reach_only_the_chosen_students(client, make_user):
     c = await make_student(client, make_user, "Charos Olimova")
     await client.patch(f"{API}/me", json={"faculty": "Moliya"}, headers=c["headers"])
     h = staff["headers"]
-    assert (await client.post(f"{API}/university/announcements/preview", json={"faculty": "Moliya"}, headers=h)).json() == {"recipients": 1}
+    assert (await client.post(f"{API}/university/announcements/preview", json={"faculty": "Moliya"}, headers=h)).json() == {"recipients": 1, "companies": 0}
     r = await client.post(f"{API}/university/announcements", json={
         "title": "Karyera kuni", "text": "Ertaga soat 10:00 da katta zalda", "audience": {"faculty": "Moliya"}}, headers=h)
     assert r.status_code == 201 and r.json()["recipients"] == 1
     assert (await client.post(f"{API}/university/announcements", json={"title": "Tashqi", "text": "Havola tekshiruvi",
-                                                                       "link": "https://evil.example"}, headers=h)).status_code == 422
+                                                                       "link": "http://evil.example"}, headers=h)).status_code == 422
     feed_c = (await client.get(f"{API}/me/university/feed", headers=c["headers"])).json()
     feed_a = (await client.get(f"{API}/me/university/feed", headers=a["headers"])).json()
     assert [x["title"] for x in feed_c["announcements"]] == ["Karyera kuni"] and feed_a["announcements"] == []
@@ -315,3 +315,119 @@ async def test_company_event_is_not_reachable_through_the_university_signup(clie
         event_id = e.id
     r = await client.post(f"{API}/me/university/events/{event_id}/register", headers=loner["headers"])
     assert r.status_code == 404
+
+
+# --------------------------------------------------------------------------- announcements with photos (2026-11-19)
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
+
+
+async def _photo(client, headers, name="rasm.png") -> int:
+    return (await client.post(f"{API}/uploads", files={"file": (name, PNG)}, headers=headers)).json()["id"]
+
+
+async def _partner(client, staff, hr) -> None:
+    uni = await uni_id("TDIU")
+    p = (await client.post(f"{API}/employer/universities/{uni}/partnership", json={"message": ""}, headers=hr["headers"])).json()
+    r = await client.post(f"{API}/university/partners/{p['id']}/decide", json={"accept": True}, headers=staff["headers"])
+    assert r.status_code == 200, r.text
+
+
+async def test_announcements_with_photos_reach_students_partner_companies_and_the_public_page(client, make_user):
+    hr, _ = await live_job(client, make_user)
+    stranger_hr, _ = await live_job(client, make_user, stir="309876543", name="HR Begona")
+    staff = await approved_staff(client, make_user)
+    await _partner(client, staff, hr)
+    a = await make_student(client, make_user, "Ali Valiyev")
+    c = await make_student(client, make_user, "Charos Olimova")
+    await client.patch(f"{API}/me", json={"faculty": "Moliya"}, headers=c["headers"])
+    h = staff["headers"]
+    p1, p2 = await _photo(client, h), await _photo(client, h, "ikki.webp")
+    foreign = await _photo(client, a["headers"])
+    base = {"title": "Karyera kuni", "text": "25-noyabr soat 10:00 katta zalda"}
+
+    # validation: a channel is required, someone else's file, seven photos, a plain http link
+    assert (await client.post(f"{API}/university/announcements", json={**base, "channels": []}, headers=h)).status_code == 422
+    r = await client.post(f"{API}/university/announcements", json={**base, "photo_ids": [foreign]}, headers=h)
+    assert r.status_code == 422 and "Rasm" in r.text
+    assert (await client.post(f"{API}/university/announcements", json={**base, "photo_ids": [p1] * 7}, headers=h)).status_code == 422
+    assert (await client.post(f"{API}/university/announcements", json={**base, "link": "http://forms.example/x"}, headers=h)).status_code == 422
+
+    preview = await client.post(f"{API}/university/announcements/preview", json={"faculty": "Moliya", "channels": ["students", "companies"]}, headers=h)
+    assert preview.json() == {"recipients": 1, "companies": 1}
+
+    # 1) students of one faculty, with photos and an outside registration form
+    r = await client.post(f"{API}/university/announcements", json={
+        **base, "audience": {"faculty": "Moliya"}, "channels": ["students"], "category": "event", "photo_ids": [p1, p2],
+        "link": "https://forms.example/karyera"}, headers=h)
+    assert r.status_code == 201, r.text
+    to_students = r.json()
+    assert to_students["recipients"] == 1 and to_students["company_recipients"] == 0
+    assert [x["name"] for x in to_students["photos"]] == ["rasm.png", "ikki.webp"] and to_students["category"] == "event"
+    assert (await client.get(to_students["photos"][0]["url"])).status_code == 200
+    # 2) partner companies only
+    to_companies = (await client.post(f"{API}/university/announcements", json={
+        "title": "Hamkorlarga: yarmarka", "text": "Stend uchun 20-noyabrgacha yozing", "channels": ["companies"]}, headers=h)).json()
+    assert to_companies["company_recipients"] == 1 and to_companies["recipients"] == 0
+    # 3) the public page only
+    public = (await client.post(f"{API}/university/announcements", json={
+        "title": "Grant natijalari", "text": "Ro'yxat universitet saytida", "channels": ["public"], "photo_ids": [p2]}, headers=h)).json()
+
+    feed = lambda who: client.get(f"{API}/me/university/feed", headers=who["headers"])  # noqa: E731
+    titles = lambda rows: [x["title"] for x in rows]  # noqa: E731
+    assert titles((await feed(c)).json()["announcements"]) == ["Grant natijalari", "Karyera kuni"]
+    assert titles((await feed(a)).json()["announcements"]) == ["Grant natijalari"]          # another faculty
+    assert (await feed(c)).json()["announcements"][1]["photos"][0]["url"]
+
+    partner_news = (await client.get(f"{API}/employer/university-news", headers=hr["headers"])).json()
+    assert titles(partner_news) == ["Grant natijalari", "Hamkorlarga: yarmarka"] and partner_news[1]["partner"] is True
+    assert titles((await client.get(f"{API}/employer/university-news", headers=stranger_hr["headers"])).json()) == ["Grant natijalari"]
+    notes = (await client.get(f"{API}/me/notifications", headers=hr["headers"])).json()["items"]
+    tdiu = await uni_id("TDIU")
+    assert any(n["kind"] == "university_announcement" and n["link"] == f"/korxona/universitetlar?u={tdiu}" for n in notes)
+    detail = (await client.get(f"{API}/employer/universities/{await uni_id('TDIU')}", headers=hr["headers"])).json()
+    assert titles(detail["news"]) == ["Grant natijalari", "Hamkorlarga: yarmarka"]
+
+    page = (await client.get(f"{API}/public/universities/{tdiu}")).json()
+    assert titles(page["news"]) == ["Grant natijalari"] and "cooperation" in page and "logo_url" in page
+
+    # deleting takes it off every page; only once, and only by the university's own staff
+    other = await approved_staff(client, make_user, short="TATU", name="Boshqa xodim")
+    assert (await client.delete(f"{API}/university/announcements/{to_students['id']}", headers=other["headers"])).status_code == 404
+    assert (await client.delete(f"{API}/university/announcements/{to_students['id']}", headers=h)).json() == {"deleted": True}
+    assert (await client.delete(f"{API}/university/announcements/{to_students['id']}", headers=h)).status_code == 404
+    assert titles((await feed(c)).json()["announcements"]) == ["Grant natijalari"]
+    assert titles((await client.get(f"{API}/university/announcements", headers=h)).json()) == ["Grant natijalari", "Hamkorlarga: yarmarka"]
+    assert public["channels"] == ["public"]
+
+    # a university without partners cannot send to companies only
+    r = await client.post(f"{API}/university/announcements", json={**base, "channels": ["companies"]}, headers=other["headers"])
+    assert r.status_code == 422 and "hamkor" in r.text
+
+
+async def test_the_company_hears_when_a_university_recommends_its_vacancy(client, make_user):
+    hr, job = await live_job(client, make_user)
+    staff = await approved_staff(client, make_user)
+    s = await make_student(client, make_user, "Ali Valiyev")
+    async with SessionLocal() as db:
+        (await db.get(User, s["id"])).verification = "verified"
+        await db.commit()
+    r = await client.post(f"{API}/university/jobs/{job['id']}/recommend", json={"note": ""}, headers=staff["headers"])
+    assert r.json()["students"] == 1
+    notes = (await client.get(f"{API}/me/notifications", headers=hr["headers"])).json()["items"]
+    mine = [n for n in notes if n["kind"] == "job_recommended_company"]
+    assert len(mine) == 1 and mine[0]["params"]["count"] == 1 and mine[0]["link"] == "/korxona/vakansiyalar"
+
+
+async def test_the_company_sees_who_recommended_its_vacancy_and_a_university_can_take_it_back(client, make_user):
+    hr, job = await live_job(client, make_user)
+    staff = await approved_staff(client, make_user)
+    await client.post(f"{API}/university/jobs/{job['id']}/recommend", json={"note": "Moliya talabalari uchun"}, headers=staff["headers"])
+    mine = (await client.get(f"{API}/employer/jobs", headers=hr["headers"])).json()
+    assert [(r["short_name"], r["note"]) for r in mine[0]["recommended_by"]] == [("TDIU", "Moliya talabalari uchun")]
+    other = await approved_staff(client, make_user, short="TATU", name="Boshqa xodim")
+    assert (await client.delete(f"{API}/university/jobs/{job['id']}/recommend", headers=other["headers"])).status_code == 404
+    assert (await client.delete(f"{API}/university/jobs/{job['id']}/recommend", headers=staff["headers"])).json() == {"recommended": False}
+    assert (await client.get(f"{API}/employer/jobs", headers=hr["headers"])).json()[0]["recommended_by"] == []
+    opp = (await client.get(f"{API}/university/opportunities", headers=staff["headers"])).json()
+    assert next(j for j in opp if j["id"] == job["id"])["recommended"] is False

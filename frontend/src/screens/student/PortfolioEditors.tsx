@@ -197,16 +197,20 @@ export function ExperienceEditor({ item, onSaved, onClose }: { item?: MyOutcome;
   const [error, setError] = useState("");
   useEffect(() => { api.public.companies({ limit: "100" }).then((r) => setCompanies(r.items), () => {}); }, []);
   const locked = Boolean(item?.confirmed);
+  // a self-entered workplace can be renamed and its kind fixed; one tied to a platform company keeps that company
+  const nameEditable = Boolean(item && !locked && !item.company_id);
 
   async function save() {
     const name = f.company === OTHER ? f.company_name.trim() : "";
     if (!item && !(f.company && f.company !== OTHER) && name.length < 2) { setError(t("st.pf.company_err")); return; }
+    if (nameEditable && f.company_name.trim().length < 2) { setError(t("st.pf.company_err")); return; }
     setBusy(true); setError("");
     try {
       const ended = f.current ? null : f.ended_on || null;
       if (item) {
         await api.editOutcome(item.id, { description: f.description.trim(), ended_on: ended,
-                                         ...(locked ? {} : { position: f.position.trim(), started_on: f.started_on || null }) });
+                                         ...(locked ? {} : { position: f.position.trim(), started_on: f.started_on || null, kind: f.kind }),
+                                         ...(nameEditable ? { company_name: f.company_name.trim() } : {}) });
       } else {
         await api.addOutcome({ company_id: f.company && f.company !== OTHER ? Number(f.company) : null, company_name: name,
                                position: f.position.trim(), kind: f.kind, started_on: f.started_on || null, ended_on: ended,
@@ -234,6 +238,10 @@ export function ExperienceEditor({ item, onSaved, onClose }: { item?: MyOutcome;
                  icon="search" placeholder={t("st.pf.company_ph")} customLabel={(q) => t("st.pf.company_add", { name: q })}
                  onChange={(v, custom) => setF({ ...f, company: custom ? OTHER : v, company_name: custom ? v : "" })} />
         </Field>
+      ) : nameEditable ? (
+        <Field id="ex-company" label={t("my.company_pick")} required>
+          <input id="ex-company" value={f.company_name} maxLength={160} onChange={(e) => setF({ ...f, company_name: e.target.value })} />
+        </Field>
       ) : (
         <div className="st-exp-company"><Icon name="building" size={18} /><b>{item.company}</b></div>
       )}
@@ -241,7 +249,7 @@ export function ExperienceEditor({ item, onSaved, onClose }: { item?: MyOutcome;
         <input id="ex-position" value={f.position} maxLength={160} disabled={locked} placeholder={t("st.pf.position_ph")}
                onChange={(e) => setF({ ...f, position: e.target.value })} />
       </Field>
-      {!item && (
+      {!locked && (
         <>
           <label>{t("my.kind")}</label>
           <div className="st-seg">

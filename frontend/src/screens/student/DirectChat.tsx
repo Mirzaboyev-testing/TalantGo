@@ -85,7 +85,7 @@ export default function DirectChat({ side, onUnread }: { side: Side; onUnread?: 
           {shown.map((x) => (
             <button key={x.id} className={`st-chat-item ${x.id === openId ? "on" : ""}`} onClick={() => navigate(`${base}?c=${x.id}`)}>
               {side === "student"
-                ? (x.company_logo ? <img className="avatar square" src={x.company_logo} alt="" /> : <div className="avatar square">{x.company.slice(0, 1)}</div>)
+                ? <Avatar name={x.company} url={x.company_logo} className="square" />
                 : <Avatar name={x.student} url={x.student_photo} />}
               <span className="st-chat-item-text">
                 <span className="row between" style={{ gap: 6 }}><b className="ellipsis">{title(x)}</b><small>{when(x.last?.at ?? x.last_message_at)}</small></span>
@@ -101,7 +101,7 @@ export default function DirectChat({ side, onUnread }: { side: Side; onUnread?: 
               <div className="side-group" style={{ padding: "10px 12px 4px" }}>{t("st.msg.start")}</div>
               {canStart.map((c) => (
                 <button key={c.id} className="st-chat-item" onClick={() => api.startChat(c.id).then((v) => { navigate(`${base}?c=${v.thread.id}`); void loadList(); }, (e) => setError(message(e)))}>
-                  {c.logo ? <img className="avatar square" src={c.logo} alt="" /> : <div className="avatar square">{c.name.slice(0, 1)}</div>}
+                  <Avatar name={c.name} url={c.logo} className="square" />
                   <span className="st-chat-item-text"><b className="ellipsis">{c.name}</b><span className="hint">{t("st.msg.start_hint")}</span></span>
                 </button>
               ))}
@@ -154,7 +154,7 @@ function Thread({ side, view, onBack, onSent, onChanged }: {
       <header className="st-chat-head">
         <button className="icon-btn st-chat-back" aria-label={t("common.back")} onClick={onBack}><Icon name="back" size={18} /></button>
         {side === "student"
-          ? (th.company_logo ? <img className="avatar square" src={th.company_logo} alt="" /> : <div className="avatar square">{th.company.slice(0, 1)}</div>)
+          ? <Avatar name={th.company} url={th.company_logo} className="square" />
           : <Avatar name={th.student} url={th.student_photo} />}
         <div className="grow" style={{ minWidth: 0 }}>
           <b className="ellipsis" style={{ display: "block" }}>{side === "student" ? th.company : th.student}</b>

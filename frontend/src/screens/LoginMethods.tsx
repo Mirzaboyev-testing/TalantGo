@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { api, type Me } from "../api";
 import { Field, useRequired } from "../form";
 import { t, useLang } from "../i18n";
-import { insideTelegram } from "../tg";
+import { BOT_URL, insideTelegram } from "../tg";
 import { ErrorText, message, toast } from "../ui";
 import { BotWaiting, useBotLink } from "./BotLink";
 
@@ -54,7 +54,19 @@ export default function LoginMethods({ me, onChanged }: { me: Me; onChanged: (m:
           : <button className="btn small" disabled={link.state !== "idle"} onClick={link.begin}>{t("s.lm.link_tg")}</button>}
       </div>
       {!me.has_telegram && link.state === "idle" && (
-        <div className="hint">{t("s.lm.tg_hint")}</div>
+        <div className="hint">{t("bot.unlinked_hint")}</div>
+      )}
+      {me.has_telegram && (
+        // the bot answers in the chat itself: companies and universities never need the Mini App
+        <div className="hint" style={{ marginTop: 4 }}>
+          {t("bot.linked_hint")}
+          <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+            <li><code>/bildirishnomalar</code> — {t("bot.cmd_notif")}</li>
+            <li><code>/akkaunt</code> — {t("bot.cmd_account")}</li>
+            <li><code>/parol</code> — {t("bot.cmd_password")}</li>
+          </ul>
+          <a href={BOT_URL} target="_blank" rel="noreferrer">{t("bot.open")}</a>
+        </div>
       )}
       {link.link && link.state !== "idle" && <BotWaiting link={link.link} state={link.state} onCancel={link.stop} onPin={link.submitPin} />}
       <ErrorText error={link.error} />

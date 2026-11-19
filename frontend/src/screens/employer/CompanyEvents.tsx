@@ -98,21 +98,21 @@ function EventForm({ event, onClose, onSaved }: { event?: EventItem; onClose: ()
     <Sheet onClose={onClose}>
       <h2 style={{ marginTop: 0 }}>{event ? t("co.ev.edit") : t("co.ev.new")}</h2>
       <Field id="ce-title" label={t("co.ev.f.title")} required>
-        <input id="ce-title" value={f.title} maxLength={160} placeholder={t("co.ev.f.title_ph")} onChange={(e) => setF({ ...f, title: e.target.value })} />
+        <input id="ce-title" value={f.title} maxLength={160} placeholder={t("co.ev.f.title_ph")} onChange={(e) => { const v = e.target.value; setF((cur) => ({ ...cur, title: v })); }} />
       </Field>
       <label>{t("co.ev.f.kind")}</label>
       <div className="st-seg">
-        {KINDS.map((k) => <button key={k} type="button" className={f.kind === k ? "on" : ""} onClick={() => setF({ ...f, kind: k })}>{eventKind(k)}</button>)}
+        {KINDS.map((k) => <button key={k} type="button" className={f.kind === k ? "on" : ""} onClick={() => setF((cur) => ({ ...cur, kind: k }))}>{eventKind(k)}</button>)}
       </div>
       <div className="u-form-grid two st-two">
-        <Field id="ce-start" label={t("co.ev.f.starts")} required><input id="ce-start" type="datetime-local" value={f.starts} onChange={(e) => setF({ ...f, starts: e.target.value })} /></Field>
-        <Field id="ce-end" label={t("co.ev.f.ends")}><input id="ce-end" type="datetime-local" value={f.ends} onChange={(e) => setF({ ...f, ends: e.target.value })} /></Field>
-        <Field id="ce-loc" label={t("co.ev.f.location")}><input id="ce-loc" value={f.location} maxLength={200} placeholder={t("co.ev.f.location_ph")} onChange={(e) => setF({ ...f, location: e.target.value })} /></Field>
-        <Field id="ce-url" label={t("co.ev.f.online")}><input id="ce-url" value={f.online_url} maxLength={256} placeholder="https://meet.google.com/…" onChange={(e) => setF({ ...f, online_url: e.target.value })} /></Field>
-        <Field id="ce-cap" label={t("co.ev.f.capacity")}><input id="ce-cap" value={f.capacity} inputMode="numeric" placeholder="50" onChange={(e) => setF({ ...f, capacity: e.target.value.replace(/\D/g, "") })} /></Field>
+        <Field id="ce-start" label={t("co.ev.f.starts")} required><input id="ce-start" type="datetime-local" value={f.starts} onChange={(e) => { const v = e.target.value; setF((cur) => ({ ...cur, starts: v })); }} /></Field>
+        <Field id="ce-end" label={t("co.ev.f.ends")}><input id="ce-end" type="datetime-local" value={f.ends} onChange={(e) => { const v = e.target.value; setF((cur) => ({ ...cur, ends: v })); }} /></Field>
+        <Field id="ce-loc" label={t("co.ev.f.location")}><input id="ce-loc" value={f.location} maxLength={200} placeholder={t("co.ev.f.location_ph")} onChange={(e) => { const v = e.target.value; setF((cur) => ({ ...cur, location: v })); }} /></Field>
+        <Field id="ce-url" label={t("co.ev.f.online")}><input id="ce-url" value={f.online_url} maxLength={256} placeholder="https://meet.google.com/…" onChange={(e) => { const v = e.target.value; setF((cur) => ({ ...cur, online_url: v })); }} /></Field>
+        <Field id="ce-cap" label={t("co.ev.f.capacity")}><input id="ce-cap" value={f.capacity} inputMode="numeric" placeholder="50" onChange={(e) => { const v = e.target.value.replace(/\D/g, ""); setF((cur) => ({ ...cur, capacity: v })); }} /></Field>
       </div>
       <Field id="ce-desc" label={t("co.ev.f.desc")}>
-        <textarea id="ce-desc" value={f.description} maxLength={3000} rows={5} placeholder={t("co.ev.f.desc_ph")} onChange={(e) => setF({ ...f, description: e.target.value })} />
+        <textarea id="ce-desc" value={f.description} maxLength={3000} rows={5} placeholder={t("co.ev.f.desc_ph")} onChange={(e) => { const v = e.target.value; setF((cur) => ({ ...cur, description: v })); }} />
       </Field>
       <p className="hint">{t("co.ev.privacy")}</p>
       <ErrorText error={error} />

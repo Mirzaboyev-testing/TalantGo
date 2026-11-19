@@ -3,16 +3,15 @@
 Only what a company publishes about itself is shown: no HR names, phone, email, Telegram or STIR,
 and nothing about individual students.
 """
-from datetime import date
-
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy import func, or_, select
 
 from ..models import (Application, Challenge, Company, EmploymentOutcome, Job, Partnership, SubmissionFile, Track,
                       University, User)
-from ..services import files
+from ..services import files, uni_news
 from ..services.outcomes import university_stats
+from ..services.progress import today as tashkent_today
 from .deps import Session
 from .jobs import visible_jobs
 
@@ -25,6 +24,8 @@ def public_job(job: Job) -> dict:
             "hours_per_week": job.hours_per_week, "description": job.description, "requirements": job.requirements,
             "skills": job.skills, "counts_as_practice": job.counts_as_practice, "deadline": job.deadline,
             "created_at": job.created_at, "company_id": job.company_id, "company_name": job.company.name,
+            "company_logo_url": files.logo_url(job.company_id, job.company.logo_file_id, job.company.status),
+            "job_fields": job.job_fields,
             "company_industry": job.company.industry, "company_city": job.company.city}
 
 
@@ -38,7 +39,7 @@ def _open_jobs_count():
     """Live jobs of the company in the outer query (the same rule as visible_jobs; the company is approved there)."""
     return (select(func.count()).select_from(Job).where(
         Job.company_id == Company.id, Job.status == "approved",
-        or_(Job.deadline.is_(None), Job.deadline >= date.today())).correlate(Company).scalar_subquery())
+        or_(Job.deadline.is_(None), Job.deadline >= tashkent_today())).correlate(Company).scalar_subquery())
 
 
 def joined_universities():
@@ -69,9 +70,12 @@ async def jobs(session: Session, q: str | None = Query(default=None, max_length=
                work_mode: str | None = Query(default=None, max_length=16),
                city: str | None = Query(default=None, max_length=60),
                industry: str | None = Query(default=None, max_length=24),
+               field: str | None = Query(default=None, max_length=24),
                company_id: int | None = None, paid_only: bool = False, practice_only: bool = False,
                limit: int = Query(default=20, ge=1, le=50), offset: int = Query(default=0, ge=0, le=5000)) -> dict:
     query = visible_jobs()
+    if field:                                       # a job function (catalog.JOB_FIELDS), as in the student panel
+        query = query.where(Job.job_fields.contains([field]))
     if q and q.strip():
         like = f"%{q.strip()}%"
         query = query.where(Job.title.ilike(like) | Company.name.ilike(like) | Job.description.ilike(like))
@@ -175,6 +179,11 @@ async def university_profile(session, uni: University) -> dict:
         .group_by(Track.title).order_by(func.count().desc()).limit(5))).all()
     return {"id": uni.id, "name": uni.name, "short_name": uni.short_name, "city": uni.city, "region": uni.region,
             "description": uni.description, "website": uni.website,
+            # what the university filled in on its profile: the institution's own contacts, never a person's
+            "logo_url": uni_news.university_logo_url(uni), "cooperation": uni.cooperation, "telegram": uni.telegram,
+            "email": uni.email, "phone": uni.phone, "address": uni.address, "founded_year": uni.founded_year,
+            "students_total": uni.students_total, "faculties_count": len(uni.faculties or []),
+            "news": await uni_news.public_items(session, uni),
             "students": data["students"], "placed": data["placed"] if enough else None,
             "employed": data["employed"] if enough else None, "interned": data["interned"] if enough else None,
             "placement_rate": data["placement_rate"], "min_sample": data["min_sample"],
@@ -198,7 +207,7 @@ async def universities(session: Session, q: str | None = Query(default=None, max
     total = await session.scalar(select(func.count()).select_from(query.subquery()))
     rows = (await session.execute(query.order_by(students.desc(), University.name).offset(offset).limit(limit))).all()
     return {"items": [{"id": u.id, "name": u.name, "short_name": u.short_name, "city": u.city, "region": u.region,
-                       "students": s, "partners": p} for u, s, p in rows], "total": total}
+                       "students": s, "partners": p, "logo_url": uni_news.university_logo_url(u)} for u, s, p in rows], "total": total}
 
 
 @router.get("/universities/{university_id}")

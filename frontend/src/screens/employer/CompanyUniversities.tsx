@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type PartnershipRow, type PublicUniversity, type UniversityProfile } from "../../api";
+import { api, type NewsItem, type PartnershipRow, type PublicUniversity, type UniversityProfile } from "../../api";
 import { t, useLang } from "../../i18n";
 import { Icon } from "../../icons";
 import { navigate, useSearch } from "../../router";
 import { haptic } from "../../tg";
 import { ErrorText, message, toast } from "../../ui";
-import { UniversityFacts } from "../../public/PublicUniversities";
+import { UniversityFacts, UniversityMark } from "../../public/PublicUniversities";
+import { NewsCard } from "../NewsCard";
 import { PartnershipCard } from "../university/UniCollab";
 import { EmptyState, PageHead, Tabs } from "./kit";
 
@@ -21,13 +22,18 @@ export default function CompanyUniversities() {
   const search = useSearch();
   const [q, setQ] = useState("");
   const [rows, setRows] = useState<Row[] | null>(null);
-  const [open, setOpen] = useState<number | null>(null);
+  // ?u=<id> (a university's announcement in the inbox) opens that university
+  const [open, setOpen] = useState<number | null>(Number(search.u) || null);
+  useEffect(() => { if (Number(search.u)) setOpen(Number(search.u)); }, [search.u]);
+  const [news, setNews] = useState<NewsItem[] | null>(null);
+  const [allNews, setAllNews] = useState(false);
+  useEffect(() => { api.employer.universityNews().then(setNews, () => setNews([])); }, []);
   const [tab, setTab] = useState<UniTab>(search.tab === "requests" ? "requests" : search.tab === "partners" ? "partners" : "all");
   const [error, setError] = useState("");
   const load = useCallback(() => api.employer.universities(q.trim()).then(setRows, (e) => setError(message(e))), [q]);
   useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (open) return <UniversityDetail id={open} onBack={() => { setOpen(null); void load(); }} />;
+  if (open) return <UniversityDetail id={open} onBack={() => { setOpen(null); if (search.u) navigate("/korxona/universitetlar", { replace: true }); void load(); }} />;
   const isPartner = (u: Row) => partnerState(u) === "accepted";
   const isRequest = (u: Row) => ["pending_in", "pending_out"].includes(partnerState(u) ?? "");
   const shown = (rows ?? []).filter((u) => tab === "all" || (tab === "partners" ? isPartner(u) : isRequest(u)));
@@ -54,6 +60,19 @@ export default function CompanyUniversities() {
         </form>
       </div>
       <ErrorText error={error} />
+      {news && news.length > 0 && (
+        <section className="co-card co-uni-news">
+          <div className="co-card-head">
+            <b>{t("news.title")}</b>
+            {news.length > 3 && <button className="link-btn" onClick={() => setAllNews((v) => !v)}>{allNews ? t("news.less") : `${t("news.all")} (${news.length})`}</button>}
+          </div>
+          <div className="nw-grid">
+            {(allNews ? news : news.slice(0, 3)).map((n) => (
+              <NewsCard key={n.id} item={n} onUniversity={n.university ? () => setOpen(n.university!.id) : undefined} />
+            ))}
+          </div>
+        </section>
+      )}
       {!rows && !error && <div className="co-grid">{[0, 1, 2, 3].map((i) => <div key={i} className="co-sk-block" style={{ height: 150 }} />)}</div>}
       {rows && shown.length === 0 && (
         <EmptyState icon="school" title={tab === "all" ? t("uni.empty") : t("co.uni.none")} text={tab === "all" ? undefined : t("co.uni.none_text")} />
@@ -64,7 +83,7 @@ export default function CompanyUniversities() {
           return (
             <button key={u.id} className="co-uni" onClick={() => setOpen(u.id)}>
               <div className="row" style={{ alignItems: "flex-start" }}>
-                <span className="co-uni-mark">{u.short_name.slice(0, 4)}</span>
+                <UniversityMark u={u} size={44} />
                 <div className="grow" style={{ minWidth: 0 }}>
                   <b className="co-clamp two">{u.name}</b>
                   <div className="hint">{[u.short_name, u.city].filter(Boolean).join(" · ")}</div>
@@ -105,7 +124,7 @@ function UniversityDetail({ id, onBack }: { id: number; onBack: () => void }) {
     <div className="co-page">
       <button className="btn small ghost co-back" onClick={onBack}><Icon name="back" size={16} />{t("uni.back")}</button>
       <div className="co-uni-hero">
-        <span className="co-uni-mark big">{u.short_name.slice(0, 4)}</span>
+        <UniversityMark u={u} size={64} />
         <div className="grow" style={{ minWidth: 0 }}>
           <h1>{u.name}</h1>
           <div className="hint">{[u.short_name, u.city, u.region].filter(Boolean).join(" · ")}</div>

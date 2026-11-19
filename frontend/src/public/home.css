@@ -259,3 +259,7 @@ a:hover > .h-go { background: var(--brand); color: #fff; transform: translateX(2
 .uni-none { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 32px 20px; }
 .uni-none p { max-width: 520px; margin: 0 0 8px; }
 .uni-none .btn { width: auto; padding: 11px 22px; border-radius: 999px; }
+
+/* job cards: a real company logo, and a deadline a week away stands out */
+img.company-mark.logo { object-fit: contain; background: #fff; border: 1px solid var(--line); padding: 3px; }
+.job-soon { color: #b45309; font-weight: 600; }

@@ -401,3 +401,91 @@
 .st-peers > div > h1, .st-peers > div > p, .st-peers > div > form, .st-peers > div > .chips, .st-peers > div > .center, .st-peers > div > .hint { grid-column: 1 / -1; }
 .st-peers > div > h1 { display: none; }
 .st-legacy-left { max-width: 980px; width: 100%; }
+
+/* ------------------------------------------------------------------ company: scoring entries of a task (CompanyTasks.tsx)
+   A scored entry folds into its decision and leaves «Baholanmagan» for «Qabul qilingan» or «Rad etilgan». */
+.co-entry { gap: 8px; }
+.co-entry.accepted { border-color: #cfe9d8; }
+.co-entry.rejected { border-color: #f3d4d4; }
+.co-entry-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.co-entry-head .co-avatar { width: 40px; height: 40px; font-size: 13.5px; }
+.co-entry-when { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; }
+.co-entry-note { margin: 2px 0 0; white-space: pre-line; overflow-wrap: anywhere; }
+.co-entry-files { display: flex; flex-wrap: wrap; gap: 6px; }
+.co-entry-files .btn { width: auto; max-width: 100%; gap: 6px; }
+.co-entry-result { margin-top: 4px; padding: 10px 12px; border-radius: 12px; background: var(--bg2); display: flex; flex-direction: column; gap: 6px; }
+.co-entry-result.accepted { background: #eef8f1; }
+.co-entry-result.rejected { background: #fdf2f2; }
+.co-entry-result p { margin: 0; font-size: 14px; white-space: pre-line; overflow-wrap: anywhere; }
+.co-entry-result .link-btn { align-self: flex-start; }
+.co-entry-facts { display: flex; flex-wrap: wrap; gap: 10px; font-size: 13.5px; }
+.co-entry-facts:empty { display: none; }
+.co-entry-facts b { font-size: 16px; }
+.co-entry-facts .ok { color: var(--brand-strong); font-weight: 700; }
+.co-entries-empty { display: flex; align-items: center; gap: 10px; color: var(--hint); }
+.co-entries-empty svg { color: var(--brand); flex: none; }
+
+/* ------------------------------------------------------------------ company tests in Topshiriqlar (StudentTests.tsx) */
+.st-sub-title { margin: 22px 0 10px; font-size: 15px; color: var(--hint); font-weight: 700; }
+.st-soon { color: var(--warn); font-weight: 600; }
+.st-test-card .co-pill svg { margin-right: 3px; vertical-align: -2px; }
+/* a phone: the timer stays under the sticky top bar and the hand-in bar above the bottom tab bar */
+@media (max-width: 899px) {
+  .st-test-run .timer { top: 57px; }
+  .st-test-run .save-bar { bottom: calc(58px + env(safe-area-inset-bottom)); }
+}
+
+/* ------------------------------------------------------------------ profile as one page (2026-11-19) */
+.st-pf-avatar .st-pf-initials { width: 100%; height: 100%; border-radius: 50%; display: grid; place-items: center; font-size: clamp(32px, 3.4vw, 44px); letter-spacing: .02em; }
+.st-profile .st-about { scroll-margin-top: 76px; }
+.st-about.editing { border-color: #b9dcc5; box-shadow: 0 0 0 3px rgba(22,163,74,.08); }
+.st-section-hint { margin-top: 4px; max-width: 640px; }
+.st-add-btn { flex: none; width: 36px; height: 36px; border: 1px solid var(--line); background: var(--bg); color: var(--brand-strong); }
+.st-add-btn:hover { background: var(--brand-soft); border-color: #b9dcc5; }
+.st-section .st-pf-grid { margin-top: 4px; }
+.st-intro-editor { display: flex; flex-direction: column; }
+.st-intro-editor label { margin-top: 14px; }
+.st-intro-phone { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg2); }
+.st-contact-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.st-contact-row svg { color: var(--hint); flex: none; }
+
+/* ------------------------------------------------------------------ task entry: files and fixing a rejected entry */
+.st-entry-files { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.st-entry-files a { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 13.5px; }
+.st-fix-hint { margin: 8px 0 0; padding: 8px 10px; border-radius: 10px; background: #fff6e6; color: #8a4b06; font-size: 13.5px; }
+.st-fix-card { border-color: #f3dcae; }
+
+/* a phone: the person's own avatar in the top bar opens the profile */
+.topbar-me { border: 0; background: none; padding: 0; cursor: pointer; display: grid; place-items: center; }
+.topbar-me .avatar { width: 32px; height: 32px; font-size: 12px; }
+
+/* ------------------------------------------------------------------ phones (2026-11-19 audit)
+   Tabs wrap instead of hiding off-screen; the chat uses the real visible height (Telegram, mobile browsers). */
+@media (max-width: 640px) {
+  .st-page .co-tabs, .st-profile .co-tabs { flex-wrap: wrap; overflow: visible; }
+  .st-page .co-tabs button { flex: 1 1 auto; justify-content: center; padding: 7px 10px; }
+}
+@supports (height: 100dvh) {
+  .st-chat { height: calc(100dvh - 220px); }
+  @media (max-width: 899px) { .st-chat { height: calc(100dvh - 250px - env(safe-area-inset-bottom)); min-height: 380px; } }
+}
+
+/* home: company tests waiting for the student */
+.st-tests-banner { width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; font: inherit; color: var(--text); cursor: pointer;
+                   margin-bottom: 12px; padding: 12px 14px; border-radius: 14px; border: 1px solid #c9ddf5; background: linear-gradient(120deg, #eef5ff, #f7fbff); }
+.st-tests-banner:hover { border-color: #a9c8ee; }
+.st-tests-banner small { display: block; color: var(--hint); font-size: 12.5px; margin-top: 2px; }
+.st-tests-banner-icon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: #dcebff; color: #1d4ed8; flex: none; }
+/* a phone: the experience text keeps the width, the trust badge and pencil go under it */
+@media (max-width: 560px) {
+  .st-exp-row { flex-wrap: wrap; }
+  .st-exp-row > div:first-child { flex: 1 1 100%; }
+  .st-exp-actions { width: 100%; justify-content: space-between; }
+}
+
+/* the job sheet: company with its logo and page link, the job's fields with the student's own marked */
+.st-sheet-company { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.st-sheet-company .company-mark { width: 44px; height: 44px; }
+.st-sheet-fields { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
+.st-sheet-fields .co-tag.match { background: var(--brand-soft); color: var(--brand-strong); border-color: #b9dcc5; }
+.st-jobcard .company-mark { object-fit: cover; }

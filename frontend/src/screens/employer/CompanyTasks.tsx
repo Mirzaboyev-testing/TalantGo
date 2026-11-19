@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type Challenge, type ChallengeEntry, type CompanyTaskInput, type StudentRow, type Track, type University } from "../../api";
-import { formatDateTime, t, useLang } from "../../i18n";
+import { api, loadCatalog, type Catalog, type Challenge, type ChallengeEntry, type CompanyTaskInput, type StudentRow, type Track, type University } from "../../api";
+import { formatDateTime, t, tMaybe, useLang } from "../../i18n";
 import { Icon } from "../../icons";
 import { navigate, useSearch } from "../../router";
 import { ask, haptic, openLink } from "../../tg";
-import { ErrorText, message, toast } from "../../ui";
-import { daysLeft, EmptyState, initials, PageHead, Tabs } from "./kit";
+import { Avatar, ErrorText, message, toast } from "../../ui";
+import { courseText } from "../../labels";
+import { daysLeft, EmptyState, PageHead, Tabs } from "./kit";
 
 const STATE_BADGE = { upcoming: "todo", active: "peer_verified", finished: "pending" } as const;
 const inDays = (n: number) => new Date(Date.now() + n * 86_400_000 + 5 * 3_600_000).toISOString().slice(0, 10);
@@ -116,6 +117,7 @@ export default function CompanyTasks() {
 
 function audienceLabel(c: Challenge): string {
   if (c.audience === "track") return c.track?.split(":")[0] ?? t("task.audience.track");
+  if (c.audience === "fields") return (c.job_fields ?? []).map((k) => tMaybe(`field.${k}`) ?? k).join(", ") || t("task.audience.fields");
   if (c.audience === "selected") return `${t("task.audience.selected")} (${c.invited ?? 0})`;
   return t(`task.audience.${c.audience ?? "all"}`);
 }
@@ -126,6 +128,8 @@ function TaskForm({ preselected, onDone }: { preselected: number[]; onDone: (cre
                                audience: (preselected.length ? "selected" : "all") as CompanyTaskInput["audience"],
                                track_id: "", university_id: "" });
   const [picked, setPicked] = useState<number[]>(preselected);
+  const [fieldIds, setFieldIds] = useState<string[]>([]);
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [unis, setUnis] = useState<University[]>([]);
   const [students, setStudents] = useState<StudentRow[] | null>(null);
@@ -137,6 +141,7 @@ function TaskForm({ preselected, onDone }: { preselected: number[]; onDone: (cre
   useEffect(() => {
     api.tracks().then(setTracks, () => {});
     api.universities().then(setUnis, () => {});
+    loadCatalog().then(setCatalog, () => {});
   }, []);
   useEffect(() => {
     if (f.audience === "selected" && !students) api.employer.students({}).then(setStudents, (e) => setError(message(e)));
@@ -145,6 +150,7 @@ function TaskForm({ preselected, onDone }: { preselected: number[]; onDone: (cre
   async function send() {
     const ready = f.title.trim().length >= 3 && f.description.trim().length >= 20
       && (f.audience !== "track" || f.track_id) && (f.audience !== "university" || f.university_id)
+      && (f.audience !== "fields" || fieldIds.length > 0)
       && (f.audience !== "selected" || picked.length > 0);
     if (!ready) return setError(t("task.f.need"));
     setBusy(true); setError("");
@@ -155,6 +161,7 @@ function TaskForm({ preselected, onDone }: { preselected: number[]; onDone: (cre
         track_id: f.audience === "track" ? Number(f.track_id) : null,
         university_id: f.audience === "university" ? Number(f.university_id) : null,
         student_ids: f.audience === "selected" ? picked : [],
+        job_fields: f.audience === "fields" ? fieldIds : [],
       });
       haptic("success");
       toast(t("task.f.sent"));
@@ -178,7 +185,7 @@ function TaskForm({ preselected, onDone }: { preselected: number[]; onDone: (cre
         <textarea value={f.description} maxLength={5000} rows={6} onChange={set("description")} />
         <label>{t("task.f.audience")}</label>
         <select value={f.audience} onChange={set("audience")}>
-          {(["all", "track", "university", "selected"] as const).map((a) => <option key={a} value={a}>{t(`task.audience.${a}`)}</option>)}
+          {(["all", "fields", "university", "selected"] as const).map((a) => <option key={a} value={a}>{t(`task.audience.${a}`)}</option>)}
         </select>
         {f.audience === "track" && (
           <>
@@ -187,6 +194,21 @@ function TaskForm({ preselected, onDone }: { preselected: number[]; onDone: (cre
               <option value="">{t("task.f.choose")}</option>
               {tracks.map((tr) => <option key={tr.id} value={tr.id}>{tr.title}</option>)}
             </select>
+          </>
+        )}
+        {f.audience === "fields" && (
+          <>
+            <label>{t("co.aud.fields_pick")}</label>
+            <div className="chips">
+              {Object.entries(catalog?.job_fields ?? {}).map(([k, label]) => (
+                <button key={k} type="button" className={`chip ${fieldIds.includes(k) ? "on" : ""}`}
+                        disabled={!fieldIds.includes(k) && fieldIds.length >= 5}
+                        onClick={() => setFieldIds(fieldIds.includes(k) ? fieldIds.filter((x) => x !== k) : [...fieldIds, k])}>
+                  {tMaybe(`field.${k}`) ?? label}
+                </button>
+              ))}
+            </div>
+            <div className="hint">{t("co.aud.fields_hint")}</div>
           </>
         )}
         {f.audience === "university" && (
@@ -246,12 +268,18 @@ function TaskForm({ preselected, onDone }: { preselected: number[]; onDone: (cre
   );
 }
 
+type EntryFilter = "submitted" | "accepted" | "rejected" | "all";
+
 function Entries({ task, onBack }: { task: Challenge; onBack: () => void }) {
   useLang();
   const [rows, setRows] = useState<ChallengeEntry[] | null>(null);
-  const [filter, setFilter] = useState<"all" | "submitted" | "accepted" | "rejected">("all");
+  // opens on the entries still to score; a scored entry leaves that list for «Qabul qilingan» or «Rad etilgan»
+  const [filter, setFilter] = useState<EntryFilter | null>(null);
   const [error, setError] = useState("");
-  const load = useCallback(() => api.employer.taskEntries(task.id).then(setRows, (e) => setError(message(e))), [task.id]);
+  const load = useCallback(() => api.employer.taskEntries(task.id).then((r) => {
+    setRows(r);
+    setFilter((cur) => cur ?? (r.some((e) => e.status === "submitted") ? "submitted" : "all"));
+  }, (e) => setError(message(e))), [task.id]);
   useEffect(() => { void load(); }, [load]);
 
   async function archive() {
@@ -259,8 +287,10 @@ function Entries({ task, onBack }: { task: Challenge; onBack: () => void }) {
     try { await api.employer.editTask(task.id, { is_archived: true }); onBack(); } catch (e) { setError(message(e)); }
   }
 
-  const count = (k: string) => (rows ?? []).filter((e) => k === "all" || e.status === k).length;
-  const shown = (rows ?? []).filter((e) => filter === "all" || e.status === filter);
+  const view = filter ?? "all";
+  const count = (k: EntryFilter) => (rows ?? []).filter((e) => k === "all" || e.status === k).length;
+  const shown = (rows ?? []).filter((e) => view === "all" || e.status === view);
+  const label = (k: EntryFilter) => k === "all" ? t("co.all") : k === "submitted" ? t("task.e.pending") : k === "accepted" ? t("task.e.accepted") : t("task.e.rejected");
   return (
     <div className="co-page">
       <button className="btn small ghost co-back" onClick={onBack}><Icon name="back" size={16} />{t("task.e.back")}</button>
@@ -273,12 +303,17 @@ function Entries({ task, onBack }: { task: Challenge; onBack: () => void }) {
       </div>
       <ErrorText error={error} />
       {rows && rows.length > 0 && (
-        <Tabs items={(["all", "submitted", "accepted", "rejected"] as const).map((k) =>
-          [k, k === "all" ? t("co.all") : k === "submitted" ? t("task.e.pending") : k === "accepted" ? t("task.e.accepted") : t("task.e.rejected"), count(k)] as [typeof k, string, number])}
-              value={filter} onChange={setFilter} />
+        <Tabs items={(["submitted", "accepted", "rejected", "all"] as const).map((k) => [k, label(k), count(k)] as [EntryFilter, string, number])}
+              value={view} onChange={setFilter} />
       )}
       {!rows && !error && <div className="hint">{t("common.loading")}</div>}
       {rows?.length === 0 && <EmptyState icon="inbox" title={t("task.e.empty")} text={t("co.tasks.entries_empty")} />}
+      {rows && rows.length > 0 && shown.length === 0 && (
+        <div className="co-card co-entries-empty">
+          <Icon name={view === "submitted" ? "tick" : "inbox"} size={22} />
+          <span>{view === "submitted" ? t("co.task.all_reviewed") : t("co.nothing_here")}</span>
+        </div>
+      )}
       <div className="co-grid wide-cards">
         {shown.map((e) => <EntryCard key={e.id} taskId={task.id} entry={e} onDone={load} />)}
       </div>
@@ -287,6 +322,9 @@ function Entries({ task, onBack }: { task: Challenge; onBack: () => void }) {
 }
 
 function EntryCard({ taskId, entry, onDone }: { taskId: number; entry: ChallengeEntry; onDone: () => void }) {
+  useLang();
+  const decided = entry.status !== "submitted";
+  const [editing, setEditing] = useState(!decided);
   const [score, setScore] = useState(entry.score != null ? String(entry.score) : "");
   const [place, setPlace] = useState(entry.place ? String(entry.place) : "");
   const [comment, setComment] = useState(entry.comment);
@@ -294,13 +332,16 @@ function EntryCard({ taskId, entry, onDone }: { taskId: number; entry: Challenge
   const [error, setError] = useState("");
 
   async function decide(accept: boolean) {
+    if (!accept && !comment.trim()) { setError(t("co.task.reject_reason")); return; }
     setBusy(true); setError("");
     try {
-      await api.employer.reviewTaskEntry(taskId, entry.id, {
-        accept, comment: comment.trim(), score: score ? Number(score) : null,
+      const saved = await api.employer.reviewTaskEntry(taskId, entry.id, {
+        accept, comment: comment.trim(), score: score ? Math.min(100, Number(score)) : null,
         place: accept && place ? (Number(place) as 1 | 2 | 3) : null,
       });
       haptic("success");
+      toast(accept ? t("co.task.moved_accepted", { n: saved.points_awarded }) : t("co.task.moved_rejected"));
+      setEditing(false);
       onDone();
     } catch (e) {
       setError(message(e));
@@ -311,38 +352,64 @@ function EntryCard({ taskId, entry, onDone }: { taskId: number; entry: Challenge
 
   const [label, badge] = entry.status === "accepted" ? [t("task.e.accepted"), "peer_verified"]
     : entry.status === "rejected" ? [t("task.e.rejected"), "rejected"] : [t("task.e.pending"), "pending"];
+  const study = [entry.university, entry.faculty, courseText(entry.course)].filter(Boolean).join(" · ");
   return (
-    <div className="co-card co-entry">
-      <div className="row between">
-        <span className="row" style={{ gap: 10, minWidth: 0 }}><span className="co-avatar">{initials(entry.student)}</span><b className="ellipsis">{entry.student}</b></span>
+    <div className={`co-card co-entry ${entry.status}`}>
+      <div className="co-entry-head">
+        <Avatar name={entry.student} url={entry.photo_url} className="co-avatar" />
+        <div className="grow" style={{ minWidth: 0 }}>
+          <b className="ellipsis" style={{ display: "block" }}>{entry.student}</b>
+          {study && <span className="hint ellipsis" style={{ display: "block" }}>{study}</span>}
+        </div>
         <span className={`badge ${badge}`}>{entry.place ? t("task.e.place_n", { n: entry.place, bonus: [0, 30, 20, 10][entry.place] }) : label}</span>
       </div>
-      <div className="hint">{[entry.university, entry.username && `@${entry.username}`].filter(Boolean).join(" · ")}</div>
-      {entry.note && <p style={{ margin: "8px 0 0", whiteSpace: "pre-line" }}>{entry.note}</p>}
-      <div className="row wrap" style={{ gap: 6, marginTop: 10 }}>
-        {entry.proof_url && <button className="btn small ghost" style={{ width: "auto" }} onClick={() => openLink(entry.proof_url)}>{t("task.e.open")}</button>}
-        {(entry.files ?? []).map((f, i) => (
-          <a key={f.id} className="btn small ghost" style={{ width: "auto" }} href={f.url} target="_blank" rel="noreferrer">{t("co.task.file_n", { n: i + 1 })}</a>
-        ))}
-      </div>
-      <div className="row" style={{ marginTop: 10 }}>
-        <div className="grow"><label>{t("task.e.score")}</label>
-          <input value={score} inputMode="numeric" onChange={(e) => setScore(e.target.value.replace(/\D/g, "").slice(0, 3))} />
+      <div className="hint co-entry-when"><Icon name="clock" size={13} />{t("co.task.sent_at", { date: formatDateTime(entry.created_at) })}</div>
+      {entry.note && <p className="co-entry-note">{entry.note}</p>}
+      {(entry.proof_url || (entry.files ?? []).length > 0) && (
+        <div className="co-entry-files">
+          {entry.proof_url && <button className="btn small ghost" onClick={() => openLink(entry.proof_url)}><Icon name="link" size={14} />{t("task.e.open")}</button>}
+          {(entry.files ?? []).map((f, i) => (
+            <a key={f.id} className="btn small ghost" href={f.url} target="_blank" rel="noreferrer" title={f.name || undefined}>
+              <Icon name="file" size={14} /><span className="ellipsis">{f.name || t("co.task.file_n", { n: i + 1 })}</span>
+            </a>
+          ))}
         </div>
-        <div className="grow"><label>{t("task.e.place")}</label>
-          <select value={place} onChange={(e) => setPlace(e.target.value)}>
-            <option value="">—</option>
-            {[1, 2, 3].map((n) => <option key={n} value={n}>{t("task.e.place_n", { n, bonus: [0, 30, 20, 10][n] })}</option>)}
-          </select>
+      )}
+
+      {!editing && (
+        <div className={`co-entry-result ${entry.status}`}>
+          <div className="co-entry-facts">
+            {entry.score != null && <span><b>{entry.score}</b>/100</span>}
+            {entry.status === "accepted" && <span className="ok">{entry.points_awarded > 0 ? t("co.task.points_got", { n: entry.points_awarded }) : t("co.task.no_points")}</span>}
+          </div>
+          <p>{entry.comment ? <><b>{t("co.task.your_comment")}:</b> {entry.comment}</> : <span className="hint">{t("co.task.no_comment")}</span>}</p>
+          <button className="link-btn" onClick={() => setEditing(true)}>{t("co.task.change")}</button>
         </div>
-      </div>
-      <label>{t("task.e.comment")}</label>
-      <textarea value={comment} maxLength={1000} onChange={(e) => setComment(e.target.value)} />
-      <ErrorText error={error} />
-      <div className="row" style={{ marginTop: 8 }}>
-        <button className="btn ghost" disabled={busy} onClick={() => decide(false)}>{t("task.e.reject")}</button>
-        <button className="btn ok" disabled={busy} onClick={() => decide(true)}>{t("task.e.accept")}</button>
-      </div>
+      )}
+
+      {editing && (
+        <>
+          <div className="row" style={{ marginTop: 10 }}>
+            <div className="grow"><label>{t("task.e.score")}</label>
+              <input value={score} inputMode="numeric" onChange={(e) => setScore(e.target.value.replace(/\D/g, "").slice(0, 3))} />
+            </div>
+            <div className="grow"><label>{t("task.e.place")}</label>
+              <select value={place} onChange={(e) => setPlace(e.target.value)}>
+                <option value="">—</option>
+                {[1, 2, 3].map((n) => <option key={n} value={n}>{t("task.e.place_n", { n, bonus: [0, 30, 20, 10][n] })}</option>)}
+              </select>
+            </div>
+          </div>
+          <label>{t("task.e.comment")}</label>
+          <textarea value={comment} maxLength={1000} placeholder={t("co.task.comment_ph")} onChange={(e) => { setComment(e.target.value); setError(""); }} />
+          <ErrorText error={error} />
+          <div className="row" style={{ marginTop: 8 }}>
+            <button className="btn ghost" disabled={busy} onClick={() => decide(false)}>{t("task.e.reject")}</button>
+            <button className="btn ok" disabled={busy} onClick={() => decide(true)}>{t("task.e.accept")}</button>
+          </div>
+          {decided && <button className="link-btn" style={{ marginTop: 8, alignSelf: "center" }} onClick={() => { setEditing(false); setError(""); }}>{t("common.cancel")}</button>}
+        </>
+      )}
     </div>
   );
 }

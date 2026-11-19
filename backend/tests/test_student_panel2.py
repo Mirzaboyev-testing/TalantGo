@@ -111,6 +111,12 @@ async def test_projects_certificates_and_experience(client, make_user):
     r = await client.patch(f"{API}/me/outcomes/{job['id']}", json={"description": "Yozgi ish, kassa va hisobot"},
                            headers=u["headers"])
     assert r.json()["description"] == "Yozgi ish, kassa va hisobot"
+    # a self-entered workplace can be renamed and its kind fixed (2026-11-19)
+    r = await client.patch(f"{API}/me/outcomes/{job['id']}", json={"company_name": "Bahor kafesi", "kind": "internship"},
+                           headers=u["headers"])
+    assert r.status_code == 200, r.text
+    assert r.json()["company"] == "Bahor kafesi" and r.json()["kind"] == "internship"
+    await client.patch(f"{API}/me/outcomes/{job['id']}", json={"company_name": "Kafe Bahor", "kind": "part_time"}, headers=u["headers"])
 
     me = (await client.get(f"{API}/me", headers=u["headers"])).json()
     assert me["portfolio_n"] == 3 and "portfolio" not in me["completeness"]["missing"]
@@ -209,6 +215,8 @@ async def test_task_entry_with_files_and_job_filters(client, make_user):
     assert got.status_code == 200 and "attachment" in got.headers["content-disposition"]     # a spreadsheet downloads
     entries = (await client.get(f"{API}/employer/tasks/{task['id']}/entries", headers=hr["headers"])).json()
     assert entries[0]["files"][0]["url"] == url
+    # 2026-11-19: reviewers see the file's own name and the student's study details, not «File 1»
+    assert entries[0]["files"][0]["name"] == "tahlil.xlsx" and "faculty" in entries[0] and "course" in entries[0]
 
     await client.patch(f"{API}/me", json={"job_fields": ["data"], "skills": ["SQL", "Power BI", "Excel"]}, headers=s["headers"])
     jobs = (await client.get(f"{API}/jobs?field=design", headers=s["headers"])).json()
@@ -228,6 +236,25 @@ async def test_catalog_seed_runs_once_so_staff_can_clear_faculties(client, make_
         await seed(s)
     tatu = next(u for u in (await client.get(f"{API}/universities")).json() if u["short_name"] == "TATU")
     assert tatu["faculties"] == []
+
+
+async def test_catalog_v2_fills_regions_short_names_and_faculties(client):
+    """2026-11-19: researched faculties and short names for the universities the first pass had none for, and the
+    region of every university from its city; a short name the first pass cut at 40 characters is replaced."""
+    unis = (await client.get(f"{API}/universities")).json()
+    assert len([u for u in unis if u["faculties"]]) >= 190
+    assert len({u["short_name"].lower() for u in unis}) == len(unis)        # every short name tells them apart
+    by_name = {u["name"]: u for u in unis}
+    tatu_sam = by_name["Toshkent axborot texnologiyalari universiteti Samarqand filiali"]
+    assert tatu_sam["short_name"] != "Toshkent axborot texnologiyalari" and len(tatu_sam["short_name"]) <= 40
+    from sqlalchemy import select
+    from app.core.db import SessionLocal
+    from app.models import University
+    async with SessionLocal() as s:
+        regions = dict((await s.execute(select(University.name, University.region))).all())
+    assert all(regions.values())
+    assert regions["Andijon davlat pedagogika instituti"] == "Andijon"
+    assert regions["Nukus davlat pedagogika instituti"] == "Qoraqalpog'iston"
 
 
 async def test_public_cv_leaves_portfolio_files_out(client, make_user):

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, QUESTION_KIND, type AttemptDetail, type CompanyTestFull,
+import { api, loadCatalog, QUESTION_KIND, type AttemptDetail, type Catalog, type CompanyTestFull,
          type CompanyTestSummary, type Job, type QuestionInput, type QuestionKind, type TestInput, type TestResultRow,
          type Track } from "../../api";
 import { Field, Req, useRequired, type Check } from "../../form";
-import { formatDateTime, t, useLang } from "../../i18n";
+import { formatDateTime, t, tMaybe, useLang } from "../../i18n";
 import { attemptStatusLabel, courseText, questionKindLabel, testStatus } from "../../labels";
 import { Icon } from "../../icons";
 import { ask, haptic } from "../../tg";
@@ -12,7 +12,9 @@ import { downloadCv, StudentSheet } from "./Students";
 import { navigate, useSearch } from "../../router";
 import { EmptyState, PageHead, Tabs } from "./kit";
 
-const audience = () => ({ all: t("task.audience.all"), tracks: t("p.tests.audience_tracks"), applicants: t("p.tests.audience_applicants") });
+// «yo'nalish» (track) targeting is kept only for tests that already use it; new tests target job fields (2026-11-19)
+const audience = () => ({ all: t("task.audience.all"), fields: t("task.audience.fields"), tracks: t("p.tests.audience_tracks"),
+                          applicants: t("p.tests.audience_applicants") });
 const when = (s: string | null) => (s ? formatDateTime(s) : "—");
 
 type View = { kind: "list" } | { kind: "edit"; test?: CompanyTestFull } | { kind: "results"; id: number } | { kind: "attempt"; id: number; back: View };
@@ -132,6 +134,8 @@ function TestBuilder({ test, onDone }: { test?: CompanyTestFull; onDone: () => v
     time_limit: test?.time_limit_min ? String(test.time_limit_min) : "",
   });
   const [trackIds, setTrackIds] = useState<number[]>(test?.track_ids ?? []);
+  const [fieldIds, setFieldIds] = useState<string[]>(test?.job_fields ?? []);
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [questions, setQuestions] = useState<QuestionInput[]>(
     test?.questions.map((q) => ({ kind: q.kind, text: q.text, options: [...q.options], correct: q.correct ?? [], points: q.points }))
     ?? [blankQuestion()]);
@@ -141,6 +145,7 @@ function TestBuilder({ test, onDone }: { test?: CompanyTestFull; onDone: () => v
 
   useEffect(() => {
     api.tracks().then(setTracks, () => {});
+    loadCatalog().then(setCatalog, () => {});
     api.employer.jobs().then((js) => setJobs(js.filter((j) => j.status !== "closed")), () => {});
   }, []);
 
@@ -154,6 +159,7 @@ function TestBuilder({ test, onDone }: { test?: CompanyTestFull; onDone: () => v
     const checks: Check[] = [
       ["t-title", f.title.trim().length >= 3, t("p.tests.req.title")],
       ["t-tracks", f.audience !== "tracks" || trackIds.length > 0, t("p.tests.req.tracks")],
+      ["t-fields", f.audience !== "fields" || fieldIds.length > 0, t("co.aud.fields_err")],
       ["t-job", f.audience !== "applicants" || Boolean(f.job_id), t("p.tests.req.job")],
     ];
     questions.forEach((q, i) => {
@@ -164,7 +170,8 @@ function TestBuilder({ test, onDone }: { test?: CompanyTestFull; onDone: () => v
     if (!check(checks)) return;
     const body: TestInput = {
       title: f.title.trim(), description: f.description.trim(), audience: f.audience as TestInput["audience"],
-      track_ids: f.audience === "tracks" ? trackIds : [], job_id: f.job_id ? Number(f.job_id) : null,
+      track_ids: f.audience === "tracks" ? trackIds : [], job_fields: f.audience === "fields" ? fieldIds : [],
+      job_id: f.job_id ? Number(f.job_id) : null,
       deadline: f.deadline || null, time_limit_min: f.time_limit ? Number(f.time_limit) : null, submit,
       questions: questions.map((q) => {
         // drop empty options and renumber the right answers to match
@@ -201,11 +208,26 @@ function TestBuilder({ test, onDone }: { test?: CompanyTestFull; onDone: () => v
                     onChange={(e) => setF({ ...f, description: e.target.value })} />
         </Field>
         <label>{t("p.tests.f.audience")}<Req /></label>
-        {(Object.keys(aud) as (keyof typeof aud)[]).map((a) => (
+        {(Object.keys(aud) as (keyof typeof aud)[]).filter((a) => a !== "tracks" || f.audience === "tracks").map((a) => (
           <label key={a} className="radio-line">
             <input type="radio" name="audience" checked={f.audience === a} onChange={() => setF({ ...f, audience: a })} />{aud[a]}
           </label>
         ))}
+        {f.audience === "fields" && (
+          <>
+            <div className="hint" style={{ margin: "4px 0 6px" }}>{t("co.aud.fields_hint")}</div>
+            <div id="t-fields" tabIndex={-1} className={groupCls("t-fields", "chips")}>
+              {Object.entries(catalog?.job_fields ?? {}).map(([k, label]) => (
+                <button key={k} type="button" className={`chip ${fieldIds.includes(k) ? "on" : ""}`}
+                        disabled={!fieldIds.includes(k) && fieldIds.length >= 5}
+                        onClick={() => { setFieldIds(fieldIds.includes(k) ? fieldIds.filter((x) => x !== k) : [...fieldIds, k]); clear("t-fields"); }}>
+                  {tMaybe(`field.${k}`) ?? label}
+                </button>
+              ))}
+            </div>
+            {errors["t-fields"] && <div className="field-error">{t("co.aud.fields_err")}</div>}
+          </>
+        )}
         {f.audience === "tracks" && (
           <>
             <div id="t-tracks" tabIndex={-1} className={groupCls("t-tracks", "chips")}>

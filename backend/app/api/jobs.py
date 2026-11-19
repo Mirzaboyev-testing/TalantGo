@@ -10,42 +10,51 @@ from ..models import (Application, ApplicationEvent, Company, ContactRequest, Em
                       SavedJob, User)
 from ..schemas import ApplyIn, ContactAnswerIn, JobOut, MyApplicationOut
 from ..core import ratelimit
-from ..services import applications, inbox
+from ..services import applications, files, inbox
 from ..services.applications import company_staff_ids
 from ..services.career import JOB_KIND_LABEL, verified_work_count
 from ..services.portfolio import refresh_count
+from ..services.progress import today as tashkent_today
 from .deps import CurrentUser, Session
 
 router = APIRouter(tags=["jobs"])
 
 
 def job_out(job: Job, **extra) -> JobOut:
+    c = job.company
     return JobOut.model_validate(job).model_copy(update={
-        "company_name": job.company.name, "company_industry": job.company.industry, **extra})
+        "company_name": c.name, "company_industry": c.industry,
+        "company_logo_url": files.logo_url(c.id, c.logo_file_id, c.status), **extra})
 
 
 def match_score(job: Job, user: User) -> int:
-    """0-100, an open formula: shared skills (45), the job function (30; the track a job asks for counts too),
-    the job type the student looks for (15) and the business field (10). Anything a side left empty counts half."""
+    """0-100, an open formula: the job function (40; the track a job asks for counts too), shared skills (35), the job
+    type the student looks for (15) and the business field (10). Anything a side left empty counts half; a job that
+    names no job function counts a quarter for a student who chose theirs (unknown, not half a match). 2026-11-19:
+    the field the student chose weighs more than skills left over from an old track (company panel audit)."""
     skills = {s.lower() for s in user.skills}
     wanted = {s.lower() for s in job.skills}
     skill_part = len(skills & wanted) / len(wanted) if wanted else 0.5
-    if job.job_fields or job.track_ids:
-        field_part = 1.0 if (set(job.job_fields) & set(user.job_fields)
-                             or (user.track_id is not None and user.track_id in job.track_ids)) else 0.0
+    unknown = 0.25 if user.job_fields else 0.5
+    if set(job.job_fields) & set(user.job_fields) or (user.track_id is not None and user.track_id in job.track_ids):
+        field_part = 1.0
+    elif job.job_fields:
+        field_part = 0.0
+    elif job.track_ids:          # only a track asked: a student without one (it is optional) left that side empty
+        field_part = unknown if user.track_id is None else 0.0
     else:
-        field_part = 0.5
+        field_part = unknown
     kind_part = (1.0 if job.kind in user.job_types else 0.0) if user.job_types else 0.5
     industry = job.company.industry if job.company else ""
     industry_part = (1.0 if industry in user.work_industries else 0.0) if user.work_industries and industry else 0.5
-    return round(100 * (0.45 * skill_part + 0.30 * field_part + 0.15 * kind_part + 0.10 * industry_part))
+    return round(100 * (0.40 * field_part + 0.35 * skill_part + 0.15 * kind_part + 0.10 * industry_part))
 
 
 def visible_jobs():
     """Approved jobs of approved companies whose deadline has not passed."""
     return (select(Job).join(Company)
             .where(Job.status == "approved", Company.status == "approved",
-                   or_(Job.deadline.is_(None), Job.deadline >= date.today())))
+                   or_(Job.deadline.is_(None), Job.deadline >= tashkent_today())))
 
 
 @router.get("/jobs", response_model=list[JobOut])

@@ -7,7 +7,7 @@ import { jobStatusLabel, type JobStatus } from "../../labels";
 import { statusBadge, statusLabel } from "../../pipeline";
 import { navigate } from "../../router";
 import { haptic } from "../../tg";
-import { ErrorText, message } from "../../ui";
+import { ErrorText, initials, message, nameTone } from "../../ui";
 import { AreaChart, Delta, PageHead, StatTile, Tabs } from "./kit";
 
 const PERIODS = ["7", "30", "90", "365"] as const;
@@ -239,7 +239,7 @@ export default function CompanyHome({ me, counters, onNewJob }: { me: Me; counte
                 <div className="co-list">
                   {d.recent.map((a) => (
                     <div key={a.application_id} className="co-list-row">
-                      <span className="co-avatar">{a.student.slice(0, 1).toUpperCase()}</span>
+                      <span className="co-avatar" style={nameTone(a.student)}>{initials(a.student)}</span>
                       <div className="grow" style={{ minWidth: 0 }}>
                         <b className="ellipsis" style={{ display: "block" }}>{a.student}</b>
                         <div className="hint ellipsis">{a.job} · {formatDateTime(a.created_at, false)}</div>
@@ -328,7 +328,7 @@ function OutcomeRequests() {
       <div className="co-list">
         {rows.map((o) => (
           <div key={o.id} className="co-list-row wrap">
-            <span className="co-avatar">{o.student.slice(0, 1).toUpperCase()}</span>
+            <span className="co-avatar" style={nameTone(o.student)}>{initials(o.student)}</span>
             <div className="grow" style={{ minWidth: 0 }}>
               <b>{o.student}</b>{o.university ? <span className="hint"> · {o.university}</span> : null}
               <div className="hint">{[o.position, t(`outcome.kind.${o.kind}`), o.started_on && formatDateTime(o.started_on, false)].filter(Boolean).join(" · ")}</div>

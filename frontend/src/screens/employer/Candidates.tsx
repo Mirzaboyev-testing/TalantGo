@@ -7,7 +7,7 @@ import { navigate, useSearch } from "../../router";
 import { ErrorText, Sheet, message } from "../../ui";
 import { ApplicantCard } from "./ApplicantCard";
 import { StudentSheet } from "./Students";
-import { EmptyState, initials, PageHead, Tabs } from "./kit";
+import { EmptyState, initials, nameTone, PageHead, Tabs } from "./kit";
 
 const STAGES = ["new", "viewed", "shortlisted", "interview", "offer", "hired", "rejected", "withdrawn"];
 const BOARD = ["new", "viewed", "shortlisted", "interview", "offer", "hired"];
@@ -97,7 +97,7 @@ export default function Candidates({ onChanged }: { onChanged?: () => void }) {
                   {cards.map((r) => (
                     <button key={r.id} className="co-cand" onClick={() => setOpen(r)}>
                       <div className="row">
-                        {r.identity.photo_url ? <img className="co-avatar" src={r.identity.photo_url} alt="" /> : <span className="co-avatar">{initials(r.identity.full_name)}</span>}
+                        {r.identity.photo_url ? <img className="co-avatar" src={r.identity.photo_url} alt="" /> : <span className="co-avatar" style={nameTone(r.identity.full_name)}>{initials(r.identity.full_name)}</span>}
                         <div className="grow" style={{ minWidth: 0 }}>
                           <b className="ellipsis" style={{ display: "block" }}>{r.identity.full_name}</b>
                           <div className="hint ellipsis">{r.job_title}</div>
@@ -135,7 +135,7 @@ export default function Candidates({ onChanged }: { onChanged?: () => void }) {
               {data.items.map((r) => (
                 <tr key={r.id} onClick={() => setOpen(r)}>
                   <td data-label={t("cand.col.name")}>
-                    <span className="row" style={{ gap: 10 }}><span className="co-avatar small">{initials(r.identity.full_name)}</span><b>{r.identity.full_name}</b></span>
+                    <span className="row" style={{ gap: 10 }}><span className="co-avatar small" style={nameTone(r.identity.full_name)}>{initials(r.identity.full_name)}</span><b>{r.identity.full_name}</b></span>
                   </td>
                   <td data-label={t("cand.col.job")}>{r.job_title}</td>
                   <td data-label={t("cand.col.stage")}><span className={`badge ${statusBadge(r.status)}`}>{statusLabel(r.status)}</span></td>

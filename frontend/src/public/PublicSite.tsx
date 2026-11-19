@@ -5,6 +5,7 @@ import { navigate, usePath } from "../router";
 import LangSwitch from "../screens/LangSwitch";
 import { backButton, insideTelegram } from "../tg";
 import WebLogin from "../screens/WebLogin";
+import { ResetByLink } from "../screens/PasswordRecovery";
 import About from "./About";
 import Home from "./Home";
 import { contactHref, useSiteContent } from "./siteContent";
@@ -19,7 +20,7 @@ import { BRAND, BrandLogo } from "../brand";
 type GetToken = () => Promise<{ token: string; moved_to?: string | null }>;
 
 /** Pages anyone can open: the home page with the three panels, jobs, companies and the sign-in pages. */
-export const isPublicPath = (path: string) => /^\/($|vakansiyalar(\/|$)|korxonalar(\/|$)|universitetlar(\/|$)|reyting$|biz-haqimizda$|kirish(\/|$))/.test(path);
+export const isPublicPath = (path: string) => /^\/($|vakansiyalar(\/|$)|korxonalar(\/|$)|universitetlar(\/|$)|reyting$|biz-haqimizda$|kirish(\/|$)|parol-tiklash$)/.test(path);
 
 export default function PublicSite({ me, dev, onSignIn, onDev }: {
   me: Me | null; dev: boolean; onSignIn: (getToken: GetToken) => void; onDev: (id: number, name: string) => void;
@@ -37,6 +38,7 @@ export default function PublicSite({ me, dev, onSignIn, onDev }: {
   else if (section === "universitetlar") page = id ? <UniversityPage id={Number(id)} /> : <UniversitiesPage />;
   else if (section === "reyting") page = <RankingPage />;
   else if (section === "biz-haqimizda") page = <About me={me} />;
+  else if (section === "parol-tiklash") page = <ResetByLink onSignIn={onSignIn} />;      // the link from the bot (/parol)
   else if (section === "kirish") {
     page = id === "talaba" || id === "korxona" || id === "universitet"
       ? <WebLogin dev={dev} panel={id as Panel} onSignIn={onSignIn} onDev={onDev} />

@@ -102,7 +102,8 @@ async def test_students_report_work_themselves(client, make_user):
     assert r.status_code == 201 and r.json()["confirmed"] is False
     page = (await client.get(f"{API}/me/university", headers=student["headers"])).json()
     assert page["university"]["short_name"] == "TDIU" and page["outcomes"][0]["company"] == "Uzum"
-    assert "phone" not in str(page["university"])
+    # aggregates and the institution's own contacts only: no student is named, no person's phone
+    assert "Aziza" not in str(page["university"]) and page["university"]["phone"] == ""
     assert (await client.delete(f"{API}/me/outcomes/{r.json()['id']}", headers=student["headers"])).status_code == 204
     hr, _ = await live_job(client, make_user)
     assert (await client.post(f"{API}/me/outcomes", json={"company_name": "Boshqa firma", "kind": "full_time"},

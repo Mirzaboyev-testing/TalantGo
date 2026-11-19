@@ -7,15 +7,16 @@ import { ask, haptic } from "../../tg";
 import { Avatar, ErrorText, message, toast } from "../../ui";
 import { COOPERATION, uapi, type StaffRow, type UniProfile as Profile } from "./uapi";
 import type { Go } from "./UniversityApp";
+import LoginMethods from "../LoginMethods";
 import { posLabel } from "./UniPending";
 import { CopyField, Empty, FileDrop, PageHead, Panel, Pill, Ring, Tabs, UIcon, UniLogo, ago, pct } from "./ukit";
 
-type View = "profile" | "team" | "invite";
+type View = "profile" | "team" | "invite" | "login";
 
 /** The university's public profile, its team on the platform, and links to invite students and colleagues. */
-export default function UniProfile({ me, sub, go, onChanged }: { me: Me; sub: string; go: Go; onChanged: () => void }) {
+export default function UniProfile({ me, sub, go, onChanged, onMe }: { me: Me; sub: string; go: Go; onChanged: () => void; onMe: (m: Me) => void }) {
   useLang();
-  const view: View = sub === "team" || sub === "invite" ? sub : "profile";
+  const view: View = sub === "team" || sub === "invite" || sub === "login" ? sub : "profile";
   const [teamCount, setTeamCount] = useState(0);
   useEffect(() => { uapi.team().then((r) => setTeamCount(r.rows.filter((x) => x.status === "pending").length), () => {}); }, [view]);
   return (
@@ -24,10 +25,11 @@ export default function UniProfile({ me, sub, go, onChanged }: { me: Me; sub: st
                 actions={me.staff_university && <button className="btn small ghost" onClick={() => navigate(`/universitetlar/${me.staff_university!.id}`)}><UIcon name="eye" size={16} />{t("uprof.open_public")}</button>} />
       <Tabs value={view} onChange={(v) => go("profile", v === "profile" ? undefined : v)}
             items={[{ id: "profile", label: t("u.pr.tab_profile") }, { id: "team", label: t("u.pr.tab_team"), count: teamCount || undefined },
-                    { id: "invite", label: t("u.pr.tab_invite") }]} />
+                    { id: "invite", label: t("u.pr.tab_invite") }, { id: "login", label: t("u.pr.tab_login") }]} />
       {view === "profile" && <ProfileForm />}
       {view === "team" && <Team onChanged={() => { onChanged(); setTeamCount(0); }} />}
       {view === "invite" && <Invite me={me} />}
+      {view === "login" && <div style={{ maxWidth: 640 }}><LoginMethods me={me} onChanged={onMe} /></div>}
     </>
   );
 }

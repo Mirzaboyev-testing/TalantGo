@@ -22,7 +22,7 @@ export default function PeersScreen({ me }: { me: Me }) {
     <div>
       <h1>{t("s.community.peers")}</h1>
       <p className="hint">
-        {query ? t("s.peers.by_goal", { goal: query }) : t("s.peers.by_track", { track: me.track?.title ?? "" })}. {t("s.peers.together")}
+        {query ? t("s.peers.by_goal", { goal: query }) : me.track ? t("s.peers.by_track", { track: me.track.title }) : t("st.peers.by_fields")}. {t("s.peers.together")}
       </p>
       <form className="row" onSubmit={(e) => { e.preventDefault(); setQuery(goal.trim()); }}>
         <input className="grow" value={goal} placeholder={t("s.peers.search_ph")} onChange={(e) => setGoal(e.target.value)} />
@@ -30,7 +30,7 @@ export default function PeersScreen({ me }: { me: Me }) {
       </form>
       {me.goals.length > 0 && (
         <div className="chips" style={{ margin: "8px 0 12px" }}>
-          <button className={`chip ${query === "" ? "on" : ""}`} onClick={() => { setGoal(""); setQuery(""); }}>{t("s.peers.my_track")}</button>
+          <button className={`chip ${query === "" ? "on" : ""}`} onClick={() => { setGoal(""); setQuery(""); }}>{me.track ? t("s.peers.my_track") : t("st.peers.my_fields")}</button>
           {me.goals.map((g) => (
             <button key={g} className={`chip ${query === g ? "on" : ""}`} onClick={() => { setGoal(g); setQuery(g); }}>{g}</button>
           ))}

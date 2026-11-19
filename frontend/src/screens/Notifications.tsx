@@ -8,7 +8,7 @@ import { ErrorText, Sheet, message } from "../ui";
 import "./notifications.css";
 
 const PLACEHOLDERS = ["job", "company", "student", "university", "task", "test", "challenge", "note", "verifier",
-                      "points", "score", "max", "status", "text", "title"];
+                      "points", "score", "max", "status", "text", "title", "comment", "place", "when", "name"];
 
 /** The message in the reader's language: Uzbek is stored as written; ru/en use a template by kind. */
 export function notificationText(n: AppNotification): string {
@@ -28,11 +28,13 @@ export function notificationText(n: AppNotification): string {
 type Tone = "green" | "blue" | "violet" | "amber" | "red";
 const KIND_ICON: [RegExp, IconName, Tone][] = [
   [/^chat_/, "chat", "blue"],
+  [/^post_|^comment_/, "chat", "blue"],
   [/^application_/, "inbox", "green"],
   [/^contact_/, "phone", "blue"],
   [/^partnership_/, "building", "violet"],
   [/^company_review/, "building", "green"],
   [/^job_/, "briefcase", "green"],
+  [/hire/, "award", "green"],                    // university_hire: a company hired one of the university's students
   [/^university_announcement/, "megaphone", "violet"],
   [/event/, "calendar", "blue"],
   [/^verification_/, "verified", "green"],
@@ -41,6 +43,7 @@ const KIND_ICON: [RegExp, IconName, Tone][] = [
   [/^test_/, "check", "blue"],
   [/^challenge_/, "trophy", "amber"],
   [/task|work_|question_/, "flag", "green"],
+  [/^password_/, "lock", "amber"],
 ];
 
 function look(n: AppNotification): { icon: IconName; tone: Tone } {

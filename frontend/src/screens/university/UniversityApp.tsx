@@ -27,7 +27,7 @@ const ALIAS_SUB: Record<string, string> = { tasdiqlash: "queue", guruhlar: "grou
 /** Opens a section, optionally on one of its tabs (?tab=...). */
 export type Go = (tab: Tab, sub?: string) => void;
 
-export default function UniversityApp({ me, onLogout }: { me: Me; onLogout: () => void }) {
+export default function UniversityApp({ me, onMe, onLogout }: { me: Me; onMe: (m: Me) => void; onLogout: () => void }) {
   useLang();
   const [tab, , segment] = useRouteTab<Tab>("/universitet", ROUTES, "dashboard", ALIASES);
   const search = useSearch();
@@ -68,7 +68,7 @@ export default function UniversityApp({ me, onLogout }: { me: Me; onLogout: () =
         {tab === "opportunities" && <UniOpportunities />}
         {tab === "events" && <UniEvents sub={sub} go={go} />}
         {tab === "messages" && <UniMessages sub={sub} go={go} />}
-        {tab === "profile" && <UniProfile me={me} sub={sub} go={go} onChanged={refreshCounts} />}
+        {tab === "profile" && <UniProfile me={me} sub={sub} go={go} onChanged={refreshCounts} onMe={onMe} />}
       </div>
     </Shell>
   );

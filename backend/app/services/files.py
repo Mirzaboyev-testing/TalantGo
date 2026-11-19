@@ -18,6 +18,9 @@ from ..core.config import settings
 from ..core.security import create_token
 from ..models import SubmissionFile
 
+# the slim server image has no /etc/mime.types, so a .webp photo or logo would be stored as an unknown file
+mimetypes.add_type("image/webp", ".webp")
+
 MAX_FILES = 5
 LINK_HOURS = 12
 INLINE_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif", "application/pdf"}   # safe to show in a browser

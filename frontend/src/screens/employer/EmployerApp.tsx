@@ -91,7 +91,12 @@ export default function EmployerApp({ me, onChanged, onLogout }: { me: Me; onCha
 
 // --------------------------------------------------------------------------- jobs and applicants
 
-type JobFilter = "all" | "approved" | "pending" | "rejected" | "closed";
+type JobFilter = "all" | "approved" | "expired" | "pending" | "rejected" | "closed";
+// a live job whose deadline has passed: students no longer see it, so it is not counted as live
+const isExpired = (j: Job) => j.status === "approved" && (daysLeft(j.deadline) ?? 1) < 0;
+const jobState = (j: Job): JobFilter => (isExpired(j) ? "expired" : (j.status as JobFilter));
+/** Today in Tashkent as yyyy-mm-dd, the earliest deadline a company can pick. */
+const todayIso = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tashkent" });
 
 function JobsTab({ me }: { me: Me }) {
   useLang();
@@ -109,8 +114,8 @@ function JobsTab({ me }: { me: Me }) {
   if (applicantsOf) return <Applicants job={applicantsOf} onBack={() => { setApplicantsOf(null); void load(); }} />;
   if (editing) return <JobForm me={me} job={editing === "new" ? undefined : editing} onDone={close} />;
 
-  const count = (f: JobFilter) => (jobs ?? []).filter((j) => f === "all" || j.status === f).length;
-  const shown = (jobs ?? []).filter((j) => filter === "all" || j.status === filter);
+  const count = (f: JobFilter) => (jobs ?? []).filter((j) => f === "all" || jobState(j) === f).length;
+  const shown = (jobs ?? []).filter((j) => filter === "all" || jobState(j) === filter);
   const totalViews = (jobs ?? []).reduce((n, j) => n + j.views, 0);
   const totalApps = (jobs ?? []).reduce((n, j) => n + j.applications, 0);
 
@@ -129,8 +134,8 @@ function JobsTab({ me }: { me: Me }) {
         </div>
       )}
       {jobs && jobs.length > 0 && (
-        <Tabs items={(["all", "approved", "pending", "rejected", "closed"] as JobFilter[]).map((f) =>
-          [f, f === "all" ? t("co.all") : jobStatusLabel(f as JobStatus), count(f)] as [JobFilter, string, number])}
+        <Tabs items={(["all", "approved", "expired", "pending", "rejected", "closed"] as JobFilter[]).filter((f) => f !== "expired" || count(f) > 0).map((f) =>
+          [f, f === "all" ? t("co.all") : f === "expired" ? t("co.jobs.expired_tab") : jobStatusLabel(f as JobStatus), count(f)] as [JobFilter, string, number])}
               value={filter} onChange={setFilter} />
       )}
       {!jobs && !error && <div className="co-grid">{[0, 1, 2].map((i) => <div key={i} className="co-sk-block" style={{ height: 220 }} />)}</div>}
@@ -146,7 +151,9 @@ function JobsTab({ me }: { me: Me }) {
             <div key={j.id} className={`co-job st-${j.status}`}>
               <div className="co-job-top">
                 <span className="co-tag">{kindLabel(j.kind)}</span>
-                <span className={`badge ${JOB_BADGE[j.status]}`}>{jobStatusLabel(j.status as JobStatus)}</span>
+                {isExpired(j)
+                  ? <span className="badge todo">{t("co.jobs.expired_tab")}</span>
+                  : <span className={`badge ${JOB_BADGE[j.status]}`}>{jobStatusLabel(j.status as JobStatus)}</span>}
               </div>
               <h3>{j.title}</h3>
               <div className="co-job-meta">
@@ -163,12 +170,21 @@ function JobsTab({ me }: { me: Me }) {
                 {left == null ? t("co.jobs.no_deadline") : left < 0 ? t("co.jobs.expired") : t("co.jobs.days_left", { n: left })}
                 <span className="hint"> · {formatDateTime(j.created_at, false)}</span>
               </div>
+              {(j.recommended_by?.length ?? 0) > 0 && (
+                <div className="co-note good" title={j.recommended_by!.map((r) => r.name).join(", ")}>
+                  <Icon name="school" size={14} /> {t("co.jobs.recommended_by", { list: j.recommended_by!.map((r) => r.short_name).join(", ") })}
+                </div>
+              )}
               {j.status === "rejected" && j.review_note && <div className="co-note bad">{t("p.jobs.review_note", { note: j.review_note })}</div>}
               {j.status === "pending" && <div className="co-note">{t("co.jobs.pending_note")}</div>}
+              {isExpired(j) && <div className="co-note bad">{t("co.jobs.expired_note")}</div>}
+              {j.status === "closed" && <div className="co-note">{t("co.jobs.closed_note")}</div>}
               <div className="co-job-actions">
                 <button className="btn small" onClick={() => setApplicantsOf(j)}><Icon name="inbox" size={15} />{t("p.jobs.applications", { n: j.applications })}</button>
-                {j.status !== "closed" && <button className="btn small ghost" onClick={() => setEditing(j)}>{t("p.common.edit")}</button>}
-                {j.status === "approved" && (
+                <button className="btn small ghost" onClick={() => setEditing(j)}>
+                  {j.status === "closed" ? t("co.jobs.reopen") : isExpired(j) ? t("co.jobs.extend") : t("p.common.edit")}
+                </button>
+                {j.status === "approved" && !isExpired(j) && (
                   <button className="icon-btn" title={t("co.jobs.public")} aria-label={t("co.jobs.public")} onClick={() => navigate(`/vakansiyalar/${j.id}`)}><Icon name="globe" size={16} /></button>
                 )}
                 {j.status !== "closed" && (
@@ -218,6 +234,8 @@ function JobForm({ me, job, onDone }: { me: Me; job?: Job; onDone: () => void })
       ["j-kind", Boolean(f.kind), t("p.jobs.req.kind")],
       ["j-city", f.city.trim().length >= 2, t("p.jobs.req.city")],
       ["j-desc", f.description.trim().length >= 20, t("p.jobs.req.desc")],
+      ["j-fields", f.job_fields.length > 0, t("co.jobs.f.fields_req")],
+      ["j-deadline", !f.deadline || f.deadline >= todayIso(), t("co.jobs.f.deadline_past")],
       ["j-rules", rules, t("p.jobs.req.rules")],
     ];
     if (!check(checks)) return;
@@ -272,7 +290,7 @@ function JobForm({ me, job, onDone }: { me: Me; job?: Job; onDone: () => void })
           <div className="co-card">
             <div className="co-section-title"><span>2</span>{t("co.jobs.s.terms")}</div>
             <label className="radio-line" style={{ marginTop: 0 }}>
-              <input type="checkbox" checked={f.is_paid} onChange={(e) => setF({ ...f, is_paid: e.target.checked })} />{t("p.jobs.f.paid")}
+              <input type="checkbox" checked={f.is_paid} onChange={(e) => { const v = e.target.checked; setF((cur) => ({ ...cur, is_paid: v })); }} />{t("p.jobs.f.paid")}
             </label>
             {f.is_paid ? (
               <div className="co-form-grid three">
@@ -287,10 +305,12 @@ function JobForm({ me, job, onDone }: { me: Me; job?: Job; onDone: () => void })
               </>
             )}
             <div className="co-form-grid">
-              <Field id="j-deadline" label={t("p.jobs.f.deadline")}><input id="j-deadline" type="date" value={f.deadline} onChange={set("deadline")} /></Field>
+              <Field id="j-deadline" label={t("p.jobs.f.deadline")} error={errors["j-deadline"] && t("co.jobs.f.deadline_past")}>
+                <input id="j-deadline" className={cls("j-deadline")} type="date" min={todayIso()} value={f.deadline} onChange={set("deadline", "j-deadline")} />
+              </Field>
             </div>
             <label className="radio-line" style={{ marginTop: 12 }}>
-              <input type="checkbox" checked={f.practice} onChange={(e) => setF({ ...f, practice: e.target.checked })} />
+              <input type="checkbox" checked={f.practice} onChange={(e) => { const v = e.target.checked; setF((cur) => ({ ...cur, practice: v })); }} />
               <span>{t("p.jobs.f.practice")}</span>
             </label>
           </div>
@@ -307,21 +327,21 @@ function JobForm({ me, job, onDone }: { me: Me; job?: Job; onDone: () => void })
             <Field id="j-skills" label={t("p.jobs.f.skills")} hint={t("p.jobs.f.skills_hint")}>
               <input id="j-skills" value={f.skills} placeholder="SQL, Power BI, Excel" onChange={set("skills")} />
             </Field>
-            <label>{t("co.jobs.f.fields")}</label>
-            <div className="chips">
+            <label>{t("co.jobs.f.fields")}<Req /></label>
+            <div id="j-fields" tabIndex={-1} className={groupCls("j-fields", "chips")}>
               {Object.keys(catalog?.job_fields ?? {}).map((k) => (
                 <button key={k} type="button" className={`chip ${f.job_fields.includes(k) ? "on" : ""}`}
-                        onClick={() => setF({ ...f, job_fields: f.job_fields.includes(k) ? f.job_fields.filter((x) => x !== k) : [...f.job_fields, k].slice(0, 3) })}>
+                        onClick={() => { setF((cur) => ({ ...cur, job_fields: cur.job_fields.includes(k) ? cur.job_fields.filter((x) => x !== k) : [...cur.job_fields, k].slice(0, 3) })); clear("j-fields"); }}>
                   {fieldLabel(k, catalog)}
                 </button>
               ))}
             </div>
-            <div className="hint" style={{ marginTop: 4 }}>{t("co.jobs.f.fields_hint")}</div>
+            {errors["j-fields"] ? <div className="field-error">{t("co.jobs.f.fields_req")}</div> : <div className="hint" style={{ marginTop: 4 }}>{t("co.jobs.f.fields_hint")}</div>}
             <label>{t("p.jobs.f.tracks")}</label>
             <div className="chips">
               {tracks.map((tr) => (
                 <button key={tr.id} type="button" className={`chip ${f.track_ids.includes(tr.id) ? "on" : ""}`}
-                        onClick={() => setF({ ...f, track_ids: f.track_ids.includes(tr.id) ? f.track_ids.filter((x) => x !== tr.id) : [...f.track_ids, tr.id] })}>
+                        onClick={() => setF((cur) => ({ ...cur, track_ids: cur.track_ids.includes(tr.id) ? cur.track_ids.filter((x) => x !== tr.id) : [...cur.track_ids, tr.id] }))}>
                   {tr.title.split(":")[0]}
                 </button>
               ))}

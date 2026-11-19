@@ -22,6 +22,7 @@ from ..models import (Application, AuditLog, Company, ContactRequest, Employment
 from ..schemas import ReviewDecisionIn, Url
 from ..services import files, inbox, outcomes, partnerships
 from ..services import staff as staff_service
+from ..services import uni_news
 from ..services.applications import company_staff_ids
 from ..services.career import completeness, decide_verification
 from ..services.catalog import clean_faculties
@@ -79,8 +80,7 @@ def _placed(uni_id: int):
                           EmploymentOutcome.confirmed.is_(True)).correlate(User)
 
 
-def logo_url(uni: University) -> str | None:
-    return f"/api/v1/public/universities/{uni.id}/logo?v={uni.logo_file_id}" if uni.logo_file_id else None
+logo_url = uni_news.university_logo_url          # one place for the logo address (site.py imports it from here)
 
 
 # --------------------------------------------------------------------------- student filters (one place)
@@ -676,7 +676,7 @@ async def decide_outcome(outcome_id: int, body: OutcomeDecisionIn, user: Staff, 
     await inbox.push(session, [student_id], "outcome_review",
                      f"Universitet «{company}» bo'yicha ish joyingizni tasdiqladi." if body.confirm
                      else f"Universitet «{company}» bo'yicha yozuvingizni tasdiqlamadi. {body.note}".strip(),
-                     link="/talaba/universitetim", params={"approved": body.confirm, "company": company, "note": body.note})
+                     link="/talaba/profil", params={"approved": body.confirm, "company": company, "note": body.note})
     return {"confirmed": body.confirm}
 
 
@@ -805,4 +805,22 @@ async def recommend(job_id: int, body: RecommendIn, user: Staff, session: Sessio
                      f"{user.staff_university.short_name} karyera markazi tavsiya qiladi: «{job.title}» ({job.company.name}).{note}",
                      link=f"/vakansiyalar/{job.id}",
                      params={"university": user.staff_university.short_name, "job": job.title, "company": job.company.name})
+    # the company learns which university vouched for its vacancy and how many students heard of it
+    await inbox.push(session, await company_staff_ids(session, job.company_id), "job_recommended_company",
+                     f"{user.staff_university.name} «{job.title}» vakansiyangizni {len(students)} ta tasdiqlangan talabaga tavsiya qildi.",
+                     link="/korxona/vakansiyalar",
+                     params={"university": user.staff_university.name, "job": job.title, "count": len(students)})
     return {"recommended": True, "students": len(students)}
+
+
+@router.delete("/jobs/{job_id}/recommend")
+async def withdraw_recommendation(job_id: int, user: Staff, session: Session) -> dict:
+    """Takes the university's recommendation back (students keep the notice they already got)."""
+    rec = (await session.execute(select(JobRecommendation).where(JobRecommendation.university_id == user.staff_university_id,
+                                                                 JobRecommendation.job_id == job_id))).scalar_one_or_none()
+    if rec is None:
+        raise HTTPException(404, "Bu vakansiya tavsiya qilinmagan")
+    await session.delete(rec)
+    session.add(AuditLog(actor=actor(user), action="job.recommend_withdraw", target=str(job_id)))
+    await session.commit()
+    return {"recommended": False}

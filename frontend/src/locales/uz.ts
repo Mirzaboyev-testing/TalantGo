@@ -4,6 +4,8 @@ import { partner } from "./parts/partner";
 import { student } from "./parts/student";
 import { student2 } from "./parts/student2";
 import { site } from "./parts/site";
+import { account } from "./parts/account";
+import { feed } from "./parts/feed";
 // Uzbek (Latin): the source language. Every key here must exist in ru.ts and en.ts.
 export const uz = {
   ...student.uz,
@@ -12,6 +14,8 @@ export const uz = {
   ...company.uz,
   ...university.uz,
   ...site.uz,
+  ...account.uz,
+  ...feed.uz,
   "common.loading": "Yuklanmoqda…",
   "common.close": "Yopish",
   "common.save": "Saqlash",
@@ -61,8 +65,9 @@ export const uz = {
   "notif.test_new": "{company} yangi test e'lon qildi: «{test}».",
   "notif.task_new": "Yangi topshiriq: «{task}» ({points} ball).",
   "notif.challenge_new": "Yangi chellenj: «{challenge}».",
-  "notif.challenge_result.ok": "«{challenge}» chellenjidagi ishingiz qabul qilindi.",
-  "notif.challenge_result.no": "«{challenge}» chellenjidagi ishingiz qabul qilinmadi.",
+  "notif.challenge_result.ok": "«{challenge}» ishingiz qabul qilindi: +{points} ball.",
+  "notif.challenge_result.no": "«{challenge}» ishingiz qabul qilinmadi. Izoh: {comment}",
+  "notif.task_resubmitted": "«{task}»: {student} ishini tuzatib qayta yubordi.",
   "notif.question_new": "«{task}» bo'yicha yangi savol: {student}.",
   "notif.question_answered": "Mentor «{task}» bo'yicha savolingizga javob berdi.",
   "notif.work_result.peer_verified": "«{task}» ishingiz tasdiqlandi: +{points} ball.",
@@ -480,6 +485,7 @@ export const uz = {
   "notif.outcome_review.ok": "Universitet «{company}» bo'yicha ish joyingizni tasdiqladi.",
   "notif.outcome_review.no": "Universitet «{company}» bo'yicha yozuvingizni tasdiqlamadi.",
   "notif.job_recommended": "{university} tavsiya qiladi: «{job}» ({company}).",
+  "notif.job_recommended_company": "{university} «{job}» vakansiyangizni {count} ta tasdiqlangan talabaga tavsiya qildi.",
 
   "emp.interned": "Amaliyotda",
   "emp.interned_hint": "{n} talaba tasdiqlangan amaliyotda",

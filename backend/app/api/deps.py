@@ -5,7 +5,7 @@ from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_session
-from ..core.security import read_token
+from ..core.security import read_token, read_user_token
 from ..models import AdminAccount, AuditLog, User
 from ..services import admin_access
 from ..services.admin_accounts import fingerprint
@@ -20,10 +20,12 @@ def _bearer(authorization: str | None) -> str:
 
 
 async def current_user(session: Session, authorization: Annotated[str | None, Header()] = None) -> User:
-    user_id = read_token(_bearer(authorization), "user")
-    user = await session.get(User, int(user_id)) if user_id else None
+    parsed = read_user_token(_bearer(authorization))
+    user = await session.get(User, parsed[0]) if parsed else None
     if user is None:
         raise HTTPException(401, "Sessiya tugagan, ilovani qayta oching")
+    if parsed[1] != user.token_version:            # the password was changed or reset after this sign-in
+        raise HTTPException(401, "Parol o'zgartirilgan: qaytadan kiring")
     if user.is_blocked:
         raise HTTPException(403, "Hisobingiz bloklangan. Savollar bo'lsa, adminga yozing.")
     return user

@@ -27,7 +27,7 @@ function nextStep(me: Me, d: StudentDashboard | null): { icon: IconName; title: 
     return { icon: "send", title: t("st.home.next.apply"), text: t("st.home.next.apply_text"), cta: t("st.home.next.apply_cta"), to: "/talaba/vakansiyalar" };
   }
   if (!me.track) {
-    return { icon: "path", title: t("st.home.next.weekly"), text: t("st.home.next.weekly_text"), cta: t("st.weekly.pick"), to: "/talaba/topshiriqlar" };
+    return { icon: "path", title: t("st.home.next.weekly"), text: t("st.home.next.weekly_text"), cta: t("st.weekly.pick"), to: "/talaba/yol" };
   }
   return null;
 }
@@ -37,18 +37,22 @@ export default function StudentHome({ me }: { me: Me }) {
   useLang();
   const [d, setD] = useState<StudentDashboard | null>(null);
   const [tasks, setTasks] = useState<Challenge[] | null>(null);
+  const [openTests, setOpenTests] = useState(0);
   const [q, setQ] = useState("");
   const [error, setError] = useState("");
   useEffect(() => {
     api.studentDashboard().then(setD, (e) => setError(message(e)));
     api.challenges.list().then((rows) => setTasks(rows.filter((c) => c.state === "active")
       .sort((a, b) => a.ends_at.localeCompare(b.ends_at))), () => setTasks([]));
+    // company tests waiting for the student (not taken yet, still open): a reminder that leads to them
+    api.tests.list().then((rows) => setOpenTests(rows.filter((x) => x.open && x.status === "approved" && !x.my_attempt).length), () => {});
   }, []);
 
   const first = me.full_name.split(" ")[0];
   const study = [me.university_ref?.short_name, me.faculty, me.course ? courseLabel(me.course) : ""].filter(Boolean).join(" · ");
   const step = nextStep(me, d);
-  const search = (term: string) => navigate(`/vakansiyalar${term.trim() ? `?q=${encodeURIComponent(term.trim())}` : ""}`);
+  // the search stays inside the panel (2026-11-19): the jobs section reads ?q=
+  const search = (term: string) => navigate(`/talaba/vakansiyalar${term.trim() ? `?q=${encodeURIComponent(term.trim())}` : ""}`);
 
   return (
     <div className="co-page st-home">
@@ -93,7 +97,7 @@ export default function StudentHome({ me }: { me: Me }) {
 
           <div className="co-stats">
             <StatTile icon="inbox" label={t("home.active_apps")} value={d?.active_applications ?? "–"} onClick={go("/talaba/arizalar")} />
-            <StatTile icon="calendar" tone="blue" label={t("st.home.interviews")} value={d ? d.interviews.length : "–"} onClick={go("/talaba/arizalar")} />
+            <StatTile icon="calendar" tone="blue" label={t("st.home.interviews")} value={d ? d.interviews.length : "–"} onClick={go("/talaba/arizalar?bosqich=interview")} />
             <StatTile icon="verified" tone="violet" label={t("st.home.verified_work")} value={d?.verified_tasks ?? "–"} onClick={go("/talaba/topshiriqlar")} />
             <StatTile icon="heart" tone="amber" label={t("st.home.saved")} value={d?.saved ?? "–"} onClick={go("/talaba/saqlangan")} />
           </div>
@@ -113,7 +117,8 @@ export default function StudentHome({ me }: { me: Me }) {
             )}
             <div className="st-card-grid">
               {d?.recommended.map((j) => (
-                <div key={j.id} className="st-job">
+                <div key={j.id} className="st-job"
+                     onClickCapture={(e) => { e.preventDefault(); e.stopPropagation(); navigate(`/talaba/vakansiyalar?ish=${j.id}`); }}>
                   <PublicJobCard job={j} />
                   {j.match >= 50 && <span className="st-match">{t("home.match", { n: j.match })}</span>}
                 </div>
@@ -126,6 +131,13 @@ export default function StudentHome({ me }: { me: Me }) {
               <div><b>{t("st.home.tasks")}</b><div className="hint">{t("st.home.tasks_hint")}</div></div>
               <a href="/talaba/topshiriqlar" onClick={go("/talaba/topshiriqlar")}>{t("home.see_all")}</a>
             </div>
+            {openTests > 0 && (
+              <button type="button" className="st-tests-banner" onClick={go("/talaba/topshiriqlar/testlar")}>
+                <span className="st-tests-banner-icon"><Icon name="file" size={18} /></span>
+                <span className="grow"><b>{t("st.home.tests_waiting", { n: openTests })}</b><small>{t("st.home.tests_waiting_hint")}</small></span>
+                <Icon name="arrow" size={18} />
+              </button>
+            )}
             {!tasks && <div className="st-skeleton-grid"><span /><span /></div>}
             {tasks?.length === 0 && (
               <div className="st-empty">
@@ -138,7 +150,7 @@ export default function StudentHome({ me }: { me: Me }) {
               {tasks?.slice(0, 4).map((c) => {
                 const left = daysLeft(c.ends_at);
                 return (
-                  <button key={c.id} type="button" className="st-task-card" onClick={go("/talaba/topshiriqlar")}>
+                  <button key={c.id} type="button" className="st-task-card" onClick={go(`/talaba/topshiriqlar?vazifa=${c.id}`)}>
                     <div className="row between">
                       <span className="st-task-from"><Icon name={c.company ? "building" : "user"} size={14} />{c.company ?? c.mentor ?? BRAND}</span>
                       <span className={`st-deadline ${left <= 2 ? "soon" : ""}`}><Icon name="clock" size={13} />{t("s.ch.days_left", { n: left })}</span>

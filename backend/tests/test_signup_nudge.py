@@ -6,6 +6,7 @@ from sqlalchemy import update
 from app.core.db import SessionLocal
 from app.models import AppConfig, User
 from app.services import reminders, settings_store, telegram_bot
+from app.services.catalog import CONSENT_VERSION
 
 
 async def test_one_reminder_for_an_unfinished_sign_up(make_user, monkeypatch):
@@ -25,9 +26,11 @@ async def test_one_reminder_for_an_unfinished_sign_up(make_user, monkeypatch):
     fresh = await make_user("Hozirgina", telegram_id=7003)
     async with SessionLocal() as s:
         await s.execute(update(User).where(User.id.in_([left["id"], done["id"]])).values(created_at=now - timedelta(hours=2)))
+        # the sign-up of 2026-11-17: job functions, job types and the city instead of a track
         await s.execute(update(User).where(User.id == done["id"]).values(
-            track_id=1, university_id=1, course=2, faculty="Iqtisodiyot", group_name="114-25", phone="+998901112233",
-            consent_at=now))
+            full_name="Tugatgan Talaba", university_id=1, course=2, faculty="Iqtisodiyot", group_name="114-25",
+            phone="+998901112233", job_fields=["data"], job_types=["internship"], city="Toshkent shahri",
+            consent_at=now, consent_version=CONSENT_VERSION))
         row = await s.get(AppConfig, reminders.NUDGE_KEY)
         row.value = {"since": (now - timedelta(days=1)).isoformat()}
         await s.commit()

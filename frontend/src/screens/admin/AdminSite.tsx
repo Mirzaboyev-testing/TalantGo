@@ -10,11 +10,14 @@ import GroupsAdmin from "./GroupsAdmin";
 import ChallengesAdmin from "./ChallengesAdmin";
 import { Applications, Companies, Jobs, Tests } from "./Market";
 import Queue from "./Queue";
+import AdminBell from "./AdminBell";
+import PasswordRequests from "./PasswordRequests";
 import { AiCard, AiConversations, AuditCard, BotCard, ExportCard, PartnerLinks, RulesCard } from "./Settings";
 import Submissions from "./Submissions";
 import Tracks from "./Tracks";
 import Universities from "./Universities";
 import SiteContent from "./SiteContent";
+import PostsAdmin from "./PostsAdmin";
 import Users from "./Users";
 import { Complaints, Outcomes, Partnerships, Ranking } from "./Trust";
 import { clearToken, loadToken, saveToken } from "./session";
@@ -36,6 +39,7 @@ const MENU: { group: string; pages: Page[] }[] = [
   { group: "Moderatsiya", pages: [
     { id: "queue", label: "Tasdiqlash navbati", icon: "inbox", need: APPROVALS },
     { id: "complaints", label: "Shikoyatlar", icon: "flag", need: ["complaints"] },
+    { id: "posts", label: "Postlar", icon: "megaphone", need: ["complaints", "posts"] },
   ] },
   { group: "Talabalar", pages: [
     { id: "users", label: "Talabalar va mentorlar", icon: "school" },
@@ -80,6 +84,8 @@ export default function AdminSite() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [queue, setQueue] = useState(0);
   const [pendingTests, setPendingTests] = useState(0);
+  const [openComplaints, setOpenComplaints] = useState(0);
+  const [passwordRequests, setPasswordRequests] = useState(0);
   const [userFilter, setUserFilter] = useState<{ id: number; name: string } | null>(null);
 
   const signOut = useCallback(() => { clearToken(); setMe(null); }, []);
@@ -99,7 +105,12 @@ export default function AdminSite() {
 
   useEffect(() => {
     if (!me) return;
-    const refresh = () => api.admin.inbox().then((c) => { setQueue(c.verifications + c.companies + c.jobs + c.staff); setPendingTests(c.tests ?? 0); }, () => {});
+    const refresh = () => api.admin.inbox().then((c) => {
+      setQueue(c.verifications + c.companies + c.jobs + c.staff);
+      setPendingTests(c.tests ?? 0);
+      setOpenComplaints(c.complaints ?? 0);
+      setPasswordRequests(c.password_requests ?? 0);
+    }, () => {});
     void refresh();
     const timer = window.setInterval(refresh, 60000);      // new requests show up without changing page
     return () => window.clearInterval(timer);
@@ -133,6 +144,8 @@ export default function AdminSite() {
                     <Icon name={p.icon} size={18} />{p.label}
                     {p.id === "queue" && queue > 0 && <span className="dot">{queue}</span>}
                     {p.id === "tests" && pendingTests > 0 && <span className="dot">{pendingTests}</span>}
+                    {p.id === "complaints" && openComplaints > 0 && <span className="dot">{openComplaints}</span>}
+                    {p.id === "users" && passwordRequests > 0 && <span className="dot" title="Parol tiklash so'rovlari">{passwordRequests}</span>}
                   </button>
                 ))}
               </div>
@@ -147,11 +160,13 @@ export default function AdminSite() {
               <b>{me.name}</b> · {ROLE_LABEL[me.role] ?? me.role}
               <div className="hint email">{me.email}</div>
             </div>
+            <AdminBell go={go} />
             <button className="btn small ghost" onClick={signOut}>Chiqish</button>
           </header>
           <div className="admin-content">
             {current.id === "dashboard" && <Dashboard go={go} />}
             {current.id === "queue" && <div className="narrow"><Queue ctx={ctx} /></div>}
+            {current.id === "users" && ctx.isOwner && <div className="narrow"><PasswordRequests onChanged={() => setPasswordRequests((n) => Math.max(0, n - 1))} /></div>}
             {current.id === "users" && <Users ctx={ctx} onShowWork={(u) => { setUserFilter(u); go("submissions"); }} />}
             {current.id === "submissions" && <div className="narrow"><Submissions user={userFilter} onClearUser={() => setUserFilter(null)} /></div>}
             {current.id === "tracks" && <div className="narrow"><Tracks /></div>}
@@ -172,6 +187,7 @@ export default function AdminSite() {
             {current.id === "audit" && <div className="narrow"><AuditCard /></div>}
             {current.id === "me" && <MyAccount me={me} />}
             {current.id === "complaints" && <Complaints canDecide={can("complaints")} />}
+            {current.id === "posts" && <PostsAdmin canDecide={can("complaints") || can("posts")} />}
             {current.id === "ranking" && <Ranking canEdit={can("ranking")} />}
             {current.id === "partnerships" && <Partnerships />}
             {current.id === "outcomes" && <Outcomes />}

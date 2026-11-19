@@ -98,6 +98,7 @@ def anonymous_card(user: User, verified_tasks: int) -> dict:
         "gpa_scale": user.gpa_scale,
         "track": user.track.title if user.track else None,
         "track_icon": user.track.icon if user.track else "",
+        "job_fields": user.job_fields,          # what the student wants to do (catalog.JOB_FIELDS)
         "skills": user.skills,
         "languages": user.languages,
         "job_types": user.job_types,

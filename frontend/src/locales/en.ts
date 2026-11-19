@@ -5,6 +5,8 @@ import { partner } from "./parts/partner";
 import { student } from "./parts/student";
 import { student2 } from "./parts/student2";
 import { site } from "./parts/site";
+import { account } from "./parts/account";
+import { feed } from "./parts/feed";
 
 // English. Machine-assisted: review before a public launch.
 export const en: Record<MsgKey, string> = {
@@ -14,6 +16,8 @@ export const en: Record<MsgKey, string> = {
   ...company.en,
   ...university.en,
   ...site.en,
+  ...account.en,
+  ...feed.en,
   "common.loading": "Loading…",
   "common.close": "Close",
   "common.save": "Save",
@@ -39,7 +43,7 @@ export const en: Record<MsgKey, string> = {
   "notif.earlier": "Earlier",
   "notif.empty_sub": "Updates about applications, messages, approvals and events will show up here.",
   "notif.application_status.shortlisted": "“{job}” ({company}): your application moved to the next stage.",
-  "notif.application_status.interview": "“{job}” ({company}): you are invited to an interview.",
+  "notif.application_status.interview": "“{job}” ({company}): you are invited to an interview {when}",
   "notif.application_status.offer": "“{job}” ({company}): you received a job offer.",
   "notif.application_status.hired": "Congratulations! “{job}” ({company}): you have been hired.",
   "notif.application_status.rejected": "“{job}” ({company}): your application was not accepted this time.",
@@ -63,8 +67,9 @@ export const en: Record<MsgKey, string> = {
   "notif.test_new": "{company} published a new test: “{test}”.",
   "notif.task_new": "New task: “{task}” ({points} points).",
   "notif.challenge_new": "New challenge: “{challenge}”.",
-  "notif.challenge_result.ok": "Your entry to the challenge “{challenge}” was accepted.",
-  "notif.challenge_result.no": "Your entry to the challenge “{challenge}” was not accepted.",
+  "notif.challenge_result.ok": "Your entry for «{challenge}» was accepted: +{points} points.",
+  "notif.challenge_result.no": "Your entry for «{challenge}» was not accepted. Comment: {comment}",
+  "notif.task_resubmitted": "«{task}»: {student} fixed their entry and sent it again.",
   "notif.question_new": "New question on “{task}”: {student}.",
   "notif.question_answered": "A mentor answered your question on “{task}”.",
   "notif.work_result.peer_verified": "Your work “{task}” is verified: +{points} points.",
@@ -482,6 +487,7 @@ export const en: Record<MsgKey, string> = {
   "notif.outcome_review.ok": "Your university confirmed your work at “{company}”.",
   "notif.outcome_review.no": "Your university did not confirm the record for “{company}”.",
   "notif.job_recommended": "{university} recommends: “{job}” ({company}).",
+  "notif.job_recommended_company": "{university} recommended your vacancy “{job}” to {count} verified students.",
 
   "emp.interned": "Interning",
   "emp.interned_hint": "{n} students in a confirmed internship",

@@ -67,6 +67,29 @@ def read_token(token: str, scope: str) -> str | None:
     return payload["sub"] if payload.get("scope") == scope else None
 
 
+USER_TOKEN_HOURS = 24 * 7
+
+
+def user_token(user) -> str:
+    """A person's session. The subject is "id", or "id.version" once users.token_version was raised by a
+    password change or reset: every token made before that stops working (tokens from before this field
+    existed read as version 0, so nobody is signed out by the upgrade itself)."""
+    subject = f"{user.id}.{user.token_version}" if user.token_version else str(user.id)
+    return create_token(subject, "user", USER_TOKEN_HOURS)
+
+
+def read_user_token(token: str) -> tuple[int, int] | None:
+    """(user id, token version) from a session token, or None."""
+    subject = read_token(token, "user")
+    if not subject:
+        return None
+    user_id, _, version = subject.partition(".")
+    try:
+        return int(user_id), int(version or 0)
+    except ValueError:
+        return None
+
+
 # --------------------------------------------------------------------------- Telegram
 
 class InitDataError(ValueError):

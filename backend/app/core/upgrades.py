@@ -7,7 +7,7 @@ Switch to Alembic once a change is not purely additive.
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from ..models import ADMIN_ROLES, APPLICATION_STATES
+from ..models import ADMIN_ROLES, APPLICATION_STATES, TEST_AUDIENCES
 
 
 def _states(values: tuple[str, ...]) -> str:
@@ -173,6 +173,20 @@ STATEMENTS = [
     "UPDATE users SET staff_reviewed_by = 'Careerup' WHERE staff_reviewed_by = 'TalantGo'",
     # per-account permissions switched on and off by the owner (2026-11-18); null keeps the role's defaults
     "ALTER TABLE admin_accounts ADD COLUMN IF NOT EXISTS permissions jsonb",
+    # notifications and password recovery (2026-11-19); create_all makes the new tables
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version integer NOT NULL DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false",
+
+    # company tests and tasks aimed at job functions instead of a track (2026-11-19)
+    "ALTER TABLE challenges ADD COLUMN IF NOT EXISTS job_fields varchar(24)[] NOT NULL DEFAULT '{}'",
+    "ALTER TABLE company_tests ADD COLUMN IF NOT EXISTS job_fields varchar(24)[] NOT NULL DEFAULT '{}'",
+    _replace_check("company_tests", "company_test_audience_valid", "audience", TEST_AUDIENCES, "fields"),
+    # university announcements with photos, to students, partner companies and the public page (2026-11-19)
+    "ALTER TABLE university_announcements ADD COLUMN IF NOT EXISTS channels varchar(12)[] NOT NULL DEFAULT '{students}'",
+    "ALTER TABLE university_announcements ADD COLUMN IF NOT EXISTS category varchar(16) NOT NULL DEFAULT 'news'",
+    "ALTER TABLE university_announcements ADD COLUMN IF NOT EXISTS photo_ids integer[] NOT NULL DEFAULT '{}'",
+    "ALTER TABLE university_announcements ADD COLUMN IF NOT EXISTS company_recipients integer NOT NULL DEFAULT 0",
+    "ALTER TABLE university_announcements ADD COLUMN IF NOT EXISTS status varchar(12) NOT NULL DEFAULT 'published'",
 ]
 
 

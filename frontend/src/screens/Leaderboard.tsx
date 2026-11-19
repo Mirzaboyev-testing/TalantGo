@@ -11,7 +11,8 @@ const SCOPES = [
 ] as const;
 type Scope = (typeof SCOPES)[number]["id"];
 
-export default function LeaderboardScreen() {
+/** `hasTrack` false hides the track board (the track is optional since 2026-11-17). */
+export default function LeaderboardScreen({ hasTrack = true }: { hasTrack?: boolean }) {
   useLang();
   const [scope, setScope] = useState<Scope>("university");
   const [data, setData] = useState<Leaderboard | null>(null);
@@ -26,7 +27,7 @@ export default function LeaderboardScreen() {
     <div>
       <h1>{t("s.community.top")}</h1>
       <div className="segmented">
-        {SCOPES.map((s) => <button key={s.id} className={scope === s.id ? "on" : ""} onClick={() => setScope(s.id)}>{t(s.label)}</button>)}
+        {SCOPES.filter((s) => hasTrack || s.id !== "track").map((s) => <button key={s.id} className={scope === s.id ? "on" : ""} onClick={() => setScope(s.id)}>{t(s.label)}</button>)}
       </div>
       <ErrorText error={error} />
       {!data && !error && <div className="hint">{t("common.loading")}</div>}

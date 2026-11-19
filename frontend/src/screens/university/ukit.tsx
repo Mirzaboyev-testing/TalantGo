@@ -63,8 +63,16 @@ export function PageHead({ title, sub, actions, eyebrow }: { title: string; sub?
 export function Tabs<T extends string>({ value, onChange, items }: {
   value: T; onChange: (v: T) => void; items: { id: T; label: string; count?: number; soft?: boolean }[];
 }) {
+  // on a phone the row scrolls sideways: keep the open tab in view (e.g. the last one opened from a link)
+  const row = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const box = row.current, on = box?.querySelector<HTMLElement>("button.on");
+    if (!box || !on) return;
+    const b = box.getBoundingClientRect(), r = on.getBoundingClientRect();
+    if (r.left < b.left || r.right > b.right) box.scrollBy({ left: r.left - b.left - 8, behavior: "smooth" });
+  }, [value]);
   return (
-    <div className="u-tabs" role="tablist">
+    <div ref={row} className="u-tabs" role="tablist">
       {items.map((it) => (
         <button key={it.id} role="tab" aria-selected={value === it.id} className={value === it.id ? "on" : ""} onClick={() => onChange(it.id)}>
           {it.label}{it.count ? <span className={`u-count ${it.soft ? "soft" : ""}`}>{it.count > 99 ? "99+" : it.count}</span> : null}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, type AttemptDetail, type StartedTest, type StudentTestCard } from "../api";
-import { t, useLang } from "../i18n";
+import { api, daysLeft, type AttemptDetail, type StartedTest, type StudentTestCard } from "../api";
+import { formatDateTime, t, useLang } from "../i18n";
+import { Icon } from "../icons";
 import { attemptStatusLabel } from "../labels";
 import { ask, backButton, haptic } from "../tg";
 import { ErrorText, message, toast } from "../ui";
@@ -11,7 +12,7 @@ type View = { kind: "list" } | { kind: "take"; test: StartedTest } | { kind: "re
 export default function StudentTests() {
   const [view, setView] = useState<View>({ kind: "list" });
   useEffect(() => (view.kind === "result" ? backButton(() => setView({ kind: "list" })) : backButton(null)), [view.kind]);
-  if (view.kind === "take") return <TakeTest test={view.test} onDone={(id) => setView({ kind: "result", id })} />;
+  if (view.kind === "take") return <TakeTest test={view.test} onDone={(id) => setView({ kind: "result", id })} onLeave={() => setView({ kind: "list" })} />;
   if (view.kind === "result") return <Result id={view.id} onBack={() => setView({ kind: "list" })} />;
   return <TestList onStart={(test) => setView({ kind: "take", test })} onResult={(id) => setView({ kind: "result", id })} />;
 }
@@ -34,43 +35,60 @@ function TestList({ onStart, onResult }: { onStart: (t: StartedTest) => void; on
     }
   }
 
+  const open = (tests ?? []).filter((x) => !x.my_attempt || x.my_attempt.status === "in_progress");
+  const taken = (tests ?? []).filter((x) => x.my_attempt && x.my_attempt.status !== "in_progress");
+  const card = (test: StudentTestCard) => {
+    const a = test.my_attempt;
+    const done = a && a.status !== "in_progress";
+    const left = test.deadline ? daysLeft(test.deadline) : null;
+    return (
+      <div key={test.id} className="st-task-card st-test-card">
+        <div className="row between" style={{ gap: 8 }}>
+          <span className="st-task-from"><Icon name="building" size={14} />{test.company}</span>
+          {done ? <span className={`st-entry ${a.status === "graded" ? "accepted" : "submitted"}`}>{attemptStatusLabel(a.status)}</span>
+            : <span className="co-pill">{test.is_survey ? t("s.tests.survey") : t("s.tests.test")}</span>}
+        </div>
+        <b>{test.title}</b>
+        {test.description && <p className="co-clamp" style={{ margin: 0 }}>{test.description}</p>}
+        <div className="st-task-meta">
+          <span className="co-pill"><Icon name="help" size={13} />{t("s.tests.questions_n", { n: test.questions_count })}</span>
+          {test.max_score > 0 && <span className="co-pill">{t("s.common.points", { n: test.max_score })}</span>}
+          {test.time_limit_min ? <span className="co-pill"><Icon name="clock" size={13} />{t("s.tests.minutes", { n: test.time_limit_min })}</span> : null}
+          {test.job_title && <span className="co-pill"><Icon name="briefcase" size={13} />{test.job_title}</span>}
+        </div>
+        <div className="row between" style={{ marginTop: "auto", gap: 8 }}>
+          <span className={`hint ${left != null && left <= 2 && !done ? "st-soon" : ""}`}>
+            {test.deadline ? t("s.tests.deadline", { date: formatDateTime(test.deadline, false) }) : ""}
+          </span>
+          {done ? (
+            <button className="btn small ghost" style={{ width: "auto" }} onClick={() => onResult(test.id)}>
+              {t("s.tests.result")}{a.status === "graded" && a.max_score ? `: ${a.score} / ${a.max_score}` : ""}
+            </button>
+          ) : a?.status === "in_progress" || (test.open && test.status === "approved") ? (
+            <button className="btn small" style={{ width: "auto" }} onClick={() => start(test)}>{a ? t("s.tests.resume") : t("s.tests.start")}</button>
+          ) : (
+            <span className="hint">{t("s.tests.expired")}</span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div>
-      <p className="hint">{t("s.tests.intro")}</p>
+    <div className="st-tests">
+      <p className="hint" style={{ marginTop: 0 }}>{t("s.tests.intro")}</p>
       <ErrorText error={error} />
-      {!tests && !error && <div className="hint">{t("common.loading")}</div>}
-      {tests?.length === 0 && <div className="center hint">{t("s.tests.empty")}</div>}
-      {tests?.map((test) => {
-        const a = test.my_attempt;
-        const done = a && a.status !== "in_progress";
-        return (
-          <div key={test.id} className="card">
-            <div className="row between">
-              <span className="hint">{test.company}</span>
-              {done ? <span className={`badge ${a.status === "graded" ? "peer_verified" : "pending"}`}>{attemptStatusLabel(a.status)}</span>
-                : <span className="badge todo">{test.is_survey ? t("s.tests.survey") : t("s.tests.test")}</span>}
-            </div>
-            <b>{test.title}</b>
-            {test.description && <div className="hint" style={{ whiteSpace: "pre-line" }}>{test.description}</div>}
-            <div className="hint">
-              {t("s.tests.questions_n", { n: test.questions_count })}{test.max_score ? ` · ${t("s.common.points", { n: test.max_score })}` : ""}
-              {test.time_limit_min ? ` · ${t("s.tests.minutes", { n: test.time_limit_min })}` : ""}
-              {test.deadline ? ` · ${t("s.tests.deadline", { date: test.deadline })}` : ""}{test.job_title ? ` · ${test.job_title}` : ""}
-            </div>
-            <div style={{ marginTop: 8 }}>
-              {done ? (
-                <button className="btn small ghost" onClick={() => onResult(test.id)}>
-                  {t("s.tests.result")}{a.status === "graded" && a.max_score ? `: ${a.score} / ${a.max_score}` : ""}
-                </button>
-              ) : a?.status === "in_progress" || (test.open && test.status === "approved") ? (
-                <button className="btn small" onClick={() => start(test)}>{a ? t("s.tests.resume") : t("s.tests.start")}</button>
-              ) : (
-                <span className="hint">{t("s.tests.expired")}</span>
-              )}
-            </div>
-          </div>
-        );
-      })}
+      {!tests && !error && <div className="st-skeleton-grid"><span /><span /><span /></div>}
+      {tests?.length === 0 && (
+        <div className="st-empty"><Icon name="file" size={28} /><b>{t("s.tests.empty")}</b><span className="hint">{t("st.tests.empty_hint")}</span></div>
+      )}
+      {open.length > 0 && <div className="st-card-grid">{open.map(card)}</div>}
+      {taken.length > 0 && (
+        <>
+          <h3 className="st-sub-title">{t("st.tests.taken")}</h3>
+          <div className="st-card-grid">{taken.map(card)}</div>
+        </>
+      )}
     </div>
   );
 }
@@ -80,7 +98,7 @@ function loadDraft(attemptId: number): Record<number, { choice: number[]; text: 
   try { return JSON.parse(localStorage.getItem(draftKey(attemptId)) ?? "{}"); } catch { return {}; }
 }
 
-function TakeTest({ test, onDone }: { test: StartedTest; onDone: (id: number) => void }) {
+function TakeTest({ test, onDone, onLeave }: { test: StartedTest; onDone: (id: number) => void; onLeave: () => void }) {
   useLang();
   // answers are kept on this device as they are given: a reload, a tab switch or a closed app loses nothing
   const [answers, setAnswers] = useState<Record<number, { choice: number[]; text: string }>>(() => loadDraft(test.attempt_id));
@@ -138,8 +156,13 @@ function TakeTest({ test, onDone }: { test: StartedTest; onDone: (id: number) =>
     return { ...cur, [qid]: { choice, text: "" } };
   });
 
+  async function leave() {
+    if (await ask(test.ends_at ? t("st.tests.leave_timed") : t("st.tests.leave"))) onLeave();
+  }
+
   return (
-    <div>
+    <div className="st-test-run">
+      <button className="btn small ghost co-back" onClick={leave}><Icon name="back" size={16} />{t("st.tests.later")}</button>
       {left != null && (
         <div className={`timer ${left < 60 ? "low" : ""}`}>
           {t("s.tests.time_left", { time: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` })}
@@ -184,7 +207,7 @@ function Result({ id, onBack }: { id: number; onBack: () => void }) {
   useEffect(() => { api.tests.result(id).then(setR, (e) => setError(message(e))); }, [id]);
   return (
     <div>
-      <button className="btn small ghost" onClick={onBack}>{t("jobs.tab.tests")}</button>
+      <button className="btn small ghost co-back" onClick={onBack}><Icon name="back" size={16} />{t("st.tasks.tab.tests")}</button>
       <ErrorText error={error} />
       {r && (
         <>

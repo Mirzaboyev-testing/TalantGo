@@ -5,7 +5,9 @@ import { formatDateTime, t, useLang } from "../../i18n";
 import { Icon } from "../../icons";
 import { courseText } from "../../labels";
 import { navigate } from "../../router";
+import { ask } from "../../tg";
 import { ErrorText, Sheet, message, toast } from "../../ui";
+import { fieldLabel } from "../student/StudentSignup";
 import { uapi, type Facets, type Opportunity } from "./uapi";
 import { Empty, Kpi, PageHead, Toggle, UIcon, UniLogo } from "./ukit";
 
@@ -24,6 +26,10 @@ export default function UniOpportunities() {
   const [recommending, setRecommending] = useState<Opportunity | null>(null);
   const [error, setError] = useState("");
   const load = useCallback(() => uapi.opportunities().then(setRows, (e) => setError(message(e))), []);
+  async function withdraw(j: Opportunity) {
+    if (!(await ask(t("u.op.withdraw_confirm")))) return;
+    try { await uapi.unrecommend(j.id); toast(t("u.op.withdrawn")); void load(); } catch (e) { toast(message(e), "error"); }
+  }
   useEffect(() => { void load(); }, [load]);
 
   const shown = useMemo(() => (rows ?? []).filter((j) => (!kind || j.kind === kind) && (!mode || j.work_mode === mode)
@@ -61,7 +67,7 @@ export default function UniOpportunities() {
           {shown.map((j) => (
             <div key={j.id} className="u-card">
               <div className="u-card-top">
-                <UniLogo small name={j.company_name} />
+                <UniLogo small name={j.company_name} url={j.company_logo_url} />
                 <div className="grow" style={{ minWidth: 0 }}>
                   <a href={`/vakansiyalar/${j.id}`} onClick={(e) => { e.preventDefault(); navigate(`/vakansiyalar/${j.id}`); }}><b>{j.title}</b></a>
                   <span>{j.company_name}{j.city ? ` · ${j.city}` : ""}</span>
@@ -72,6 +78,7 @@ export default function UniOpportunities() {
                 <span className="u-tag green">{salaryText(j)}</span>
                 {j.partner && <span className="u-tag violet"><Icon name="building" size={12} />{t("opp.partner")}</span>}
                 {j.counts_as_practice && <span className="u-tag amber">{t("u.op.practice")}</span>}
+                {(j.job_fields ?? []).slice(0, 2).map((f) => <span key={f} className="u-tag">{fieldLabel(f, null)}</span>)}
               </div>
               <div className="row between" style={{ fontSize: 13 }}>
                 <span className="hint">{j.deadline ? t("u.op.deadline", { date: formatDateTime(j.deadline, false) }) : t("u.op.no_deadline")}</span>
@@ -79,8 +86,12 @@ export default function UniOpportunities() {
               </div>
               <div className="u-card-foot">
                 <span />
-                {j.recommended ? <span className="u-tag amber"><UIcon name="star" size={12} />{t("opp.recommended")}</span>
-                  : <button className="btn small" onClick={() => setRecommending(j)}><UIcon name="megaphone" size={15} />{t("opp.recommend")}</button>}
+                {j.recommended ? (
+                  <span className="row" style={{ gap: 6 }}>
+                    <span className="u-tag amber"><UIcon name="star" size={12} />{t("opp.recommended")}</span>
+                    <button className="btn small ghost" onClick={() => withdraw(j)}>{t("u.op.withdraw")}</button>
+                  </span>
+                ) : <button className="btn small" onClick={() => setRecommending(j)}><UIcon name="megaphone" size={15} />{t("opp.recommend")}</button>}
               </div>
             </div>
           ))}

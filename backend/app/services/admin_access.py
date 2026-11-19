@@ -62,7 +62,14 @@ RULES: tuple[tuple[str, str, str], ...] = (
     ("*", "/admin/bot", "settings"),
     ("*", "/admin/ai", "settings"),
     ("*", "/admin/rules", "settings"),
+    ("W", "/admin/posts/", "complaints"),          # the feed's report queue: hide or restore posts and comments
+    ("W", "/admin/comments/", "complaints"),
 )
+
+
+# open to every active account: its own bell
+SELF = "self"
+OPEN_PREFIXES = ("/admin/notifications",)
 
 
 def effective(account) -> set[str]:
@@ -75,6 +82,8 @@ def effective(account) -> set[str]:
 
 
 def required(method: str, path: str) -> str | None:
+    if path.startswith(OPEN_PREFIXES):
+        return SELF
     for rule_method, prefix, permission in RULES:
         if path.startswith(prefix) and (rule_method == "*" or (rule_method == "W" and method != "GET") or rule_method == method):
             return permission
@@ -86,6 +95,8 @@ def check(account, method: str, path: str) -> None:
     if account.role == "owner" or path.startswith("/admin-auth/") or method in ("HEAD", "OPTIONS"):
         return
     permission = required(method, path)
+    if permission == SELF:
+        return
     if permission is None:
         if method == "GET":
             return

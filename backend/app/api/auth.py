@@ -12,16 +12,14 @@ from sqlalchemy import select
 
 from ..core import ratelimit
 from ..core.config import settings
-from ..core.security import InitDataError, create_token, validate_init_data, validate_login_widget
-from ..models import User
+from ..core.security import InitDataError, user_token, validate_init_data, validate_login_widget
+from ..models import PasswordRequest, User
 from ..schemas import DevAuthIn, TelegramAuthIn, TokenOut
-from ..services import bots, telegram_bot, web_login
+from ..services import admin_inbox, bots, password_reset, telegram_bot, web_login
 from ..services.admin_accounts import check_password, hash_password
 from .deps import Session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-USER_TOKEN_HOURS = 24 * 7
 
 
 async def _upsert(session: Session, telegram_id: int, full_name: str, username: str | None,
@@ -64,7 +62,7 @@ async def telegram_login(body: TelegramAuthIn, session: Session) -> TokenOut:
     tg, old_bot = await _check(session, lambda token: validate_init_data(body.init_data, token, settings.init_data_max_age))
     full_name = " ".join(filter(None, [tg.get("first_name"), tg.get("last_name")])) or "Talaba"
     user = await _upsert(session, int(tg["id"]), full_name[:128], tg.get("username"), tg.get("photo_url"))
-    return TokenOut(token=create_token(str(user.id), "user", USER_TOKEN_HOURS),
+    return TokenOut(token=user_token(user),
                     moved_to=await bots.username(session) if old_bot else None)
 
 
@@ -86,7 +84,7 @@ async def telegram_web_login(body: WidgetAuthIn, session: Session) -> TokenOut:
     tg, _ = await _check(session, lambda token: validate_login_widget(fields, token, settings.init_data_max_age))
     full_name = " ".join(filter(None, [tg.get("first_name"), tg.get("last_name")])) or "Talaba"
     user = await _upsert(session, int(tg["id"]), full_name[:128], tg.get("username"), tg.get("photo_url"))
-    return TokenOut(token=create_token(str(user.id), "user", USER_TOKEN_HOURS))
+    return TokenOut(token=user_token(user))
 
 
 @router.get("/mode")
@@ -101,7 +99,7 @@ async def dev_login(body: DevAuthIn, session: Session) -> TokenOut:
     if settings.app_env != "dev":
         raise HTTPException(404)
     user = await _upsert(session, body.telegram_id, body.full_name, body.username, None)
-    return TokenOut(token=create_token(str(user.id), "user", USER_TOKEN_HOURS))
+    return TokenOut(token=user_token(user))
 
 
 
@@ -134,7 +132,7 @@ class PinIn(BaseModel):
 async def bot_login_verify(code: str, body: PinIn, session: Session) -> TokenOut:
     """The PIN the bot showed after "Ha": only the browser that asked can finish the sign-in."""
     user_id = await web_login.verify_login(session, code[:40], body.pin, _upsert)
-    return TokenOut(token=create_token(str(user_id), "user", USER_TOKEN_HOURS))
+    return TokenOut(token=user_token(await session.get(User, user_id)))
 
 
 # --------------------------------------------------------------------------- website: email and password
@@ -207,7 +205,7 @@ async def register(body: RegisterIn, request: Request, session: Session) -> Toke
     except IntegrityError as exc:              # the same email registered at the same moment
         await session.rollback()
         raise taken from exc
-    return TokenOut(token=create_token(str(user.id), "user", USER_TOKEN_HOURS))
+    return TokenOut(token=user_token(user))
 
 
 @router.post("/login", response_model=TokenOut)
@@ -223,4 +221,81 @@ async def login(body: LoginIn, request: Request, session: Session) -> TokenOut:
     _fails.pop(body.email, None)
     user.last_seen_at = datetime.now(UTC)
     await session.commit()
-    return TokenOut(token=create_token(str(user.id), "user", USER_TOKEN_HOURS))
+    return TokenOut(token=user_token(user))
+
+
+# --------------------------------------------------------------------------- forgotten password (services/password_reset.py)
+
+class ForgotIn(BaseModel):
+    email: Email
+
+
+class ResetIn(BaseModel):
+    password: Password
+    token: str | None = Field(default=None, max_length=64)             # the link from the bot
+    email: Email | None = None                                          # with `code`, or a new e-mail with `token`
+    code: str | None = Field(default=None, pattern=r"^\d{6}$")
+
+
+class HelpIn(BaseModel):
+    email: Email
+    full_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=128)]
+    phone: Annotated[str, StringConstraints(strip_whitespace=True, min_length=7, max_length=20)]
+    note: str = Field(default="", max_length=500)
+
+
+@router.post("/password/forgot")
+async def forgot_password(body: ForgotIn, request: Request, session: Session) -> dict:
+    """Sends a code to the bot when the account has Telegram. The answer is the same either way."""
+    ratelimit.limit(f"pw-forgot:{ratelimit.client_ip(request)}", 10, 60 * 60)
+    ratelimit.limit(f"pw-forgot:{body.email}", 3, 15 * 60, "Kod yaqinda yuborildi. 15 daqiqadan keyin qayta so'rang.")
+    user = (await session.execute(select(User).where(User.email == body.email))).scalar_one_or_none()
+    if user is not None and not user.is_blocked and user.telegram_id:
+        await password_reset.send_by_bot(session, user)
+    return {"ok": True}
+
+
+@router.get("/password/reset/{token}")
+async def reset_link(token: str, session: Session) -> dict:
+    """What the reset page needs: whether the link still works and whether an e-mail has to be added."""
+    reset = await password_reset.by_token(session, token[:64])
+    user = await session.get(User, reset.user_id) if reset else None
+    if user is None:
+        raise HTTPException(404, "Havola eskirgan yoki ishlatilgan. Botda /parol buyrug'ini qayta yuboring.")
+    return {"name": user.full_name.split()[0] if user.full_name else "", "email": user.email,
+            "account_type": user.account_type}
+
+
+@router.post("/password/reset", response_model=TokenOut)
+async def reset_password(body: ResetIn, request: Request, session: Session) -> TokenOut:
+    """A new password with the bot's link or the e-mail + code; signs the person in."""
+    ratelimit.limit(f"pw-reset:{ratelimit.client_ip(request)}", 30, 60 * 60)
+    if body.token:
+        reset = await password_reset.by_token(session, body.token)
+        new_email = body.email
+    elif body.email and body.code:
+        reset = await password_reset.by_code(session, body.email, body.code)
+        new_email = None
+    else:
+        raise HTTPException(422, "Kodni yoki havolani yuboring")
+    if reset is None:
+        raise HTTPException(400, "Kod noto'g'ri yoki eskirgan. Yangi kod so'rang.")
+    user = await password_reset.complete(session, reset, body.password, new_email)
+    return TokenOut(token=user_token(user))
+
+
+@router.post("/password/help")
+async def password_help(body: HelpIn, request: Request, session: Session) -> dict:
+    """No Telegram (or no code came): the owner gets the request and calls the person back."""
+    ratelimit.limit(f"pw-help:{ratelimit.client_ip(request)}", 5, 60 * 60)
+    user = (await session.execute(select(User).where(User.email == body.email))).scalar_one_or_none()
+    open_one = await session.scalar(select(PasswordRequest.id).where(
+        PasswordRequest.email == body.email, PasswordRequest.status == "open"))
+    if open_one is None:
+        session.add(PasswordRequest(kind="user", email=body.email, full_name=" ".join(body.full_name.split()),
+                                    phone=body.phone, note=body.note.strip(), user_id=user.id if user else None))
+        await session.commit()
+        await admin_inbox.push(session, None, "password_request",
+                               f"Parolni tiklash so'rovi: {' '.join(body.full_name.split())}, {body.email}, {body.phone}. "
+                               "Telefon orqali tekshirib, «Talabalar va mentorlar» bo'limida tiklang.", "users")
+    return {"ok": True}

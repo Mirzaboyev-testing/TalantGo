@@ -16,6 +16,7 @@ export default function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [asked, setAsked] = useState(false);
 
   useEffect(() => {
     api.adminAuth.status().then((s) => { setNeedsOwner(s.needs_owner); if (s.needs_owner) setMode("register"); }, () => {});
@@ -94,7 +95,17 @@ export default function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
             <button className="btn" style={{ marginTop: 14 }} disabled={busy || !email || !password || (mode === "register" && (name.trim().length < 2 || password.length < 10))}>
               {busy ? "Kuting…" : mode === "login" ? "Kirish" : needsOwner ? "Ega hisobini yaratish" : "So'rov yuborish"}
             </button>
-            {mode === "login" && <p className="hint" style={{ marginBottom: 0 }}>Parolni unutdingizmi? Ilova egasidan parolni tiklashni so'rang.</p>}
+            {mode === "login" && (
+              <p className="hint" style={{ marginBottom: 0 }}>
+                Parolni unutdingizmi?{" "}
+                {asked ? <b>So'rov ilova egasiga yuborildi: u parolni tiklab, sizga vaqtinchalik parol beradi.</b> : (
+                  <button type="button" className="nt-link" disabled={!email.trim()} title={email.trim() ? "" : "Avval emailingizni yozing"}
+                          onClick={async () => { try { await api.adminAuth.passwordRequest(email.trim()); setAsked(true); } catch (e) { setError(message(e)); } }}>
+                    Emailni yozib, ilova egasiga so'rov yuboring
+                  </button>
+                )}
+              </p>
+            )}
           </form>
         )}
       </div>

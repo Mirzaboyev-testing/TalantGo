@@ -7,12 +7,13 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 
 from ..core.config import settings
 from ..core.db import SessionLocal
 from ..models import AppConfig, Status, Submission, Task, User
 from . import bots, telegram_bot
+from .career import signup_missing
 from .progress import TASHKENT
 
 log = logging.getLogger("careerflow.reminders")
@@ -21,8 +22,8 @@ NUDGE_KEY = "signup_nudge"         # {"since": ...}: only people who start signi
 NUDGE_AFTER = timedelta(hours=1)   # give people an hour before reminding them
 NUDGE_WINDOW = timedelta(days=3)   # and stop trying after a few days
 NUDGE_TEXT = ("Ro'yxatdan o'tishingiz yakunlanmadi.\n\n"
-              "Ilovani ochib yo'nalish, universitet, kurs va guruhingizni tanlang: bu 1 daqiqa. "
-              "Shundan keyin haftalik vazifalar, reyting va amaliyotlar ochiladi.")
+              "Ilovani ochib ro'yxatdan o'tishni yakunlang va kasb yo'nalishlaringizni tanlang: bu 1 daqiqa. "
+              "Shundan keyin sizga mos vakansiyalar, kompaniya vazifalari va reyting ochiladi.")
 SEND_HOUR = 10                     # Monday 10:00 Tashkent
 
 
@@ -85,10 +86,10 @@ async def run_once(now: datetime) -> int:
     return sent
 
 
-def unfinished_signup():
-    """Mirrors the app's sign-up gate (App.tsx): what a student must fill before using the app."""
-    return or_(User.track_id.is_(None), User.university_id.is_(None), User.course.is_(None), User.faculty == "",
-               User.group_name == "", User.phone == "", User.consent_at.is_(None))
+def unfinished_signup(people: list[User]) -> list[User]:
+    """The people the app still keeps on the sign-up form: the same check (career.signup_missing), so a student
+    who finished the sign-up of 2026-11-17 (job functions, no track) is not told it is unfinished."""
+    return [u for u in people if signup_missing(u)]
 
 
 async def nudge_unfinished(now: datetime) -> int:
@@ -103,9 +104,9 @@ async def nudge_unfinished(now: datetime) -> int:
             await session.commit()
             return 0
         since = max(datetime.fromisoformat(row.value["since"]), now - NUDGE_WINDOW)
-        people = (await session.execute(select(User).where(
+        people = unfinished_signup((await session.execute(select(User).where(
             User.account_type == "student", User.is_blocked.is_(False), User.onboarding_nudged_at.is_(None), User.telegram_id.isnot(None),
-            User.created_at >= since, User.created_at <= now - NUDGE_AFTER, unfinished_signup()))).scalars().all()
+            User.created_at >= since, User.created_at <= now - NUDGE_AFTER))).scalars().all())
         for user in people:
             user.onboarding_nudged_at = now      # marked before sending: a crash never sends twice
         await session.commit()

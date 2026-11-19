@@ -2,6 +2,7 @@
 public image links (/media). Experience entries are employment outcomes (api/jobs.py adds and deletes them)."""
 import hmac
 from datetime import date
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -108,6 +109,8 @@ async def delete_item(item_id: int, user: CurrentUser, session: Session) -> dict
 
 
 class ExperiencePatch(BaseModel):
+    company_name: str | None = Field(default=None, min_length=2, max_length=160)
+    kind: Literal["full_time", "part_time", "internship", "dual_education"] | None = None
     position: str | None = Field(default=None, max_length=160)
     started_on: date | None = None
     ended_on: date | None = None
@@ -121,15 +124,20 @@ async def edit_experience(outcome_id: int, body: ExperiencePatch, user: CurrentU
     if o is None or o.student_id != user.id:
         raise HTTPException(404, "Yozuv topilmadi")
     changes = body.model_dump(exclude_unset=True)
-    if o.confirmed and any(k in changes and changes[k] != getattr(o, k) for k in ("position", "started_on")):
-        raise HTTPException(409, "Tasdiqlangan ish joyining lavozimi va boshlanish sanasi o'zgarmaydi")
+    if o.confirmed and any(k in changes and changes[k] != getattr(o, k) for k in ("position", "started_on", "company_name", "kind")):
+        raise HTTPException(409, "Tasdiqlangan ish joyining korxonasi, turi, lavozimi va boshlanish sanasi o'zgarmaydi")
+    # an entry tied to a platform company (waiting for its confirmation) keeps that company; the kind may be fixed
+    if o.company_id and "company_name" in changes and (changes["company_name"] or "").strip() != o.company_name:
+        raise HTTPException(409, "Platformadagi korxonaga bog'langan yozuvning korxonasi o'zgarmaydi: o'chirib, qaytadan qo'shing")
     start = changes.get("started_on", o.started_on)
     end = changes.get("ended_on", o.ended_on)
     if start and end and end < start:
         raise HTTPException(422, "Tugash sanasi boshlanishidan oldin bo'lmasin")
     for k, v in changes.items():
-        if k in ("position", "description"):
+        if k in ("position", "description", "company_name"):
             v = (v or "").strip()                        # these columns are NOT NULL: an empty value clears them
+        if k in ("company_name", "kind") and not v:
+            continue                                     # a company name and a kind are always there
         setattr(o, k, v)
     await session.commit()
     return pf.experience_out(o)

@@ -1,0 +1,14 @@
+/* The university page (public and inside the company panel): logo, profile facts, contacts, news. */
+
+.uni-mark { flex: none; display: inline-grid; place-items: center; border-radius: 12px; background: var(--brand-soft); color: var(--brand-strong);
+            font-size: 12px; font-weight: 800; letter-spacing: .02em; border: 1px solid var(--line); }
+.uni-mark.img { object-fit: contain; background: #fff; padding: 3px; }
+.uni-page-head { gap: 14px; margin-bottom: 12px; }
+.uni-about { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 14px; }
+.uni-about .chip.on { display: inline-flex; align-items: center; gap: 5px; }
+.uni-contacts { display: flex; flex-direction: column; gap: 8px; }
+.uni-contacts > div { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; color: var(--text); }
+.uni-contacts > div svg { flex: none; color: var(--hint); }
+.uni-contacts a, .uni-contacts span { overflow-wrap: anywhere; }
+.uni-news { margin: 6px 0 16px; }
+.uni-news .pub-h2 { margin: 0 0 10px; }

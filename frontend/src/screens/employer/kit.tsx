@@ -199,4 +199,4 @@ export function daysLeft(iso: string | null | undefined): number | null {
   return Math.ceil((end - Date.now()) / 86_400_000);
 }
 
-export const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
+export { initials, nameTone } from "../../ui";

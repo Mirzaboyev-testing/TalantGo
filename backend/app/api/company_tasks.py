@@ -12,8 +12,9 @@ from sqlalchemy import select
 
 from ..core import ratelimit
 from ..models import Challenge, ChallengeEntry, Role, Track, University, User
+from ..schemas import JobField
 from ..services import inbox
-from .challenges import (TASHKENT, ReviewEntryIn, _counts, apply_review, challenge_out, end_of_day, entry_out)
+from .challenges import (TASHKENT, ReviewEntryIn, _counts, apply_review, challenge_out, end_of_day, entry_out, file_names)
 from .deps import Session
 from .employer import ApprovedEmployer, _visible_students
 
@@ -29,8 +30,9 @@ class TaskIn(BaseModel):
     points: int = Field(default=20, ge=0, le=MAX_COMPANY_TASK_POINTS)
     starts_on: date | None = None
     ends_on: date
-    audience: Literal["all", "track", "university", "selected"] = "all"
+    audience: Literal["all", "track", "fields", "university", "selected"] = "all"
     track_id: int | None = None
+    job_fields: list[JobField] = Field(default_factory=list, max_length=5)     # audience "fields": job functions
     university_id: int | None = None
     student_ids: list[int] = Field(default_factory=list, max_length=MAX_INVITED)
 
@@ -45,6 +47,9 @@ class TaskIn(BaseModel):
             raise ValueError("Vazifa ko'pi bilan 4 oy davom etadi")
         if self.audience == "track" and not self.track_id:
             raise ValueError("Yo'nalishni tanlang")
+        if self.audience == "fields" and not self.job_fields:
+            raise ValueError("Kamida bitta kasb yo'nalishini tanlang")
+        self.job_fields = list(dict.fromkeys(self.job_fields)) if self.audience == "fields" else []
         if self.audience == "university" and not self.university_id:
             raise ValueError("Universitetni tanlang")
         if self.audience == "selected" and not self.student_ids:
@@ -77,6 +82,8 @@ def _audience_query(c: Challenge):
     query = select(User.id).where(User.account_type == "student", User.role == Role.student, User.is_blocked.is_(False))
     if c.audience == "track":
         return query.where(User.track_id == c.track_id)
+    if c.audience == "fields":
+        return query.where(User.job_fields.overlap(c.job_fields or []))
     if c.audience == "university":
         return query.where(User.university_id == c.university_id)
     if c.audience == "selected":
@@ -114,7 +121,7 @@ async def create_task(body: TaskIn, user: ApprovedEmployer, session: Session) ->
     c = Challenge(title=body.title.strip(), description=body.description.strip(), prize=body.prize.strip(),
                   points=body.points, starts_at=starts, ends_at=end_of_day(body.ends_on), created_by_id=user.id,
                   company_id=user.company_id, audience=body.audience,
-                  track_id=body.track_id if body.audience == "track" else None,
+                  track_id=body.track_id if body.audience == "track" else None, job_fields=body.job_fields,
                   university_id=body.university_id if body.audience == "university" else None, invited_ids=invited)
     session.add(c)
     await session.commit()
@@ -122,7 +129,7 @@ async def create_task(body: TaskIn, user: ApprovedEmployer, session: Session) ->
     prize = f" Sovrin: {c.prize}." if c.prize else ""
     await inbox.push(session, (await session.execute(_audience_query(c))).scalars().all(), "company_task_new",
                      f"{user.company.name} sizga vazifa berdi: «{c.title}». Muddat: {body.ends_on.strftime('%d.%m.%Y')}.{prize}",
-                     link="/talaba/topshiriqlar", params={"task": c.title, "company": user.company.name})
+                     link=f"/talaba/topshiriqlar?vazifa={c.id}", params={"task": c.title, "company": user.company.name})
     return challenge_out(c, now, entries=0, to_review=0)
 
 
@@ -146,8 +153,9 @@ async def task_entries(task_id: int, user: ApprovedEmployer, session: Session) -
     await _own_task(session, user, task_id)
     rows = (await session.execute(select(ChallengeEntry).where(ChallengeEntry.challenge_id == task_id)
                                   .order_by((ChallengeEntry.status == "submitted").desc(), ChallengeEntry.place.nulls_last(),
-                                            ChallengeEntry.score.desc().nulls_last(), ChallengeEntry.created_at))).scalars()
-    return [entry_out(e, with_username=False) for e in rows]
+                                            ChallengeEntry.score.desc().nulls_last(), ChallengeEntry.created_at))).scalars().all()
+    names = await file_names(session, rows)
+    return [entry_out(e, with_username=False, file_names=names) for e in rows]
 
 
 @router.post("/{task_id}/entries/{entry_id}/review")
@@ -157,4 +165,4 @@ async def review_task_entry(task_id: int, entry_id: int, body: ReviewEntryIn, us
     if entry is None or entry.challenge_id != c.id:
         raise HTTPException(404, "Ish topilmadi")
     await apply_review(session, c, entry, body)
-    return entry_out(entry, with_username=False)
+    return entry_out(entry, with_username=False, file_names=await file_names(session, [entry]))

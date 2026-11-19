@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type Me, type QueueItem, type Rules } from "../api";
 import { t, useLang } from "../i18n";
+import { navigate } from "../router";
 import { haptic, openLink } from "../tg";
 import { ErrorText, FileList, StatusBadge, message } from "../ui";
 import { MentorChallenges, MentorQuestions, MentorTasks } from "./mentor/MentorTools";
@@ -54,7 +55,10 @@ function Queue({ me, onChanged, embedded = false }: { me: Me; onChanged: () => v
       </p>
       <ErrorText error={error} />
       {!items && !error && <div className="hint">{t("common.loading")}</div>}
-      {items?.length === 0 && <div className="center hint">{t("s.review.empty")}</div>}
+      {items?.length === 0 && (!isMentor && !me.track
+        ? <div className="st-empty"><b>{t("st.review.no_track")}</b><span className="hint">{t("st.review.no_track_hint")}</span>
+            <button className="btn small" style={{ width: "auto" }} onClick={() => navigate("/talaba/yol")}>{t("st.weekly.pick")}</button></div>
+        : <div className="center hint">{t("s.review.empty")}</div>)}
       {items?.map((it) => (
         <ReviewCard key={it.submission_id} item={it} onDone={async () => { await load(); onChanged(); }} />
       ))}

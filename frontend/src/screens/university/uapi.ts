@@ -1,6 +1,6 @@
 // University panel API (v2): types and calls. Kept apart from api.ts so the university and company panels
 // can change without touching each other's code.
-import { download, request, type Job, type Me, type OutcomeKind, type PartnershipRow, type SubmittedFile, type Verification } from "../../api";
+import { download, request, type Job, type Me, type NewsCategory, type NewsItem, type OutcomeKind, type PartnershipRow, type SubmittedFile, type Verification } from "../../api";
 
 export type StaffStatus = "" | "pending" | "needs_info" | "approved" | "rejected";
 export type StaffRole = "" | "lead" | "member";
@@ -88,7 +88,10 @@ export interface DirectoryCompany {
 export interface Opportunity extends Job { partner: boolean; recommended: boolean; our_applicants: number }
 
 export interface Audience { faculty?: string; course?: number; group?: string; graduation_year?: number; verified_only?: boolean; open_to_work?: boolean }
-export interface Announcement { id: number; title: string; text: string; link: string; audience: Audience; recipients: number; author: string | null; created_at: string }
+export type Channel = "students" | "companies" | "public";
+/** The staff's view of an announcement: the reader's card plus filters, channels, reach and author. */
+export interface Announcement extends NewsItem { audience: Audience; channels: Channel[]; recipients: number; company_recipients: number; author: string | null }
+export interface AnnouncementInput { title: string; text: string; link: string; audience: Audience; channels: Channel[]; category: NewsCategory; photo_ids: number[] }
 
 export type EventKind = "career_day" | "job_fair" | "hackathon" | "workshop" | "open_day" | "meetup" | "other";
 export const EVENT_KINDS: EventKind[] = ["career_day", "job_fair", "hackathon", "workshop", "open_day", "meetup", "other"];
@@ -151,11 +154,14 @@ export const uapi = {
   askPartner: (companyId: number, message: string) => request<PartnershipRow>("POST", "/university/partners", { company_id: companyId, message }),
   decidePartner: (id: number, accept: boolean) => request<PartnershipRow>("POST", `/university/partners/${id}/decide`, { accept }),
   opportunities: () => request<Opportunity[]>("GET", "/university/opportunities"),
+  unrecommend: (jobId: number) => request<{ recommended: boolean }>("DELETE", `/university/jobs/${jobId}/recommend`),
   recommend: (jobId: number, note: string, faculty?: string, course?: number) =>
     request<{ recommended: boolean; students: number }>("POST", `/university/jobs/${jobId}/recommend`, { note, faculty: faculty || null, course: course || null }),
   announcements: () => request<Announcement[]>("GET", "/university/announcements"),
-  previewAudience: (a: Audience) => request<{ recipients: number }>("POST", "/university/announcements/preview", a),
-  announce: (body: { title: string; text: string; link: string; audience: Audience }) => request<Announcement>("POST", "/university/announcements", body),
+  previewAudience: (a: Audience, channels: Channel[] = ["students"]) =>
+    request<{ recipients: number; companies: number }>("POST", "/university/announcements/preview", { ...a, channels }),
+  announce: (body: AnnouncementInput) => request<Announcement>("POST", "/university/announcements", body),
+  deleteAnnouncement: (id: number) => request<{ deleted: boolean }>("DELETE", `/university/announcements/${id}`),
   events: (scope: "upcoming" | "past" | "all") => request<UniEvent[]>("GET", `/university/events?scope=${scope}`),
   createEvent: (e: EventInput) => request<UniEvent>("POST", "/university/events", e),
   editEvent: (id: number, e: EventInput) => request<UniEvent>("PATCH", `/university/events/${id}`, e),
@@ -163,7 +169,6 @@ export const uapi = {
   registrations: (id: number) => request<Registration[]>("GET", `/university/events/${id}/registrations`),
   attendance: (id: number, userIds: number[], attended: boolean) => request<{ updated: number }>("POST", `/university/events/${id}/attendance`, { user_ids: userIds, attended }),
   // the student side
-  myFeed: () => request<{ announcements: { id: number; title: string; text: string; link: string; created_at: string }[]; events: UniEvent[] }>("GET", "/me/university/feed"),
   registerEvent: (id: number) => request<{ registered: boolean }>("POST", `/me/university/events/${id}/register`),
   unregisterEvent: (id: number) => request<{ registered: boolean }>("DELETE", `/me/university/events/${id}/register`),
   // admin

@@ -242,6 +242,7 @@ function PartnerEditor({ initial, onSaved, onCancel }: { initial?: AdminSitePart
                 {choices?.map((c) => (
                   <button key={c.id} className="site-choice" onClick={() => choose(c)}>
                     <Thumb url={c.logo_url} name={c.name} short={c.short} /><span className="grow">{c.name}{c.short && <small className="hint"> · {c.short}</small>}</span>
+                    {c.consented && <span className="badge peer_verified">rozilik bergan</span>}
                     {!c.logo_url && <small className="hint">logosiz</small>}
                   </button>
                 ))}

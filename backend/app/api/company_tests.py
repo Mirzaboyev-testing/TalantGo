@@ -13,8 +13,9 @@ from pydantic import BaseModel, Field, StringConstraints, model_validator
 from sqlalchemy import func, select
 
 from ..models import Application, CompanyTest, Job, Role, TestAttempt, TestQuestion, Track, User
+from ..schemas import JobField
 from ..core import ratelimit
-from ..services import inbox, notify
+from ..services import admin_inbox, inbox
 from ..services.applications import company_staff_ids
 from .deps import AdminActor, CurrentUser, Session, audit
 from .employer import ApprovedEmployer, Employer
@@ -63,8 +64,9 @@ class TestIn(BaseModel):
     title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=160)]
     description: Annotated[str, StringConstraints(strip_whitespace=True, max_length=3000)] = ""
     job_id: int | None = None
-    audience: Literal["all", "tracks", "applicants"] = "all"
+    audience: Literal["all", "tracks", "fields", "applicants"] = "all"
     track_ids: list[int] = Field(default_factory=list, max_length=10)
+    job_fields: list[JobField] = Field(default_factory=list, max_length=5)     # audience "fields": job functions
     deadline: date | None = None
     time_limit_min: int | None = Field(default=None, ge=1, le=300)
     questions: list[QuestionIn] = Field(min_length=1, max_length=50)
@@ -76,8 +78,11 @@ class TestIn(BaseModel):
             raise ValueError("Test kimga ko'rinishini tanlang: kamida bitta yo'nalish")
         if self.audience == "applicants" and not self.job_id:
             raise ValueError("«Ariza berganlar uchun» test vakansiyaga bog'lanishi kerak")
+        if self.audience == "fields" and not self.job_fields:
+            raise ValueError("Test kimga ko'rinishini tanlang: kamida bitta kasb yo'nalishi")
         if self.audience != "tracks":
             self.track_ids = []
+        self.job_fields = list(dict.fromkeys(self.job_fields)) if self.audience == "fields" else []
         return self
 
 
@@ -128,7 +133,8 @@ def question_out(q: TestQuestion, with_answers: bool) -> dict:
 def test_summary(t: CompanyTest, attempts: int = 0, to_grade: int = 0) -> dict:
     return {
         "id": t.id, "title": t.title, "description": t.description, "status": t.status, "review_note": t.review_note,
-        "audience": t.audience, "track_ids": t.track_ids, "job_id": t.job_id, "job_title": t.job.title if t.job else None,
+        "audience": t.audience, "track_ids": t.track_ids, "job_fields": t.job_fields or [],
+        "job_id": t.job_id, "job_title": t.job.title if t.job else None,
         "deadline": t.deadline, "time_limit_min": t.time_limit_min, "questions_count": len(t.questions),
         "max_score": max_score(t), "is_survey": max_score(t) == 0, "company": t.company.name,
         "company_industry": t.company.industry, "attempts": attempts, "to_grade": to_grade,
@@ -190,17 +196,11 @@ async def _check_links(session: Session, user: User, body: TestIn) -> None:
 
 
 def _fill(test: CompanyTest, body: TestIn) -> None:
-    for field in ("title", "description", "job_id", "audience", "track_ids", "deadline", "time_limit_min"):
+    for field in ("title", "description", "job_id", "audience", "track_ids", "job_fields", "deadline", "time_limit_min"):
         setattr(test, field, getattr(body, field))
     test.questions = [TestQuestion(sort_order=i, kind=q.kind, text=q.text, options=q.options, correct=q.correct,
                                    points=q.points) for i, q in enumerate(body.questions)]
     test.status, test.review_note = ("pending" if body.submit else "draft"), ""
-
-
-async def _notify_admins(session: Session, text: str) -> None:
-    ids = (await session.execute(select(User.telegram_id).where(
-        (User.role == Role.admin) | User.is_owner, User.is_blocked.is_(False)))).scalars().all()
-    notify.send(list(ids), text)
 
 
 @employer_router.get("/tests")
@@ -221,7 +221,8 @@ async def create_test(body: TestIn, user: ApprovedEmployer, session: Session) ->
     await session.commit()
     await session.refresh(test)
     if test.status == "pending":
-        await _notify_admins(session, f"Yangi test tekshiruvni kutmoqda: {user.company.name}, «{test.title}».")
+        await admin_inbox.push(session, "tests", "test_new",
+                               f"Yangi test tekshiruvni kutmoqda: {user.company.name}, «{test.title}».", "tests")
     return test_full(test)
 
 
@@ -244,7 +245,8 @@ async def edit_test(test_id: int, body: TestIn, user: ApprovedEmployer, session:
     await session.commit()
     await session.refresh(test)
     if test.status == "pending":
-        await _notify_admins(session, f"Test qayta tekshiruvni kutmoqda: {user.company.name}, «{test.title}».")
+        await admin_inbox.push(session, "tests", "test_resubmitted",
+                               f"Test qayta tekshiruvni kutmoqda: {user.company.name}, «{test.title}».", "tests")
     return test_full(test)
 
 
@@ -327,7 +329,7 @@ async def grade(attempt_id: int, body: GradingIn, user: ApprovedEmployer, sessio
         await inbox.push(session, [attempt.user_id], "test_graded",
                          f"«{attempt.test.title}» testingiz baholandi ({user.company.name}): "
                          f"{attempt.score:g} / {attempt.max_score} ball.",
-                         link="/talaba/vakansiyalar", params={"test": attempt.test.title, "company": user.company.name,
+                         link="/talaba/topshiriqlar/testlar", params={"test": attempt.test.title, "company": user.company.name,
                                                              "score": attempt.score, "max": attempt.max_score})
     return {**attempt_out(attempt, with_correct=True), "student": _student_brief(attempt.user)}
 
@@ -339,6 +341,8 @@ async def _can_take(session: Session, user: User, test: CompanyTest) -> bool:
         return False
     if test.audience == "tracks":
         return user.track_id in test.track_ids
+    if test.audience == "fields":
+        return bool(set(test.job_fields or []) & set(user.job_fields or []))
     if test.audience == "applicants":
         return bool(await session.scalar(select(Application.id).where(
             Application.job_id == test.job_id, Application.user_id == user.id)))
@@ -503,15 +507,18 @@ async def review_test(test_id: int, body: DecisionIn, actor: AdminActor, session
 
 async def _announce(session: Session, test: CompanyTest) -> None:
     """Tells the students the test is meant for that it is open."""
+    # the track is optional since 2026-11-17: students without one are reached too
     query = select(User.id).where(User.account_type == "student", User.role == Role.student,
-                                  User.is_blocked.is_(False), User.track_id.isnot(None))
+                                  User.is_blocked.is_(False))
     if test.audience == "tracks":
         query = query.where(User.track_id.in_(test.track_ids))
+    elif test.audience == "fields":
+        query = query.where(User.job_fields.overlap(test.job_fields or []))
     elif test.audience == "applicants":
         query = query.join(Application, Application.user_id == User.id).where(Application.job_id == test.job_id)
     ids = (await session.execute(query)).scalars().all()
     deadline = f" Muddat: {test.deadline.strftime('%d.%m.%Y')}." if test.deadline else ""
     await inbox.push(session, list(ids), "test_new",
                      f"{test.company.name} yangi test e'lon qildi: «{test.title}».{deadline} "
-                     "«Vakansiyalar» > «Testlar» bo'limida ishlang.",
-                     link="/talaba/vakansiyalar", params={"test": test.title, "company": test.company.name})
+                     "«Topshiriqlar» → «Testlar» bo'limida ishlang.",
+                     link="/talaba/topshiriqlar/testlar", params={"test": test.title, "company": test.company.name})

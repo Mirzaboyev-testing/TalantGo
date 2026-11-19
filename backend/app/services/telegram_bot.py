@@ -14,7 +14,7 @@ OLD_BOT_NAME = f"{BRAND} (eski bot)"
 DESCRIPTION = (
     "🚀 Kelajagingni biz bilan qur!\n\n"
     "Careerup: o'qish davomida haqiqiy tajriba to'playdigan joy.\n\n"
-    "🧭 Yo'nalishingni tanla va har hafta topshiriq bajar\n"
+    "🧭 Kasb yo'nalishingni belgila va korxona topshiriqlarini bajar\n"
     "✅ Ishlaring tengdosh va mentor tomonidan tasdiqlanadi\n"
     "💼 Amaliyot va birinchi ishni top\n\n"
     "Boshlash uchun «Start» tugmasini bos."
@@ -26,7 +26,7 @@ WELCOME_CAPTION = (
     "<b>🚀 Kelajagingni biz bilan qur!</b>\n\n"
     "Careerup: o'qish davomida haqiqiy tajriba to'plab, diplom bilan birga isbotlangan portfolio "
     "olib chiqadigan joy.\n\n"
-    "🧭 Yo'nalishingni tanla va har hafta topshiriq bajar\n"
+    "🧭 Kasb yo'nalishingni belgila va korxona topshiriqlarini bajar\n"
     "✅ Ishlaring tengdosh va mentor tomonidan tasdiqlanadi\n"
     "💼 Amaliyot va birinchi ishni top\n\n"
     "Pastdagi tugmani bos 👇"
@@ -112,6 +112,8 @@ async def connect(token: str, public_url: str) -> dict:
                secret_token=webhook_secret(token), allowed_updates=["message"], drop_pending_updates=True)
     await call(token, "setMyDescription", description=DESCRIPTION)
     await call(token, "setMyShortDescription", short_description=SHORT_DESCRIPTION)
+    from .bot_commands import COMMANDS
+    await call(token, "setMyCommands", commands=[{"command": c, "description": d} for c, d in COMMANDS])
     return me
 
 
@@ -120,7 +122,11 @@ async def send_welcome(token: str, chat_id: int, public_url: str, role: str | No
     """role comes from a partner link (?start=hr / ?start=uni); join from a group invite (?start=g<code>)."""
     query = f"role={role}" if role else (f"join={join}" if join else "")
     url = f"{public_url}/?{query}" if query else public_url
-    markup = {"inline_keyboard": [[{"text": "🚀 Ilovani ochish", "web_app": {"url": url}}]]}
+    rows = [[{"text": "🚀 Ilovani ochish", "web_app": {"url": url}}]]
+    if role in ("employer", "university"):     # their panels are made for a computer: the website in the browser
+        panel = "korxona" if role == "employer" else "universitet"
+        rows.append([{"text": "💻 Saytda ochish", "url": f"{public_url}/kirish/{panel}"}])
+    markup = {"inline_keyboard": rows}
     try:
         await call(token, "sendPhoto", chat_id=chat_id, photo=f"{public_url}/media/welcome.jpg?v=careerup",   # a new URL: Telegram caches by URL
                    caption=WELCOME_CAPTION, parse_mode="HTML", reply_markup=markup)

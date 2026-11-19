@@ -4,7 +4,8 @@ import { initData, insideTelegram } from "./tg";
 import { message } from "./ui";
 import Onboarding from "./screens/Onboarding";
 import StudentSignup from "./screens/student/StudentSignup";
-import TasksHub from "./screens/student/TasksHub";
+import { MustChangePassword } from "./screens/PasswordRecovery";
+import TasksHub, { type TasksView } from "./screens/student/TasksHub";
 import StudentProfile from "./screens/student/StudentProfile";
 import StudentSettings from "./screens/student/StudentSettings";
 import DirectChat from "./screens/student/DirectChat";
@@ -141,6 +142,9 @@ export default function App() {
     return <PublicSite me={me} dev={false} onSignIn={signIn} onDev={devLogin} />;
   }
 
+  // signed in with the owner's temporary password: a new password before any panel (every panel, the same rule)
+  if (me.must_change_password) return <MustChangePassword me={me} onDone={setMe} onLogout={logout} />;
+
   // Careerup AI is there from the first screen: people ask how to sign up, then how to use their part of the app
   const audience: AiAudience = me.account_type === "employer" ? "employer"
     : me.account_type === "university" || me.signup_missing.length > 0 ? "signup" : "student";
@@ -155,7 +159,7 @@ export default function App() {
   }
   if (me.account_type === "university") {
     return <>{ai}{me.staff_status === "approved"
-      ? <UniversityApp me={me} onLogout={logout} />
+      ? <UniversityApp me={me} onMe={setMe} onLogout={logout} />
       : <div className="app"><UniPending me={me} onChanged={setMe} onLogout={logout} /></div>}</>;
   }
   // a brand-new account first chooses: job seeker or employer (the panel picked on the website decides it)
@@ -195,6 +199,11 @@ function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
 }) {
   useLang();
   const [tab, setTab, segment] = useRouteTab<Tab>("/talaba", STUDENT_TABS, "home", { saqlangan: "jobs", yol: "tasks", tekshirish: "tasks" });
+  // the part after the section: /talaba/vakansiyalar/saqlangan, /talaba/topshiriqlar/testlar
+  const sub = usePath().split("/")[3] ?? "";
+  // tests moved from Arizalarim to Topshiriqlar (2026-11-19): older links still land on them
+  useEffect(() => { if (segment === "arizalar" && sub === "testlar") navigate("/talaba/topshiriqlar/testlar", { replace: true }); }, [segment, sub]);
+  const tasksView: TasksView | undefined = segment === "tekshirish" ? "review" : segment === "yol" ? "weekly" : sub === "testlar" ? "tests" : undefined;
   const [unread, setUnread] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
   const refreshUnread = useCallback(() => api.groups.unread().then((r) => setUnread(r.unread), () => {}), []);
@@ -232,16 +241,17 @@ function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
 
   return (
     <Shell tabs={tabs} active={tab} onChange={setTab} onLogout={onLogout} wide onUser={() => setTab("profile")}
+           phoneBar={["home", "jobs", "tasks", "messages"]}
            user={{ name: me.full_name, photo: me.photo_url, subtitle: subtitle || undefined, verified: me.verification === "verified" }}>
       {tab === "home" && <StudentHome me={me} />}
-      {tab === "tasks" && <TasksHub me={me} onChanged={refreshMe} initial={segment === "tekshirish" ? "review" : segment === "yol" ? "weekly" : undefined} />}
+      {tab === "tasks" && <TasksHub key={`tasks-${segment}-${sub}`} me={me} onChanged={refreshMe} initial={tasksView} />}
       {tab === "university" && <MyUniversity me={me} />}
       {tab === "messages" && <DirectChat side="student" onUnread={refreshChats} />}
       {tab === "events" && <Events />}
-      {tab === "jobs" && <JobsScreen key={`jobs-${segment}`} me={me} views={["jobs", "saved"]}
-                                     initialView={segment === "saqlangan" ? "saved" : "jobs"}
+      {tab === "jobs" && <JobsScreen key={`jobs-${segment}-${sub}`} me={me} views={["jobs", "saved"]}
+                                     initialView={segment === "saqlangan" || sub === "saqlangan" ? "saved" : "jobs"}
                                      onOpenProfile={() => setTab("profile")} />}
-      {tab === "applications" && <JobsScreen key="applications" me={me} views={["mine", "tests"]} initialView="mine"
+      {tab === "applications" && <JobsScreen key="applications" me={me} views={["mine"]} initialView="mine"
                                              onOpenProfile={() => setTab("profile")} />}
       {tab === "community" && <Community me={me} joinCode={joinCode} onUnreadChange={refreshUnread} />}
       {tab === "profile" && (seeker ? <StudentProfile me={me} onSaved={setMe} />

@@ -93,7 +93,8 @@ async def submit(session: AsyncSession, user: User, task_id: int, proof_url: str
         User.track_id == task.track_id, User.id != user.id, User.account_type == "student",
         User.is_blocked.is_(False)))).scalars().all()
     notify.send(list(peers), f"📝 {user.full_name} «{task.title}» ishini topshirdi. "
-                             f"«Topshiriqlar → Boshqalarni tekshirish»da baholang va +{rules.review_points} ball oling.")
+                             f"«Topshiriqlar → Boshqalarni tekshirish»da baholang va +{rules.review_points} ball oling.",
+                path="/talaba/tekshirish")
     return await _reload(session, sub.id)
 
 

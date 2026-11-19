@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { api, type Applicant, type TalentCard } from "../../api";
+import { useEffect, useState } from "react";
+import { api, loadCatalog, type Applicant, type Catalog, type TalentCard } from "../../api";
 import { formatDateTime, t, useLang } from "../../i18n";
 import { courseText } from "../../labels";
 import { actionLabel, EMPLOYER_MOVES, statusBadge, statusLabel } from "../../pipeline";
+import { navigate } from "../../router";
 import { ask, haptic, openLink } from "../../tg";
 import { ErrorText, Sheet, message } from "../../ui";
 import { downloadCv } from "./Students";
@@ -10,6 +11,10 @@ import { downloadCv } from "./Students";
 /** Study details and verified results of a student, as companies see them on cards. */
 export function CardBody({ card }: { card: TalentCard }) {
   useLang();
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
+  useEffect(() => { if (card.job_fields?.length) loadCatalog().then(setCatalog, () => {}); }, [card.job_fields?.length]);
+  // the job fields the student chose say more than the optional programme track
+  const fields = (card.job_fields ?? []).map((k) => catalog?.job_fields[k] ?? k).join(", ");
   return (
     <>
       {card.headline && <div style={{ fontWeight: 600 }}>{card.headline}</div>}
@@ -17,7 +22,7 @@ export function CardBody({ card }: { card: TalentCard }) {
         {[card.university, card.faculty, courseText(card.course), card.city].filter(Boolean).join(" · ")}
       </div>
       <div className="hint">
-        {card.track ?? t("p.common.no_track")} · {t("p.common.points_n", { n: card.points })} · {t("p.common.verified_works", { n: card.verified_tasks })}
+        {fields || card.track || t("p.common.no_track")} · {t("p.common.points_n", { n: card.points })} · {t("p.common.verified_works", { n: card.verified_tasks })}
         {card.gpa != null ? ` · GPA ${card.gpa}/${card.gpa_scale}` : ""}
       </div>
       {(card.skills.length > 0 || card.languages.length > 0) && (
@@ -57,6 +62,11 @@ export function ApplicantCard({ applicant: a, onUpdated, onProfile, jobTitle }: 
     await save({ status });
   }
 
+  // opening a new application counts as reviewing it (no notice to the student), as the per-job list does
+  useEffect(() => {
+    if (a.status === "new") api.employer.updateApplication(a.id, { status: "viewed" }).then(onUpdated, () => {});
+  }, [a.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const moves = EMPLOYER_MOVES[a.status] ?? [];
   return (
     <div className="card">
@@ -77,6 +87,9 @@ export function ApplicantCard({ applicant: a, onUpdated, onProfile, jobTitle }: 
         {a.identity.phone && <span className="hint">{t("p.common.phone_short", { phone: a.identity.phone })}</span>}
         <button className="btn small ghost" onClick={() => onProfile(a.card.id)}>{t("p.common.profile")}</button>
         <button className="btn small ghost" onClick={() => downloadCv(a.card.id)}>{t("p.common.cv_pdf")}</button>
+        {a.status !== "withdrawn" && (
+          <button className="btn small ghost" onClick={() => navigate(`/korxona/xabarlar?student=${a.card.id}`)}>{t("co.app.write")}</button>
+        )}
       </div>
       {moves.length > 0 && (
         <div className="row wrap" style={{ marginTop: 8 }}>

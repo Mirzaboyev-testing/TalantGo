@@ -5,11 +5,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, daysLeft, fileSize, type Challenge, type SubmittedFile } from "../../api";
 import { formatDateTime, t, useLang, type MsgKey } from "../../i18n";
 import { Icon } from "../../icons";
+import { navigate, useSearch } from "../../router";
 import { haptic, openLink } from "../../tg";
 import { ErrorText, message, toast } from "../../ui";
 import { BRAND } from "../../brand";
 
-type Filter = "open" | "mine" | "upcoming" | "finished";
+// a student's own entry sits in the tab of its state: in review, accepted or rejected (2026-11-19)
+type Filter = "open" | "review" | "accepted" | "rejected" | "upcoming" | "finished";
+const FILTERS: Filter[] = ["open", "review", "accepted", "rejected", "upcoming", "finished"];
+const ENTRY_OF: Partial<Record<Filter, string>> = { review: "submitted", accepted: "accepted", rejected: "rejected" };
 const MAX_FILES = 5;
 const day = (iso: string) => formatDateTime(iso, false);
 
@@ -33,19 +37,22 @@ export default function TaskBoard() {
   useLang();
   const [rows, setRows] = useState<Challenge[] | null>(null);
   const [filter, setFilter] = useState<Filter>("open");
-  const [openId, setOpenId] = useState<number | null>(null);
+  // a notification or the home page opens one task straight away: /talaba/topshiriqlar?vazifa=<id>
+  const search = useSearch();
+  const [openId, setOpenId] = useState<number | null>(search.vazifa ? Number(search.vazifa) || null : null);
+  useEffect(() => { if (search.vazifa) setOpenId(Number(search.vazifa) || null); }, [search.vazifa]);
   const [error, setError] = useState("");
   const load = useCallback(() => api.challenges.list().then(setRows, (e) => setError(message(e))), []);
   useEffect(() => { void load(); }, [load]);
 
-  const pick = (f: Filter) => (rows ?? []).filter((c) => f === "mine" ? Boolean(c.my_entry)
-    : f === "open" ? c.state === "active" && !c.my_entry : c.state === (f === "upcoming" ? "upcoming" : "finished"));
-  if (openId) return <TaskDetail id={openId} onBack={() => { setOpenId(null); void load(); }} />;
+  const pick = (f: Filter) => (rows ?? []).filter((c) => ENTRY_OF[f] ? c.my_entry?.status === ENTRY_OF[f]
+    : !c.my_entry && c.state === (f === "open" ? "active" : f));
+  if (openId) return <TaskDetail id={openId} onBack={() => { setOpenId(null); if (search.vazifa) navigate("/talaba/topshiriqlar", { replace: true }); void load(); }} />;
 
   return (
     <div className="co-page">
       <div className="co-tabs">
-        {(["open", "mine", "upcoming", "finished"] as Filter[]).map((f) => (
+        {FILTERS.filter((f) => f === "open" || !rows || pick(f).length > 0 || f === filter).map((f) => (
           <button key={f} className={filter === f ? "on" : ""} onClick={() => setFilter(f)}>
             {t(`st.tb.f.${f}` as MsgKey)}{rows && <span className="co-tab-n">{pick(f).length}</span>}
           </button>
@@ -90,7 +97,7 @@ function TaskDetail({ id, onBack }: { id: number; onBack: () => void }) {
   if (!c) return <div className="co-page"><button className="btn small ghost co-back" onClick={onBack}><Icon name="back" size={16} />{t("common.back")}</button>{error ? <ErrorText error={error} /> : <div className="st-skeleton-grid"><span /></div>}</div>;
 
   const e = c.my_entry;
-  const canSubmit = c.state === "active" && (!e || e.status === "submitted");
+  const canSubmit = c.state === "active" && (!e || e.status !== "accepted");
   const steps = [
     { key: "join", done: true }, { key: "submit", done: Boolean(e) },
     { key: "review", done: Boolean(e && e.status !== "submitted") }, { key: "result", done: Boolean(e && (e.status !== "submitted" || c.state === "finished")) },
@@ -149,8 +156,15 @@ function TaskDetail({ id, onBack }: { id: number; onBack: () => void }) {
                 {e.points_awarded > 0 && <div className="hint">+{e.points_awarded} {t("home.points")}</div>}
                 {e.comment && <blockquote className="co-quote">«{e.comment}»</blockquote>}
                 {e.proof_url && <button className="link-btn" onClick={() => openLink(e.proof_url)}><Icon name="link" size={14} /> {t("s.common.open_link")}</button>}
-                {(e.files ?? []).length > 0 && <div className="hint">{t("st.tb.files_n", { n: e.files!.length })}</div>}
+                {(e.files ?? []).length > 0 && (
+                  <div className="st-entry-files">
+                    {e.files!.map((f, i) => (
+                      <a key={f.id} href={f.url} target="_blank" rel="noreferrer"><Icon name="file" size={14} /><span className="ellipsis">{f.name || t("co.task.file_n", { n: i + 1 })}</span></a>
+                    ))}
+                  </div>
+                )}
                 {e.status === "submitted" && c.state === "active" && <p className="hint">{t("st.tb.can_edit", { date: day(c.ends_at) })}</p>}
+                {e.status === "rejected" && c.state === "active" && <p className="st-fix-hint">{t("st.tb.can_fix", { date: day(c.ends_at) })}</p>}
               </>
             )}
           </div>
@@ -168,6 +182,8 @@ function SubmitTask({ c, onDone }: { c: Challenge; onDone: () => void }) {
   const [url, setUrl] = useState(e?.proof_url ?? "");
   const [note, setNote] = useState(e?.note ?? "");
   const [files, setFiles] = useState<SubmittedFile[]>([]);
+  const [kept, setKept] = useState(e?.files ?? []);
+  const fixing = e?.status === "rejected";
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const input = useRef<HTMLInputElement>(null);
@@ -177,7 +193,7 @@ function SubmitTask({ c, onDone }: { c: Challenge; onDone: () => void }) {
     setError("");
     try {
       for (const f of Array.from(list)) {
-        if (files.length >= MAX_FILES) { setError(t("s.path.max_files", { n: MAX_FILES })); break; }
+        if (files.length + kept.length >= MAX_FILES) { setError(t("s.path.max_files", { n: MAX_FILES })); break; }
         setBusy(t("co.file.uploading"));
         const up = await api.upload(f);
         setFiles((cur) => [...cur, up]);
@@ -188,18 +204,31 @@ function SubmitTask({ c, onDone }: { c: Challenge; onDone: () => void }) {
   async function send() {
     setBusy(t("s.common.sending")); setError("");
     try {
-      await api.challenges.enter(c.id, url.trim(), note.trim(), [...(e?.files ?? []).map((f) => f.id), ...files.map((f) => f.id)]);
+      await api.challenges.enter(c.id, url.trim(), note.trim(), [...kept.map((f) => f.id), ...files.map((f) => f.id)]);
       haptic("success");
-      toast(e ? t("st.tb.updated") : t("st.tb.sent"));
+      toast(fixing ? t("st.tb.resent") : e ? t("st.tb.updated") : t("st.tb.sent"));
       setFiles([]);
       onDone();
     } catch (err) { setError(message(err)); }
     finally { setBusy(""); }
   }
-  const ready = url.trim().length >= 10 || files.length > 0 || (e?.files ?? []).length > 0;
+  const ready = url.trim().length >= 10 || files.length > 0 || kept.length > 0;
+  const title = fixing ? t("st.tb.fix") : e ? t("st.tb.update") : t("st.tb.submit");
   return (
-    <div className="co-card">
-      <b>{e ? t("st.tb.update") : t("st.tb.submit")}</b>
+    <div className={`co-card ${fixing ? "st-fix-card" : ""}`}>
+      <b>{title}</b>
+      {fixing && e?.comment && <p className="hint" style={{ margin: "6px 0 0" }}>{t("st.tb.fix_hint")}</p>}
+      {kept.length > 0 && (
+        <div className="files" style={{ marginTop: 10 }}>
+          {kept.map((f, i) => (
+            <div key={f.id} className="file-chip">
+              <span className="file-ext"><Icon name="file" size={14} /></span>
+              <a className="file-name" href={f.url} target="_blank" rel="noreferrer">{f.name || t("co.task.file_n", { n: i + 1 })}</a>
+              <button className="file-remove" aria-label={t("s.path.remove_file")} onClick={() => setKept(kept.filter((x) => x.id !== f.id))}><Icon name="close" size={16} /></button>
+            </div>
+          ))}
+        </div>
+      )}
       <input ref={input} type="file" multiple hidden onChange={(ev) => pick(ev.target.files)} />
       <div className="dropzone" role="button" style={{ marginTop: 10 }} onClick={() => input.current?.click()}>
         <Icon name="upload" size={20} />{t("s.path.choose_file")}
@@ -221,7 +250,7 @@ function SubmitTask({ c, onDone }: { c: Challenge; onDone: () => void }) {
       <label>{t("s.common.note_optional")}</label>
       <textarea value={note} maxLength={1000} rows={3} placeholder={t("st.tb.note_ph")} onChange={(ev) => setNote(ev.target.value)} />
       <ErrorText error={error} />
-      <button className="btn" style={{ marginTop: 10 }} disabled={!!busy || !ready} onClick={send}>{busy || (e ? t("st.tb.update") : t("s.common.send"))}</button>
+      <button className="btn" style={{ marginTop: 10 }} disabled={!!busy || !ready} onClick={send}>{busy || (fixing ? t("st.tb.resend") : e ? t("st.tb.update") : t("s.common.send"))}</button>
     </div>
   );
 }

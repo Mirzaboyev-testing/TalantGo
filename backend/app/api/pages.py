@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from ..core.config import settings
 from ..models import User
-from ..services import bots, telegram_bot, web_login
+from ..services import bot_commands, bots, telegram_bot, web_login
 from ..services.cv import build_cv, public_view
 from .deps import Session
 
@@ -82,9 +82,18 @@ async def _handle(update: dict, session: Session, token: str, old_bot: bool) -> 
         except telegram_bot.BotError as exc:
             log.warning("website sign-in message failed: %s", exc)
         return {"ok": True}
+    if private and sender and text and not text.startswith("/start"):
+        try:
+            await bot_commands.handle(session, token, message["chat"]["id"], message["from"], text)
+        except telegram_bot.BotError as exc:
+            log.warning("bot command answer failed: %s", exc)
+        return {"ok": True}
     if text.startswith("/start") and private and sender:
         payload = text.removeprefix("/start").strip()
         role = {"hr": "employer", "uni": "university"}.get(payload)
+        if role is None and not payload:         # a company or university member pressing Start again
+            kind = await session.scalar(select(User.account_type).where(User.telegram_id == sender))
+            role = kind if kind in ("employer", "university") else None
         if payload.startswith("r") and payload[1:].isdigit() and 0 < int(payload[1:]) < 2 ** 31:
             await _remember_referral(session, message["from"], int(payload[1:]))
         join = payload[1:] if payload.startswith("g") and len(payload) > 4 else None

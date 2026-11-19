@@ -15,8 +15,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import aliased
 
 from ..core.config import settings
-from ..models import (APPLICATION_STATES, AdminAccount, CompanyTest, Announcement, Application, AuditLog, Challenge, ChallengeEntry, Company, Group,
-                      GroupMember, GroupMessage, Job, Role, Status, Submission, Task, Track, University, User)
+from ..models import (APPLICATION_STATES, AdminAccount, AdminNotification, Complaint, CompanyTest, Announcement, Application, AuditLog, Challenge, ChallengeEntry, Company, Group,
+                      GroupMember, GroupMessage, Job, PasswordRequest, Role, Status, Submission, Task, Track, University, User)
 from ..schemas import (AdminSubmissionOut, AdminTaskOut, AdminTrackOut, AdminUserOut, AnnouncementIn,
                        AnnouncementOut, AuditOut, BotStatusOut, BotTokenIn, CompanyOut, PointsAdjustIn,
                        ReviewDecisionIn, ReviewOut, TaskIn, TaskPatch, TrackIn, TrackPatch, UniversityIn,
@@ -100,16 +100,32 @@ async def users(_: AdminActor, session: Session,
 async def reset_user_password(user_id: int, actor: OwnerActor, session: Session) -> dict:
     """For a website account whose owner forgot the password: a temporary one to hand over.
     Owner only: whoever holds the temporary password controls the account."""
-    import asyncio
-    from ..services.admin_accounts import hash_password
     user = await session.get(User, user_id)
     if user is None or not user.email:
         raise HTTPException(404, "Bu foydalanuvchida email bilan kirish yo'q")
+    return await _temporary_password(session, actor, user)
+
+
+async def _temporary_password(session: Session, actor, user: User) -> dict:
+    """A temporary password the person must replace on the first sign-in; every old session ends."""
+    import asyncio
     temporary = secrets.token_urlsafe(9)
     user.password_hash = await asyncio.to_thread(hash_password, temporary)
+    user.token_version = (user.token_version or 0) + 1
+    user.must_change_password = True
     audit(session, actor, "user.password_reset", f"{user.full_name} (#{user.id})", user.email)
+    await _close_requests(session, actor, PasswordRequest.user_id == user.id)
     await session.commit()
+    await user_inbox.push(session, [user.id], "password_reset",
+                          "Parolingiz Careerup admini tomonidan tiklandi. Admin bergan vaqtinchalik parol bilan kiring "
+                          "va darhol yangi parol qo'ying.")
     return {"temporary_password": temporary, "email": user.email}
+
+
+async def _close_requests(session: Session, actor, where, status: str = "done") -> None:
+    rows = (await session.execute(select(PasswordRequest).where(where, PasswordRequest.status == "open"))).scalars()
+    for r in rows:
+        r.status, r.handled_by, r.handled_at = status, actor.name[:160], datetime.now(UTC)
 
 
 @router.patch("/users/{user_id}", response_model=AdminUserOut)
@@ -526,7 +542,7 @@ async def export_users(actor: AdminActor, session: Session) -> StreamingResponse
 # --------------------------------------------------------------------------- moderation queues
 
 @router.get("/inbox")
-async def inbox(_: AdminActor, session: Session) -> dict:
+async def inbox(actor: AdminActor, session: Session) -> dict:
     """Counts behind the badges: everything that waits for an admin decision."""
     count = lambda model, *where: session.scalar(select(func.count()).select_from(model).where(*where))  # noqa: E731
     return {
@@ -535,7 +551,100 @@ async def inbox(_: AdminActor, session: Session) -> dict:
         "jobs": await count(Job, Job.status == "pending"),
         "staff": await count(User, User.staff_status == "pending"),
         "tests": await count(CompanyTest, CompanyTest.status == "pending"),
+        "complaints": await count(Complaint, Complaint.status == "open"),
+        "password_requests": await count(PasswordRequest, PasswordRequest.status == "open") if actor.is_owner else 0,
     }
+
+
+# --------------------------------------------------------------------------- the admin bell (services/admin_inbox.py)
+
+class AdminReadIn(BaseModel):
+    ids: list[int] | None = Field(default=None, max_length=200)     # None: everything
+
+
+def _notice_out(n: AdminNotification) -> dict:
+    return {"id": n.id, "kind": n.kind, "text": n.text, "link": n.link, "created_at": n.created_at,
+            "read": n.read_at is not None}
+
+
+async def _admin_unread(session: Session, account_id: int) -> int:
+    return await session.scalar(select(func.count()).select_from(AdminNotification).where(
+        AdminNotification.account_id == account_id, AdminNotification.read_at.is_(None)))
+
+
+@router.get("/notifications")
+async def admin_notifications(actor: AdminActor, session: Session, before_id: int | None = None,
+                              limit: int = Query(default=30, ge=1, le=100)) -> dict:
+    query = select(AdminNotification).where(AdminNotification.account_id == actor.account.id)
+    if before_id:
+        query = query.where(AdminNotification.id < before_id)
+    rows = (await session.execute(query.order_by(AdminNotification.id.desc()).limit(limit))).scalars().all()
+    return {"items": [_notice_out(n) for n in rows], "unread": await _admin_unread(session, actor.account.id),
+            "more": len(rows) == limit}
+
+
+@router.get("/notifications/unread")
+async def admin_unread(actor: AdminActor, session: Session) -> dict:
+    return {"unread": await _admin_unread(session, actor.account.id)}
+
+
+@router.post("/notifications/read")
+async def admin_mark_read(body: AdminReadIn, actor: AdminActor, session: Session) -> dict:
+    from sqlalchemy import update
+    query = update(AdminNotification).where(AdminNotification.account_id == actor.account.id,
+                                            AdminNotification.read_at.is_(None))
+    if body.ids is not None:
+        query = query.where(AdminNotification.id.in_(body.ids))
+    await session.execute(query.values(read_at=datetime.now(UTC)))
+    await session.commit()
+    return {"unread": await _admin_unread(session, actor.account.id)}
+
+
+# --------------------------------------------------------------------------- forgotten passwords (owner only)
+
+@router.get("/password-requests")
+async def password_requests(_: OwnerActor, session: Session, status: str = "open") -> list[dict]:
+    rows = (await session.execute(select(PasswordRequest).where(PasswordRequest.status == status)
+                                  .order_by(PasswordRequest.id.desc()).limit(100))).scalars().all()
+    out = []
+    for r in rows:
+        user = await session.get(User, r.user_id) if r.user_id else None
+        account = await session.get(AdminAccount, r.admin_account_id) if r.admin_account_id else None
+        out.append({"id": r.id, "kind": r.kind, "email": r.email, "full_name": r.full_name, "phone": r.phone,
+                    "note": r.note, "status": r.status, "created_at": r.created_at, "handled_by": r.handled_by,
+                    # what the platform knows, to compare with what the person wrote before trusting them
+                    "account": ({"name": user.full_name, "phone": user.phone, "account_type": user.account_type,
+                                 "has_telegram": user.telegram_id is not None, "blocked": user.is_blocked} if user
+                                else {"name": account.name, "role": account.role, "status": account.status} if account
+                                else None)})
+    return out
+
+
+@router.post("/password-requests/{request_id}/reset")
+async def password_request_reset(request_id: int, actor: OwnerActor, session: Session) -> dict:
+    r = await session.get(PasswordRequest, request_id)
+    if r is None or r.status != "open":
+        raise HTTPException(404, "So'rov topilmadi yoki yopilgan")
+    if r.kind == "admin":
+        account = await session.get(AdminAccount, r.admin_account_id) if r.admin_account_id else None
+        if account is None:
+            raise HTTPException(404, "Bu email bilan admin hisobi yo'q")
+        return await reset_password(account.id, actor, session)
+    user = await session.get(User, r.user_id) if r.user_id else None
+    if user is None or not user.email:
+        raise HTTPException(404, "Bu email bilan akkaunt topilmadi: so'rovni yoping")
+    return await _temporary_password(session, actor, user)
+
+
+@router.post("/password-requests/{request_id}/close")
+async def password_request_close(request_id: int, actor: OwnerActor, session: Session) -> dict:
+    r = await session.get(PasswordRequest, request_id)
+    if r is None or r.status != "open":
+        raise HTTPException(404, "So'rov topilmadi yoki yopilgan")
+    r.status, r.handled_by, r.handled_at = "closed", actor.name[:160], datetime.now(UTC)
+    audit(session, actor, "password_request.close", r.email)
+    await session.commit()
+    return {"status": r.status}
 
 
 @router.get("/verifications")
@@ -614,7 +723,8 @@ async def review_job(job_id: int, body: ReviewDecisionIn, actor: AdminActor, ses
         raise HTTPException(409, "Avval kompaniyani tasdiqlang")
     if job.status == "closed":
         raise HTTPException(409, "Kompaniya bu vakansiyani yopgan")
-    job.status, job.review_note = ("approved" if body.approve else "rejected"), body.note.strip()
+    # the note is the reason a job went back; an approved job keeps none (JobOut also reaches students)
+    job.status, job.review_note = ("approved", "") if body.approve else ("rejected", body.note.strip())
     audit(session, actor, "job.review", f"{job.company.name}: {job.title}", f"{job.status} {body.note}")
     await session.commit()
     await user_inbox.push(session, await company_staff_ids(session, job.company_id), "job_review",
@@ -881,6 +991,7 @@ async def reset_password(account_id: int, actor: OwnerActor, session: Session) -
     temporary = secrets.token_urlsafe(9)
     account.password_hash = hash_password(temporary)
     audit(session, actor, "account.reset", account.email)
+    await _close_requests(session, actor, PasswordRequest.admin_account_id == account.id)
     await session.commit()
     return {"temporary_password": temporary}
 

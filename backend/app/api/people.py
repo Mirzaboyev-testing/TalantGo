@@ -6,15 +6,15 @@ from sqlalchemy import func, select
 
 from datetime import UTC, datetime
 
-from ..models import Company, Role, Status, Submission, Track, University, User
+from ..models import Company, Status, Submission, Track, University, User
 from ..schemas import (CompanyOut, EmployerSignupIn, LeaderboardOut, LeaderRow, MeOut, MeUpdate, PeerOut,
                        StaffRequestIn, TrackOut, UniversityOut)
 from ..core import ratelimit
-from ..services import files, inbox, notify
+from ..services import admin_inbox, files, inbox, password_reset
 from ..services.career import completeness, signup_missing
 from ..services.portfolio import media_url
 from ..services.catalog import CONSENT_VERSION, as_dict as catalog_dict
-from ..core.security import read_token
+from ..core.security import read_token, user_token
 from ..services import cv_pdf
 from ..services.cv import build_cv, public_view
 from ..services.progress import current_streak, rank_of
@@ -49,6 +49,7 @@ async def me_out(session: Session, user: User) -> MeOut:
         portfolio_n=user.portfolio_n or 0,
         signup_missing=signup_missing(user),
         email=user.email, has_password=bool(user.password_hash), has_telegram=user.telegram_id is not None,
+        must_change_password=user.must_change_password,
         language=user.language, visible_to_employers=user.visible_to_employers,
         staff=await staff_info(session, user) if user.account_type == "university" and user.staff_status else None)
 
@@ -93,8 +94,10 @@ async def update_me(body: MeUpdate, user: CurrentUser, session: Session) -> MeOu
         changes["job_title"] = " ".join(changes["job_title"].split())
     if changes.get("work_industries") is not None:
         changes["work_industries"] = list(dict.fromkeys(changes["work_industries"]))
-    if (gpa := changes.get("gpa")) is not None and gpa > (changes.get("gpa_scale") or user.gpa_scale):
-        raise HTTPException(422, "O'rtacha baho shkaladan katta bo'lishi mumkin emas")
+    if (gpa := changes["gpa"] if "gpa" in changes else user.gpa) is not None \
+            and gpa > (changes.get("gpa_scale") or user.gpa_scale):
+        raise HTTPException(422, "O'rtacha baho shkaladan katta bo'lishi mumkin emas" if "gpa" in changes
+                            else f"Saqlangan o'rtacha baho ({gpa:g}) yangi shkaladan katta: avval bahoni o'zgartiring")
     if "phone" in changes and changes["phone"] != user.phone:
         user.phone_verified = False        # typed by hand: only a number shared via Telegram is confirmed
     if user.verification in ("pending", "verified") and any(
@@ -171,9 +174,12 @@ async def peers(user: CurrentUser, session: Session,
         query = query.where(User.goals.contains([goal.strip()]) | User.skills.contains([goal.strip()]))
     else:
         wanted = track_id or user.track_id
-        if wanted is None:
+        if wanted is not None:
+            query = query.where(User.track_id == wanted)
+        elif user.job_fields:                  # no track (optional since 2026-11-17): the same job functions
+            query = query.where(User.job_fields.overlap(user.job_fields))
+        else:
             return []
-        query = query.where(User.track_id == wanted)
     rows = (await session.execute(query.order_by(User.points.desc(), User.id).limit(100))).all()
     return [PeerOut(id=u.id, full_name=u.full_name, username=u.username, photo_url=u.photo_url,
                     track_title=u.track.title if u.track else None, track_icon=u.track.icon if u.track else "",
@@ -193,6 +199,8 @@ async def leaderboard(user: CurrentUser, session: Session,
     rank_query = select(func.count()).select_from(User).where(User.points > user.points, User.is_blocked.is_(False),
                                                               User.account_type == "student", User.consent_at.isnot(None))
     if scope == "track":
+        if user.track_id is None:              # no track, no track rating (the app hides that tab)
+            return LeaderboardOut(rows=[], my_rank=0)
         query = query.where(User.track_id == user.track_id)
         rank_query = rank_query.where(User.track_id == user.track_id)
     elif scope == "university":
@@ -263,6 +271,11 @@ async def request_verification(user: CurrentUser, session: Session) -> MeOut:
     await inbox.push(session, staff, "verification_request",
                      f"Yangi talaba tasdiqlashni kutmoqda: {user.full_name}, {user.faculty}, {user.course}-kurs.",
                      link="/universitet/tasdiqlash", params={"student": user.full_name})
+    if not staff:                    # nobody at the university can check it yet: the platform admins do
+        uni = user.university_ref.short_name if user.university_ref else ""
+        await admin_inbox.push(session, "students", "verification_new",
+                               f"Talabalik tasdig'ini kutmoqda: {user.full_name} ({uni}, {user.course}-kurs). "
+                               "Universitetda hali tasdiqlangan xodim yo'q.", "queue")
     await session.refresh(user)
     return await me_out(session, user)
 
@@ -275,7 +288,8 @@ class PasswordIn(BaseModel):
 
 @router.put("/me/password", response_model=MeOut)
 async def set_password(body: PasswordIn, user: CurrentUser, session: Session) -> MeOut:
-    """Email and password for the website, on the same account as the bot."""
+    """Email and password for the website, on the same account as the bot. Changing a password ends every other
+    session and returns a fresh token for this one; a temporary password from the owner needs no current one."""
     from ..services.admin_accounts import check_password, hash_password
     from .auth import _email
     try:
@@ -283,14 +297,21 @@ async def set_password(body: PasswordIn, user: CurrentUser, session: Session) ->
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     import asyncio
-    if user.password_hash and not await asyncio.to_thread(check_password, body.current_password, user.password_hash):
+    changing = bool(user.password_hash)
+    if changing and not user.must_change_password and not await asyncio.to_thread(
+            check_password, body.current_password, user.password_hash):
         raise HTTPException(403, "Joriy parol noto'g'ri")
     if await session.scalar(select(User.id).where(User.email == email, User.id != user.id)):
         raise HTTPException(409, "Bu email boshqa akkauntga bog'langan")
-    user.email, user.password_hash = email, await asyncio.to_thread(hash_password, body.password)
-    await session.commit()
+    if changing:
+        await password_reset.set_password(session, user, body.password, email=email)
+    else:                                   # a first password for a Telegram account: nothing to sign out
+        user.email, user.password_hash = email, await asyncio.to_thread(hash_password, body.password)
+        await session.commit()
     await session.refresh(user)
-    return await me_out(session, user)
+    out = await me_out(session, user)
+    out.token = user_token(user) if changing else None
+    return out
 
 
 class LinkPinIn(BaseModel):
@@ -351,9 +372,8 @@ async def register_company(body: EmployerSignupIn, user: CurrentUser, session: S
     user.consent_version = CONSENT_VERSION
     await session.commit()
     await session.refresh(user)
-    admins = (await session.execute(select(User.telegram_id).where(
-        (User.role == Role.admin) | User.is_owner, User.is_blocked.is_(False)))).scalars().all()
-    notify.send(list(admins), f"Yangi kompaniya tekshiruvni kutmoqda: {company.name} (STIR {company.stir}).")
+    await admin_inbox.push(session, "companies", "company_new",
+                           f"Yangi kompaniya tekshiruvni kutmoqda: {company.name} (STIR {company.stir}).", "queue")
     return await me_out(session, user)
 
 

@@ -1,7 +1,8 @@
-"""A university talking to its own students: messages to a chosen part of them, and events they sign up for.
+"""A university talking to its students and partner companies: announcements with photos (to students by
+faculty / course / group, to partner companies, on the public page) and events students sign up for.
 
-Staff side under /university (approved staff only); the student side under /me/university. A message or an
-event of a university only ever reaches that university's own students.
+Staff side under /university (approved staff only); the student side under /me/university; the company side
+under /employer/university-news. Who sees which announcement is decided in services/uni_news.py.
 """
 import csv
 import io
@@ -15,14 +16,17 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 
 from ..core import ratelimit
-from ..models import EVENT_KINDS, AuditLog, EventRegistration, UniversityAnnouncement, UniversityEvent, User
-from ..services import inbox
+from ..models import (ANNOUNCEMENT_CATEGORIES, ANNOUNCEMENT_CHANNELS, EVENT_KINDS, AuditLog, EventRegistration,
+                      UniversityAnnouncement, UniversityEvent, User)
+from ..services import inbox, uni_news
 from .deps import CurrentUser, Session
+from .employer import ApprovedEmployer
 from .university import Staff, StudentFilter, _roster_query, actor, cell
 
 TASHKENT = ZoneInfo("Asia/Tashkent")
 router = APIRouter(prefix="/university", tags=["university"])
 student_router = APIRouter(prefix="/me/university", tags=["university"])
+company_router = APIRouter(prefix="/employer", tags=["university"])
 
 
 class Audience(BaseModel):
@@ -51,56 +55,93 @@ async def _audience_ids(session, uni_id: int, audience: Audience) -> list[int]:
     return list((await session.execute(_roster_query(uni_id, audience.to_filter()).with_only_columns(User.id))).scalars())
 
 
-# --------------------------------------------------------------------------- messages
+# --------------------------------------------------------------------------- announcements (with photos)
 
 class AnnouncementIn(BaseModel):
     title: str = Field(min_length=3, max_length=160)
     text: str = Field(min_length=5, max_length=2000)
     link: str = Field(default="", max_length=256)
-    audience: Audience = Field(default_factory=Audience)
+    audience: Audience = Field(default_factory=Audience)          # applies to the students channel
+    channels: list[Literal[ANNOUNCEMENT_CHANNELS]] = Field(default_factory=lambda: ["students"], min_length=1, max_length=3)  # type: ignore[valid-type]
+    category: Literal[ANNOUNCEMENT_CATEGORIES] = "news"         # type: ignore[valid-type]
+    photo_ids: list[int] = Field(default_factory=list, max_length=uni_news.MAX_PHOTOS)
 
 
-def _announcement_out(a: UniversityAnnouncement) -> dict:
-    return {"id": a.id, "title": a.title, "text": a.text, "link": a.link, "audience": a.audience,
-            "recipients": a.recipients, "author": a.author.full_name if a.author else None, "created_at": a.created_at}
+class PreviewIn(Audience):
+    """The student filters plus the channels (an older client sends the filters alone)."""
+    channels: list[Literal[ANNOUNCEMENT_CHANNELS]] = Field(default_factory=lambda: ["students"], max_length=3)  # type: ignore[valid-type]
+
+
+def _announcement_out(a: UniversityAnnouncement, photos: dict[int, dict]) -> dict:
+    """The staff's view: the reader's card plus filters, channels, reach and author."""
+    return {**uni_news.item_out(a, photos), "audience": a.audience, "channels": a.channels, "recipients": a.recipients,
+            "company_recipients": a.company_recipients, "author": a.author.full_name if a.author else None}
 
 
 @router.get("/announcements")
 async def announcements(user: Staff, session: Session) -> list[dict]:
     rows = (await session.execute(select(UniversityAnnouncement).where(
-        UniversityAnnouncement.university_id == user.staff_university_id)
-        .order_by(UniversityAnnouncement.created_at.desc()).limit(100))).scalars()
-    return [_announcement_out(a) for a in rows]
+        UniversityAnnouncement.university_id == user.staff_university_id, UniversityAnnouncement.status == "published")
+        .order_by(UniversityAnnouncement.created_at.desc()).limit(100))).scalars().all()
+    photos = await uni_news.photos_by_id(session, rows)
+    return [_announcement_out(a, photos) for a in rows]
 
 
 @router.post("/announcements/preview")
-async def announcement_preview(body: Audience, user: Staff, session: Session) -> dict:
-    """How many students a message with these filters would reach (shown before sending)."""
-    return {"recipients": len(await _audience_ids(session, user.staff_university_id, body))}
+async def announcement_preview(body: PreviewIn, user: Staff, session: Session) -> dict:
+    """How many students and partner companies an announcement would reach (shown before sending)."""
+    uni = user.staff_university_id
+    students = len(await _audience_ids(session, uni, body)) if "students" in body.channels else 0
+    companies = len(await uni_news.partner_company_ids(session, uni)) if "companies" in body.channels else 0
+    return {"recipients": students, "companies": companies}
 
 
 @router.post("/announcements", status_code=201)
 async def send_announcement(body: AnnouncementIn, user: Staff, session: Session) -> dict:
     uni = user.staff_university
-    link = body.link.strip()
-    # an in-app page only: a browser reads "//x", "/\x" and "/<tab>/x" as another site
-    if link and (not link.startswith("/") or link.startswith("//") or any(c == "\\" or ord(c) <= 32 for c in link)):
-        raise HTTPException(422, "Havola ilova ichidagi sahifa bo'lsin (masalan /vakansiyalar/12)")
-    ids = await _audience_ids(session, uni.id, body.audience)
-    if not ids:
+    link = uni_news.clean_link(body.link)
+    channels = list(dict.fromkeys(body.channels))
+    student_ids = await _audience_ids(session, uni.id, body.audience) if "students" in channels else []
+    company_ids = await uni_news.partner_company_ids(session, uni.id) if "companies" in channels else []
+    if "students" in channels and not student_ids and channels == ["students"]:
         raise HTTPException(422, "Bu filtrlar bo'yicha talaba topilmadi")
-    ratelimit.limit(f"uni-announce:{uni.id}", 10, 24 * 3600, "Bir kunda 10 tadan ortiq xabar yuborib bo'lmaydi")
+    if "companies" in channels and not company_ids and channels == ["companies"]:
+        raise HTTPException(422, "Hali hamkor korxonangiz yo'q: avval hamkorlik qiling yoki boshqa kanalni tanlang")
+    photo_ids = await uni_news.check_photos(session, user.id, body.photo_ids)
+    ratelimit.limit(f"uni-announce:{uni.id}", 10, 24 * 3600, "Bir kunda 10 tadan ortiq e'lon yuborib bo'lmaydi")
     row = UniversityAnnouncement(university_id=uni.id, author_id=user.id, title=body.title.strip(), text=body.text.strip(),
                                  link=link, audience=body.audience.model_dump(exclude_none=True, exclude_defaults=True),
-                                 recipients=len(ids))
+                                 recipients=len(student_ids), company_recipients=len(company_ids), channels=channels,
+                                 category=body.category, photo_ids=photo_ids)
     session.add(row)
-    session.add(AuditLog(actor=actor(user), action="university.announce", target=body.title[:200], details=f"{len(ids)} talaba"))
+    session.add(AuditLog(actor=actor(user), action="university.announce", target=body.title[:200],
+                         details=f"{len(student_ids)} talaba, {len(company_ids)} korxona, {', '.join(channels)}"))
     await session.commit()
     await session.refresh(row)
     # the text is written by staff in one language, so it is stored and shown as written (no template)
-    await inbox.push(session, ids, "university_announcement", f"{uni.short_name}: {row.title}\n{row.text}",
-                     link=link or "/talaba/universitetim", params={"university": uni.short_name, "title": row.title})
-    return _announcement_out(row)
+    text = f"{uni.short_name}: {row.title}\n{row.text}"
+    params = {"university": uni.short_name, "title": row.title}
+    in_app = link if link.startswith("/") else ""
+    if student_ids:
+        await inbox.push(session, student_ids, "university_announcement", text, link=in_app or "/talaba/universitetim", params=params)
+    if company_ids:
+        staff = (await session.execute(select(User.id).where(User.company_id.in_(company_ids), User.account_type == "employer",
+                                                             User.is_blocked.is_(False)))).scalars().all()
+        await inbox.push(session, list(staff), "university_announcement", text, link=f"/korxona/universitetlar?u={uni.id}", params=params)
+    photos = await uni_news.photos_by_id(session, [row])
+    return _announcement_out(row, photos)
+
+
+@router.delete("/announcements/{announcement_id}")
+async def delete_announcement(announcement_id: int, user: Staff, session: Session) -> dict:
+    """Takes it off the students', companies' and public pages (notices already sent stay in inboxes)."""
+    a = await session.get(UniversityAnnouncement, announcement_id)
+    if a is None or a.university_id != user.staff_university_id or a.status != "published":
+        raise HTTPException(404, "E'lon topilmadi")
+    a.status = "deleted"
+    session.add(AuditLog(actor=actor(user), action="university.announce_delete", target=a.title[:200]))
+    await session.commit()
+    return {"deleted": True}
 
 
 # --------------------------------------------------------------------------- events
@@ -184,9 +225,9 @@ async def create_event(body: EventIn, user: Staff, session: Session) -> dict:
     if body.notify:
         ids = await _audience_ids(session, uni.id, body.audience)
         notified = len(ids)
-        when = e.starts_at.astimezone(UTC).strftime("%d.%m.%Y")
+        when = e.starts_at.astimezone(TASHKENT).strftime("%d.%m.%Y")
         await inbox.push(session, ids, "university_event", f"{uni.short_name}: «{e.title}» ({when}). Ro'yxatdan o'ting.",
-                         link="/talaba/universitetim", params={"university": uni.short_name, "title": e.title})
+                         link="/talaba/tadbirlar", params={"university": uni.short_name, "title": e.title})
     return _event_out(e, notified=notified)
 
 
@@ -211,7 +252,7 @@ async def cancel_event(event_id: int, user: Staff, session: Session) -> dict:
     await session.commit()
     ids = (await session.execute(select(EventRegistration.user_id).where(EventRegistration.event_id == e.id))).scalars().all()
     await inbox.push(session, ids, "university_event_cancelled", f"«{e.title}» tadbiri bekor qilindi.",
-                     link="/talaba/universitetim", params={"title": e.title})
+                     link="/talaba/tadbirlar", params={"title": e.title})
     return _event_out(e)
 
 
@@ -263,10 +304,7 @@ async def my_feed(user: CurrentUser, session: Session) -> dict:
     """The student's university: its recent messages and the events open to them."""
     if not user.university_id:
         return {"announcements": [], "events": []}
-    msgs = (await session.execute(select(UniversityAnnouncement).where(
-        UniversityAnnouncement.university_id == user.university_id)
-        .order_by(UniversityAnnouncement.created_at.desc()).limit(30))).scalars().all()
-    mine = [a for a in msgs if Audience(**a.audience).matches(user)][:8]
+    news = await uni_news.student_items(session, user, lambda audience, u: Audience(**audience).matches(u), limit=10)
     rows = (await session.execute(select(UniversityEvent).where(
         UniversityEvent.university_id == user.university_id, UniversityEvent.status == "published",
         UniversityEvent.starts_at >= datetime.now(UTC) - timedelta(hours=6)).order_by(UniversityEvent.starts_at).limit(30))).scalars().all()
@@ -275,8 +313,15 @@ async def my_feed(user: CurrentUser, session: Session) -> dict:
     counts = await _counts(session, [e.id for e in rows])
     events_out = [_event_out(e, *counts.get(e.id, (0, 0)), me_registered=e.id in registered) for e in rows
                   if e.id in registered or Audience(**e.audience).matches(user)]
-    return {"announcements": [{"id": a.id, "title": a.title, "text": a.text, "link": a.link, "created_at": a.created_at}
-                              for a in mine], "events": events_out}
+    return {"announcements": news, "events": events_out}
+
+
+# --------------------------------------------------------------------------- the company side
+
+@company_router.get("/university-news")
+async def company_news(user: ApprovedEmployer, session: Session, university_id: int | None = None) -> list[dict]:
+    """Announcements of partner universities sent to companies, and every active university's public ones."""
+    return await uni_news.company_items(session, user.company_id, university_id)
 
 
 async def _open_event(session, user: User, event_id: int) -> UniversityEvent:

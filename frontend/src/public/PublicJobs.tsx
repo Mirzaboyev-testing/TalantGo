@@ -27,11 +27,27 @@ function useSaved(me: Me | null) {
   return student ? { ids, toggle } : null;
 }
 
+/** The company's logo when it has one, else its first letter. */
+export function CompanyLogo({ name, url, big }: { name: string; url?: string | null; big?: boolean }) {
+  return url
+    ? <img className={`avatar company-mark logo ${big ? "big" : ""}`} src={url} alt="" loading="lazy" />
+    : <span className={`avatar company-mark ${big ? "big" : ""}`}>{name.slice(0, 1).toUpperCase()}</span>;
+}
+
+/** "31.12 gacha" / "3 kun qoldi": how long a student still has to apply (a week or less reads as urgent). */
+function deadlineLabel(iso: string | null): { text: string; soon: boolean } | null {
+  if (!iso) return null;
+  const days = Math.ceil((new Date(`${iso}T23:59:59+05:00`).getTime() - Date.now()) / 86_400_000);
+  return days <= 7
+    ? { text: t("pub.job.days_left", { n: Math.max(days, 0) }), soon: true }
+    : { text: t("pub.job.until", { date: `${iso.slice(8, 10)}.${iso.slice(5, 7)}` }), soon: false };
+}
+
 export function PublicJobCard({ job, saved, onToggleSave }: { job: PublicJob | Job; saved?: boolean; onToggleSave?: () => void }) {
   return (
     <a className="card job-card tap" href={`/vakansiyalar/${job.id}`} onClick={(e) => { e.preventDefault(); navigate(`/vakansiyalar/${job.id}`); }}>
       <div className="row" style={{ alignItems: "flex-start" }}>
-        <span className="avatar company-mark">{job.company_name.slice(0, 1).toUpperCase()}</span>
+        <CompanyLogo name={job.company_name} url={job.company_logo_url} />
         <div className="grow" style={{ minWidth: 0 }}>
           <b className="job-title">{job.title}</b>
           <div className="job-salary">{salaryText(job)}</div>
@@ -51,7 +67,10 @@ export function PublicJobCard({ job, saved, onToggleSave }: { job: PublicJob | J
           <span className="chip">{modeLabel(job.work_mode)}</span>
           {job.counts_as_practice && <span className="chip">{t("job.practice")}</span>}
         </div>
-        <span className="hint" style={{ whiteSpace: "nowrap" }}>{dayLabel(job.created_at)}</span>
+        {(() => {
+          const due = deadlineLabel(job.deadline);
+          return <span className={`hint ${due?.soon ? "job-soon" : ""}`} style={{ whiteSpace: "nowrap" }}>{due?.text ?? dayLabel(job.created_at)}</span>;
+        })()}
       </div>
     </a>
   );
@@ -62,6 +81,8 @@ export function JobsPage({ me }: { me: Me | null }) {
   const [q, setQ] = useState(search.q ?? "");
   const [kind, setKind] = useState<JobKind | "">((search.kind as JobKind) ?? "");
   const [industry, setIndustry] = useState(search.industry ?? "");
+  const [field, setField] = useState(search.field ?? "");
+  const [remote, setRemote] = useState(false);
   const [paid, setPaid] = useState(false);
   const [practice, setPractice] = useState(false);
   const [items, setItems] = useState<PublicJob[] | null>(null);
@@ -75,17 +96,19 @@ export function JobsPage({ me }: { me: Me | null }) {
     if (q.trim()) p.q = q.trim();
     if (kind) p.kind = kind;
     if (industry) p.industry = industry;
+    if (field) p.field = field;
+    if (remote) p.work_mode = "remote";
     if (paid) p.paid_only = "true";
     if (practice) p.practice_only = "true";
     return p;
-  }, [q, kind, industry, paid, practice]);
+  }, [q, kind, industry, field, remote, paid, practice]);
 
   const load = useCallback(() => {
     setItems(null); setError("");
     api.public.jobs(params(0)).then((r) => { setItems(r.items); setTotal(r.total); }, (e) => setError(message(e)));
   }, [params]);
 
-  useEffect(() => { void load(); }, [kind, industry, paid, practice]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void load(); }, [kind, industry, field, remote, paid, practice]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { loadCatalog().then(setCatalog, () => {}); }, []);
 
   async function more() {
@@ -104,14 +127,21 @@ export function JobsPage({ me }: { me: Me | null }) {
       <div className="scroll-tabs" style={{ marginTop: 10 }}>
         <button className={`chip ${kind === "" ? "on" : ""}`} onClick={() => setKind("")}>{t("pub.filter.all")}</button>
         {KINDS.map((k) => <button key={k} className={`chip ${kind === k ? "on" : ""}`} onClick={() => setKind(k)}>{kindLabel(k)}</button>)}
+        <button className={`chip ${remote ? "on" : ""}`} onClick={() => setRemote(!remote)}>{modeLabel("remote")}</button>
         <button className={`chip ${paid ? "on" : ""}`} onClick={() => setPaid(!paid)}>{t("pub.filter.paid")}</button>
         <button className={`chip ${practice ? "on" : ""}`} onClick={() => setPractice(!practice)}>{t("pub.filter.practice")}</button>
       </div>
       {catalog && (
-        <select className="pub-select" value={industry} onChange={(e) => setIndustry(e.target.value)}>
-          <option value="">{t("pub.filter.any_industry")}</option>
-          {Object.keys(catalog.industries).map((k) => <option key={k} value={k}>{industryLabel(k)}</option>)}
-        </select>
+        <div className="row wrap" style={{ gap: 8 }}>
+          <select className="pub-select" value={field} aria-label={t("pub.filter.any_field")} onChange={(e) => setField(e.target.value)}>
+            <option value="">{t("pub.filter.any_field")}</option>
+            {Object.entries(catalog.job_fields).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+          </select>
+          <select className="pub-select" value={industry} aria-label={t("pub.filter.any_industry")} onChange={(e) => setIndustry(e.target.value)}>
+            <option value="">{t("pub.filter.any_industry")}</option>
+            {Object.keys(catalog.industries).map((k) => <option key={k} value={k}>{industryLabel(k)}</option>)}
+          </select>
+        </div>
       )}
       <ErrorText error={error} />
       {items && <div className="hint" style={{ margin: "12px 0 6px" }}>{t("pub.jobs.count", { n: total })}</div>}
@@ -129,6 +159,8 @@ export function JobsPage({ me }: { me: Me | null }) {
 
 export function JobPage({ id, me }: { id: number; me: Me | null }) {
   const [job, setJob] = useState<PublicJob | null>(null);
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
+  useEffect(() => { loadCatalog().then(setCatalog, () => {}); }, []);
   const [mine, setMine] = useState<Job | null>(null);          // the signed-in student's view: applied? saved?
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -171,7 +203,7 @@ export function JobPage({ id, me }: { id: number; me: Me | null }) {
       <button className="btn small ghost" onClick={() => navigate("/vakansiyalar")}><Icon name="back" size={16} />{t("job.back")}</button>
       <div className="card" style={{ marginTop: 12 }}>
         <div className="row" style={{ alignItems: "flex-start" }}>
-          <span className="avatar company-mark">{job.company_name.slice(0, 1).toUpperCase()}</span>
+          <CompanyLogo name={job.company_name} url={job.company_logo_url} big />
           <div className="grow">
             <h1 style={{ margin: "0 0 4px" }}>{job.title}</h1>
             <div className="job-salary">{salaryText(job)}</div>
@@ -195,6 +227,11 @@ export function JobPage({ id, me }: { id: number; me: Me | null }) {
           {job.deadline && <span className="chip">{t("job.deadline", { date: formatDateTime(job.deadline, false) })}</span>}
           {job.counts_as_practice && <span className="chip">{t("job.practice")}</span>}
         </div>
+        {(job.job_fields ?? []).length > 0 && catalog && (
+          <div className="chips" style={{ marginTop: 6 }}>
+            {(job.job_fields ?? []).map((f) => <span key={f} className="chip on">{catalog.job_fields[f] ?? f}</span>)}
+          </div>
+        )}
       </div>
       <div className="card">
         <b>{t("job.description")}</b>

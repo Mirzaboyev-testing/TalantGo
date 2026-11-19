@@ -40,6 +40,8 @@ export interface Me {
   cover_url?: string | null; has_photo_upload?: boolean; portfolio_n?: number;
   email: string | null; has_password: boolean; has_telegram: boolean;
   language: "uz" | "ru" | "en"; visible_to_employers: boolean;
+  must_change_password?: boolean;        // signed in with the owner's temporary password: a new one comes first
+  token?: string | null;                 // a fresh session after a password change (every other one ended)
 }
 export interface BotLink { code: string; url: string; expires_in: number }
 export type BotLoginStatus = { status: "pending" | "claimed" | "awaiting_pin" | "rejected" | "conflict" | "used" | "expired"; note?: string };
@@ -98,14 +100,15 @@ export type AttemptStatus = "in_progress" | "submitted" | "graded";
 export interface TestQuestion { id: number; kind: QuestionKind; text: string; options: string[]; points: number; correct?: number[] }
 export interface QuestionInput { kind: QuestionKind; text: string; options: string[]; correct: number[]; points: number }
 export interface CompanyTestSummary {
-  id: number; title: string; description: string; status: TestStatus; review_note: string; audience: "all" | "tracks" | "applicants";
-  track_ids: number[]; job_id: number | null; job_title: string | null; deadline: string | null; time_limit_min: number | null;
+  id: number; title: string; description: string; status: TestStatus; review_note: string; audience: "all" | "tracks" | "applicants" | "fields";
+  track_ids: number[]; job_fields?: string[]; job_id: number | null; job_title: string | null; deadline: string | null; time_limit_min: number | null;
   questions_count: number; max_score: number; is_survey: boolean; company: string; company_industry: string;
   attempts: number; to_grade: number; created_at: string; updated_at: string;
 }
 export interface CompanyTestFull extends CompanyTestSummary { questions: TestQuestion[] }
 export interface TestInput {
-  title: string; description: string; job_id: number | null; audience: "all" | "tracks" | "applicants"; track_ids: number[];
+  title: string; description: string; job_id: number | null; audience: "all" | "tracks" | "applicants" | "fields"; track_ids: number[];
+  job_fields?: string[];
   deadline: string | null; time_limit_min: number | null; questions: QuestionInput[]; submit: boolean;
 }
 export interface StudentBrief {
@@ -132,11 +135,12 @@ export interface StudentTestCard {
 }
 export interface StartedTest extends StudentTestCard { attempt_id: number; started_at: string; ends_at: string | null; questions: TestQuestion[] }
 export interface Job {
-  id: number; company_id: number; company_name: string; company_industry: string; title: string; kind: JobKind;
+  id: number; company_id: number; company_name: string; company_industry: string; company_logo_url?: string | null; title: string; kind: JobKind;
   work_mode: WorkMode; city: string; is_paid: boolean; salary_from: number | null; salary_to: number | null;
   hours_per_week: number | null; description: string; requirements: string; skills: string[]; track_ids: number[];
   job_fields?: string[]; counts_as_practice: boolean; deadline: string | null; status: string; review_note: string; views: number;
   created_at: string; applied: boolean; application_status: string | null; match: number; applications: number; saved?: boolean;
+  recommended_by?: { university_id: number; short_name: string; name: string; note: string; created_at: string }[];   // company's own list
 }
 export type JobInput = Pick<Job, "title" | "kind" | "work_mode" | "city" | "is_paid" | "salary_from" | "salary_to" |
   "hours_per_week" | "description" | "requirements" | "skills" | "track_ids" | "counts_as_practice" | "deadline"> & { job_fields?: string[]; rules_accepted: boolean };
@@ -149,6 +153,7 @@ export interface PublicJob {
   salary_from: number | null; salary_to: number | null; hours_per_week: number | null; description: string;
   requirements: string; skills: string[]; counts_as_practice: boolean; deadline: string | null; created_at: string;
   company_id: number; company_name: string; company_industry: string; company_city: string;
+  company_logo_url?: string | null; job_fields?: string[];
 }
 export interface PublicCompany {
   id: number; name: string; industry: string; city: string; size: string; website: string; description: string;
@@ -180,7 +185,7 @@ export interface PartnerInput {
   logo_media_id: number | null; is_visible: boolean;
 }
 export interface TeamInput { full_name: string; role: string; role_ru: string; role_en: string; link: string | null; photo_media_id: number | null; is_visible: boolean }
-export interface SiteChoice { id: number; name: string; short?: string; logo_url: string | null }
+export interface SiteChoice { id: number; name: string; short?: string; logo_url: string | null; consented?: boolean }
 export interface StudentDashboard {
   applications: Record<string, number>; active_applications: number;
   interviews: { application_id: number; job: string; company: string; at: string | null; place: string }[];
@@ -220,8 +225,21 @@ export interface UniversityProfile {
   students: number; placed: number | null; employed: number | null; interned: number | null; placement_rate: number | null; min_sample: number;
   top_employers: { name: string; count: number }[]; hires_on_platform: number;
   partners: { id: number; name: string }[]; tracks: { title: string; count: number }[];
+  // filled in by the university on its profile (2026-11-19); the institution's contacts, never a person's
+  logo_url?: string | null; cooperation?: string[]; telegram?: string; email?: string; phone?: string; address?: string;
+  founded_year?: number | null; students_total?: number | null; faculties_count?: number; news?: NewsItem[];
 }
-export interface PublicUniversity { id: number; name: string; short_name: string; city: string; region: string; students: number; partners: number }
+export interface PublicUniversity { id: number; name: string; short_name: string; city: string; region: string; students: number; partners: number;
+  logo_url?: string | null; cooperation?: string[] }
+/** A university announcement as a student, a company or a visitor sees it (photos are signed links). */
+export type NewsCategory = "news" | "career" | "internship" | "event" | "scholarship" | "other";
+export interface NewsItem {
+  id: number; title: string; text: string; link: string; category: NewsCategory; created_at: string;
+  photos: { id: number; name: string; size: number; mime: string; url: string }[];
+  university: { id: number; name: string; short_name: string; logo_url: string | null } | null;
+  /** company feed only: the company is this university's partner */
+  partner?: boolean;
+}
 export interface OutcomeRequest { id: number; student: string; university: string | null; position: string; kind: OutcomeKind; started_on: string | null; created_at: string }
 export interface MyOutcome { id: number; company: string; company_id: number | null; position: string; kind: OutcomeKind; started_on: string | null; source: string; confirmed: boolean; confirmed_by: string;
   ended_on?: string | null; description?: string; trust?: Trust }
@@ -260,11 +278,21 @@ export interface AppNotification {
   id: number; kind: string; text: string; link: string; params: Record<string, string | number | boolean | null>;
   created_at: string; read: boolean;
 }
+/** The admin website's bell; `link` is an admin page id ("queue", "complaints", "users"...). */
+export interface AdminNotice { id: number; kind: string; text: string; link: string; created_at: string; read: boolean }
+export interface PasswordRequestRow {
+  id: number; kind: "user" | "admin"; email: string; full_name: string; phone: string; note: string; status: string;
+  created_at: string; handled_by: string;
+  account: { name: string; phone?: string; account_type?: string; has_telegram?: boolean; blocked?: boolean;
+             role?: string; status?: string } | null;
+}
+export interface ResetLinkInfo { name: string; email: string | null; account_type: AccountType }
 export interface TalentCard {
   id: number; code: string; headline: string; university: string | null; university_name: string | null; faculty: string;
   course: number | null; graduation_year: number | null; gpa: number | null; gpa_scale: number; track: string | null;
   track_icon: string; skills: string[]; languages: string[]; job_types: string[]; city: string; points: number;
   verified_tasks: number; verification: Verification; verified_by: string; contact_status?: string | null;
+  job_fields?: string[];
 }
 export interface Identity { full_name: string; username: string | null; photo_url: string | null; cv_url: string | null; github_url: string; linkedin_url: string; phone?: string | null }
 export interface Applicant {
@@ -328,6 +356,11 @@ let onUserUnauthorized: () => void = () => {};
 export const setUserUnauthorizedHandler = (fn: () => void) => { onUserUnauthorized = fn; };
 export const setAdminUnauthorizedHandler = (fn: () => void) => { onAdminUnauthorized = fn; };
 export const setUserToken = (t: string) => { userToken = t; };
+/** A new password ends every other session and brings a fresh token; the website keeps it (App.tsx TOKEN_KEY). */
+function replaceUserToken(t: string) {
+  userToken = t;
+  try { if (localStorage.getItem("cf_user_token")) localStorage.setItem("cf_user_token", t); } catch { /* storage blocked */ }
+}
 export const setAdminToken = (t: string) => { adminToken = t; };
 
 // Field names the server reports, in the words the forms use.
@@ -442,8 +475,18 @@ export const api = {
   emailRegister: (full_name: string, email: string, password: string) =>
     request<{ token: string }>("POST", "/auth/register", { full_name, email, password }),
   emailLogin: (email: string, password: string) => request<{ token: string }>("POST", "/auth/login", { email, password }),
-  setPassword: (email: string, password: string, current_password: string) =>
-    request<Me>("PUT", "/me/password", { email, password, current_password }),
+  setPassword: async (email: string, password: string, current_password: string) => {
+    const me = await request<Me>("PUT", "/me/password", { email, password, current_password });
+    if (me.token) replaceUserToken(me.token);
+    return me;
+  },
+  // a forgotten password (services/password_reset.py): the bot's code or link, or a request to the owner
+  forgotPassword: (email: string) => request<{ ok: boolean }>("POST", "/auth/password/forgot", { email }),
+  resetLinkInfo: (token: string) => request<ResetLinkInfo>("GET", `/auth/password/reset/${encodeURIComponent(token)}`),
+  resetPassword: (b: { password: string; token?: string; email?: string; code?: string }) =>
+    request<{ token: string }>("POST", "/auth/password/reset", b),
+  passwordHelp: (b: { email: string; full_name: string; phone: string; note: string }) =>
+    request<{ ok: boolean }>("POST", "/auth/password/help", b),
   telegramLinkStart: () => request<BotLink>("POST", "/me/telegram-link"),
   updateMe: (changes: Partial<Omit<Me, "track" | "university_ref" | "company" | "staff_university" | "completeness">> &
     { track_id?: number | null; university_id?: number | null; consent?: boolean }) => request<Me>("PATCH", "/me", changes),
@@ -472,8 +515,7 @@ export const api = {
   savedJobs: () => request<Job[]>("GET", "/me/saved-jobs"),
   studentDashboard: () => request<StudentDashboard>("GET", "/me/dashboard"),
   myUniversity: () => request<{ university: UniversityProfile | null; verified?: boolean; recommended: (Job & { note: string })[]; outcomes: MyOutcome[] }>("GET", "/me/university"),
-  universityFeed: () => request<{ announcements: { id: number; title: string; text: string; link: string; created_at: string }[];
-                                   events: EventItem[] }>("GET", "/me/university/feed"),
+  universityFeed: () => request<{ announcements: NewsItem[]; events: EventItem[] }>("GET", "/me/university/feed"),
   chats: () => request<{ threads: ChatThread[]; can_start: { id: number; name: string; logo: string | null }[] }>("GET", "/me/chats"),
   chatUnread: () => request<{ unread: number }>("GET", "/me/chats/unread"),
   startChat: (company_id: number) => request<DirectView>("POST", "/me/chats", { company_id }),
@@ -489,7 +531,8 @@ export const api = {
   deletePortfolio: (id: number) => request<Portfolio>("DELETE", `/me/portfolio/${id}`),
   setPhoto: (file_id: number | null) => request<Me>("PUT", "/me/photo", { file_id }),
   setCover: (file_id: number | null) => request<Me>("PUT", "/me/cover", { file_id }),
-  editOutcome: (id: number, changes: { position?: string; started_on?: string | null; ended_on?: string | null; description?: string }) =>
+  editOutcome: (id: number, changes: { position?: string; started_on?: string | null; ended_on?: string | null; description?: string;
+                                       company_name?: string; kind?: OutcomeKind }) =>
     request<MyOutcome>("PATCH", `/me/outcomes/${id}`, changes),
   addOutcome: (o: { company_id?: number | null; company_name: string; position: string; kind: OutcomeKind; started_on?: string | null;
                     ended_on?: string | null; description?: string }) =>
@@ -528,6 +571,7 @@ export const api = {
     me: () => request<AdminMe>("GET", "/admin-auth/me", undefined, true),
     changePassword: (current_password: string, new_password: string) =>
       request<{ token: string }>("PUT", "/admin-auth/password", { current_password, new_password }, true),
+    passwordRequest: (email: string) => request<{ ok: boolean }>("POST", "/admin-auth/password-request", { email }),
   },
 
   mentor: {
@@ -569,6 +613,33 @@ export const api = {
     deleteMessage: (id: number, messageId: number) => request<null>("DELETE", `/groups/${id}/messages/${messageId}`),
   },
 
+  // posts feed ("Lenta", docs/12-talaba-postlar.md); the admin calls at the end use the admin session
+  feed: {
+    list: (scope: FeedScope, before?: number | null, limit = 20) =>
+      request<PostPage>("GET", `/feed?${new URLSearchParams({ scope, limit: String(limit), ...(before ? { before: String(before) } : {}) })}`),
+    post: (id: number) => request<Post>("GET", `/posts/${id}`),
+    create: (p: PostInput) => request<Post>("POST", "/posts", p),
+    edit: (id: number, p: Partial<PostInput>) => request<Post>("PATCH", `/posts/${id}`, p),
+    remove: (id: number) => request<{ ok: boolean }>("DELETE", `/posts/${id}`),
+    react: (id: number, kind: ReactionKind) => request<PostReactions>("PUT", `/posts/${id}/reaction`, { kind }),
+    unreact: (id: number) => request<PostReactions>("DELETE", `/posts/${id}/reaction`),
+    comments: (id: number) => request<PostComment[]>("GET", `/posts/${id}/comments`),
+    comment: (id: number, text: string, parent_id?: number | null) =>
+      request<PostComment>("POST", `/posts/${id}/comments`, parent_id ? { text, parent_id } : { text }),
+    removeComment: (id: number) => request<{ ok: boolean }>("DELETE", `/comments/${id}`),
+    report: (id: number, reason: ReportReason, note: string) => request<{ ok: boolean }>("POST", `/posts/${id}/report`, { reason, note }),
+    reportComment: (id: number, reason: ReportReason, note: string) => request<{ ok: boolean }>("POST", `/comments/${id}/report`, { reason, note }),
+    // a page or (older servers) a bare list: both come back as a page
+    userPosts: async (userId: number, before?: number | null, limit = 20) => asPostPage(await request<PostPage | Post[]>(
+      "GET", `/people/${userId}/posts?${new URLSearchParams({ limit: String(limit), ...(before ? { before: String(before) } : {}) })}`)),
+    myPosts: async (before?: number | null, limit = 20) => asPostPage(await request<PostPage | Post[]>(
+      "GET", `/me/posts?${new URLSearchParams({ limit: String(limit), ...(before ? { before: String(before) } : {}) })}`)),
+    adminList: (status: "reported" | "hidden" | "all") => request<AdminPostRow[]>("GET", `/admin/posts?status=${status}`, undefined, true),
+    adminHide: (id: number, note: string) => request<unknown>("POST", `/admin/posts/${id}/hide`, { note }, true),
+    adminRestore: (id: number) => request<unknown>("POST", `/admin/posts/${id}/restore`, undefined, true),
+    adminHideComment: (id: number) => request<unknown>("POST", `/admin/comments/${id}/hide`, undefined, true),
+  },
+
   employer: {
     chats: () => request<ChatThread[]>("GET", "/employer/chats"),
     chatUnread: () => request<{ unread: number }>("GET", "/employer/chats/unread"),
@@ -608,6 +679,8 @@ export const api = {
     universities: (q = "") => request<(PublicUniversity & { partnership: PartnershipRow | null })[]>("GET", `/employer/universities${q ? `?q=${encodeURIComponent(q)}` : ""}`),
     university: (id: number) => request<UniversityProfile & { partnership: PartnershipRow | null }>("GET", `/employer/universities/${id}`),
     askPartnership: (universityId: number, message: string) => request<PartnershipRow>("POST", `/employer/universities/${universityId}/partnership`, { message }),
+    /** partner universities' announcements to companies plus every university's public ones */
+    universityNews: (universityId?: number) => request<NewsItem[]>("GET", `/employer/university-news${universityId ? `?university_id=${universityId}` : ""}`),
     decidePartnership: (id: number, accept: boolean) => request<PartnershipRow>("POST", `/employer/partnerships/${id}/decide`, { accept }),
     outcomeRequests: () => request<OutcomeRequest[]>("GET", "/employer/outcomes"),
     decideOutcome: (id: number, confirm: boolean) => request<{ confirmed: boolean }>("POST", `/employer/outcomes/${id}`, { confirm }),
@@ -716,7 +789,15 @@ export const api = {
     aiConversation: (userId: number) => request<AiMessage[]>("GET", `/admin/assistant/users/${userId}/messages`, undefined, true),
     testAi: () => request<{ model: string; reply: string }>("POST", "/admin/ai/test", undefined, true),
     exportUsers: () => download("/admin/export/users.csv", "careerup-talabalar.csv"),
-    inbox: () => request<{ verifications: number; companies: number; jobs: number; staff: number; tests: number }>("GET", "/admin/inbox", undefined, true),
+    inbox: () => request<{ verifications: number; companies: number; jobs: number; staff: number; tests: number;
+                           complaints: number; password_requests: number }>("GET", "/admin/inbox", undefined, true),
+    notifications: (beforeId?: number) => request<{ items: AdminNotice[]; unread: number; more: boolean }>(
+      "GET", `/admin/notifications${beforeId ? `?before_id=${beforeId}` : ""}`, undefined, true),
+    notificationsUnread: () => request<{ unread: number }>("GET", "/admin/notifications/unread", undefined, true),
+    readNotifications: (ids?: number[]) => request<{ unread: number }>("POST", "/admin/notifications/read", ids ? { ids } : {}, true),
+    passwordRequests: () => request<PasswordRequestRow[]>("GET", "/admin/password-requests", undefined, true),
+    resetPasswordRequest: (id: number) => request<{ temporary_password: string; email?: string }>("POST", `/admin/password-requests/${id}/reset`, undefined, true),
+    closePasswordRequest: (id: number) => request<{ status: string }>("POST", `/admin/password-requests/${id}/close`, undefined, true),
     tests: (status: string) => request<CompanyTestFull[]>("GET", `/admin/tests${status ? `?status=${status}` : ""}`, undefined, true),
     reviewTest: (id: number, approve: boolean, note: string) => request<CompanyTestFull>("POST", `/admin/tests/${id}/review`, { approve, note }, true),
     verifications: () => request<PendingStudent[]>("GET", "/admin/verifications", undefined, true),
@@ -850,7 +931,8 @@ export interface MentorTask {
 export interface ChallengeEntry {
   id: number; user_id: number; student: string; username: string | null; university: string | null; proof_url: string;
   note: string; status: "submitted" | "accepted" | "rejected"; score: number | null; place: 1 | 2 | 3 | null;
-  comment: string; points_awarded: number; created_at: string; files?: { id: number; url: string }[];
+  comment: string; points_awarded: number; created_at: string; files?: { id: number; url: string; name?: string }[];
+  photo_url?: string | null; faculty?: string; course?: number | null;
 }
 // student panel v2, phase 3: company ↔ student messages and events
 export interface ChatThread {
@@ -870,8 +952,8 @@ export interface Challenge {
   id: number; title: string; description: string; track_id: number | null; track: string | null; prize: string;
   points: number; starts_at: string; ends_at: string; state: "upcoming" | "active" | "finished"; is_archived: boolean;
   mentor: string | null; entries: number; to_review?: number; my_entry?: ChallengeEntry | null;
-  company_id?: number | null; company?: string | null; audience?: "all" | "track" | "university" | "selected";
-  university_id?: number | null; invited?: number;
+  company_id?: number | null; company?: string | null; audience?: "all" | "track" | "university" | "selected" | "fields";
+  university_id?: number | null; invited?: number; job_fields?: string[];
   results?: { student: string; place: number | null; score: number | null }[];
 }
 export interface ChallengeInput {
@@ -879,7 +961,8 @@ export interface ChallengeInput {
 }
 export interface CompanyTaskInput {
   title: string; description: string; prize: string; points: number; starts_on?: string | null; ends_on: string;
-  audience: "all" | "track" | "university" | "selected"; track_id?: number | null; university_id?: number | null; student_ids?: number[];
+  audience: "all" | "track" | "university" | "selected" | "fields"; track_id?: number | null; university_id?: number | null; student_ids?: number[];
+  job_fields?: string[];
 }
 export interface AdminChallenge {
   id: number; title: string; track: string; prize: string; points: number; mentor: string | null; entries: number;
@@ -908,3 +991,30 @@ export function loadCatalog(): Promise<Catalog> {
   catalogCache ??= api.catalog().catch((e) => { catalogCache = null; throw e; });
   return catalogCache;
 }
+
+// ---- posts feed ("Lenta", docs/12-talaba-postlar.md)
+export type PostKind = "experience" | "project" | "achievement" | "event" | "question" | "news";
+export type FeedScope = "all" | "students" | "university" | "fields";
+export type PostVisibility = "all" | "university";
+export type ReactionKind = "like" | "congrats";
+export type ReportReason = "spam" | "offensive" | "false" | "private" | "other";
+export interface PostAuthor {
+  kind: "student" | "company" | "university"; user_id: number; name: string; photo_url: string | null; subtitle: string;
+  verified: boolean; company_id: number | null; company_logo: string | null; university_id: number | null;
+}
+export interface PostReactions { reactions: { like: number; congrats: number }; my_reaction: ReactionKind | null }
+export interface Post extends PostReactions {
+  id: number; author: PostAuthor; kind: PostKind; text: string; media: { id: number; url: string }[];
+  visibility: PostVisibility; created_at: string; edited_at: string | null; comments_n: number; mine: boolean;
+  status: "visible" | "hidden" | "removed";
+}
+export interface PostInput { kind: PostKind; text: string; media_ids: number[]; visibility: PostVisibility }
+export interface PostPage { items: Post[]; next: number | null }
+export interface PostComment {
+  id: number; post_id: number; parent_id: number | null; author: PostAuthor; text: string; created_at: string;
+  mine: boolean; can_delete: boolean;
+}
+export interface AdminPostRow {
+  post: Post; reports: { reason: string; note: string; reporter_name: string; created_at: string }[]; reports_open: number;
+}
+const asPostPage = (r: PostPage | Post[] | null): PostPage => (Array.isArray(r) ? { items: r, next: null } : r ?? { items: [], next: null });

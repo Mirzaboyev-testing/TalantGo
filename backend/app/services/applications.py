@@ -79,11 +79,36 @@ async def employer_move(session: AsyncSession, app: Application, employer: User,
     await session.commit()
     if target in STUDENT_NOTICE:
         company = app.job.company.name
+        when = _when(app) if target == "interview" else ""
         await inbox.push(session, [app.user_id], "application_status",
-                         STUDENT_NOTICE[target].format(job=app.job.title, company=company, when=_when(app)),
+                         STUDENT_NOTICE[target].format(job=app.job.title, company=company, when=when),
                          link="/talaba/arizalar",
-                         params={"status": target, "job": app.job.title, "company": company})
+                         # ru/en templates need the time and place too (the Uzbek text carries them already)
+                         params={"status": target, "job": app.job.title, "company": company, "when": _when_params(app) if when else ""})
+    if target == "hired":
+        await _tell_university(session, app)
     return True
+
+
+def _when_params(app: Application) -> str:
+    parts = [app.interview_at.astimezone().strftime("%d.%m.%Y %H:%M")] if app.interview_at else []
+    text = ", ".join(parts + ([app.interview_place] if app.interview_place else []))
+    return f"({text})" if text else ""
+
+
+async def _tell_university(session: AsyncSession, app: Application) -> None:
+    """The student's university sees the hire in its employment numbers; its approved staff get a notice too."""
+    student = app.user
+    if not student.university_id:
+        return
+    staff = list(await session.scalars(select(User.id).where(
+        User.staff_university_id == student.university_id, User.staff_status == "approved", User.is_blocked.is_(False))))
+    if staff:
+        company = app.job.company.name
+        await inbox.push(session, staff, "university_hire",
+                         f"Talabangiz {student.full_name} «{app.job.title}» ({company}) bo'yicha ishga qabul qilindi. "
+                         "Bandlik ko'rsatkichlariga qo'shildi.",
+                         link="/universitet/bandlik", params={"student": student.full_name, "job": app.job.title, "company": company})
 
 
 async def mark_viewed(session: AsyncSession, apps: list[Application], employer: User) -> None:

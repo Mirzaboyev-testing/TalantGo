@@ -223,6 +223,8 @@ class MeOut(ORM):
     signup_missing: list[str] = []
     email: str | None = None
     has_password: bool = False
+    must_change_password: bool = False   # signed in with a temporary password from the owner: set a new one first
+    token: str | None = None             # a fresh session after a password change (the old ones end)
     has_telegram: bool = True
     language: str = "uz"
     visible_to_employers: bool = True
@@ -429,6 +431,7 @@ class JobOut(ORM):
     id: int
     company_id: int
     company_name: str = ""
+    company_logo_url: str | None = None        # an approved company's logo, public (job_out fills it)
     company_industry: str = ""
     title: str
     kind: str
@@ -454,6 +457,8 @@ class JobOut(ORM):
     match: int = 0
     applications: int = 0
     saved: bool = False
+    # the company's own list only: universities that recommended this vacancy to their students
+    recommended_by: list[dict] = []
 
 
 class ApplyIn(BaseModel):

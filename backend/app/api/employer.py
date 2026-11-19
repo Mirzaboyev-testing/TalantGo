@@ -11,17 +11,18 @@ from pydantic import BaseModel, Field
 from sqlalchemy import false, func, select
 
 from ..models import (Application, ApplicationEvent, Challenge, ChallengeEntry, Company, ContactRequest, EmploymentOutcome,
-                      Job, Partnership, Role, Status, Submission, SubmissionFile, Track, University, User)
+                      Job, JobRecommendation, Partnership, Role, Status, Submission, SubmissionFile, Track, University, User)
 from ..schemas import (ApplicantOut, ApplicationPatch, CompanyIn, CompanyOut, ContactIn, JobIn, JobOut)
 from ..core import ratelimit
-from ..services import applications, files, inbox, notify, partnerships
+from ..services import admin_inbox, applications, files, inbox, partnerships, uni_news
 from ..core.security import create_token
 from ..models import CompanyTest, TestAttempt
 from ..services.career import JOB_KIND_LABEL, anonymous_card, identity, student_row
 from ..services.catalog import CONSENT_VERSION
+from ..services.progress import today as tashkent_today
 from ..services.cv import build_cv
 from .deps import CurrentUser, Session
-from .jobs import job_out, match_score
+from .jobs import job_out, match_score, visible_jobs
 
 router = APIRouter(prefix="/employer", tags=["employer"])
 CONTACTS_PER_DAY = 20          # per company: keeps students from being spammed
@@ -48,12 +49,6 @@ def _verified_count():
     return (select(func.count()).where(Submission.user_id == User.id,
                                        Submission.status.in_([Status.peer_verified, Status.mentor_verified]))
             .correlate(User).scalar_subquery())
-
-
-async def _notify_admins(session: Session, text: str) -> None:
-    ids = (await session.execute(select(User.telegram_id).where(
-        (User.role == Role.admin) | User.is_owner, User.is_blocked.is_(False)))).scalars().all()
-    notify.send(list(ids), text)
 
 
 # --------------------------------------------------------------------------- company
@@ -89,9 +84,12 @@ async def edit_company(body: CompanyIn, user: Employer, session: Session) -> Com
         company.submitted_at = datetime.now(UTC)
     await session.commit()
     if resubmitted:
-        await _notify_admins(session, f"Rad etilgan kompaniya ma'lumotlarini tuzatib qayta yubordi: {company.name} (STIR {company.stir}).")
+        await admin_inbox.push(session, "companies", "company_resubmitted",
+                               f"Rad etilgan kompaniya ma'lumotlarini tuzatib qayta yubordi: {company.name} (STIR {company.stir}).", "queue")
     elif identity_changed or first_stir or new_document:
-        await _notify_admins(session, f"Kompaniya ma'lumotlari o'zgardi: {company.name} (STIR {company.stir}).")
+        await admin_inbox.push(session, "companies", "company_changed",
+                               f"Kompaniya ma'lumotlari o'zgardi: {company.name} (STIR {company.stir}).",
+                               "queue" if company.status == "pending" else "companies")
     return company
 
 
@@ -182,19 +180,39 @@ async def my_jobs(user: Employer, session: Session) -> list[JobOut]:
     counts = (select(func.count()).where(Application.job_id == Job.id).correlate(Job).scalar_subquery())
     rows = (await session.execute(select(Job, counts).where(Job.company_id == user.company_id)
                                   .order_by(Job.created_at.desc()))).all()
-    return [job_out(j, applications=n) for j, n in rows]
+    # which universities vouched for each vacancy (a university's career centre recommends it to its students)
+    recs: dict[int, list[dict]] = {}
+    for r, u in (await session.execute(select(JobRecommendation, University).join(University, University.id == JobRecommendation.university_id)
+                                       .where(JobRecommendation.job_id.in_([j.id for j, _ in rows]))
+                                       .order_by(JobRecommendation.created_at))).all() if rows else []:
+        recs.setdefault(r.job_id, []).append({"university_id": u.id, "short_name": u.short_name, "name": u.name,
+                                              "note": r.note, "created_at": r.created_at})
+    return [job_out(j, applications=n).model_copy(update={"recommended_by": recs.get(j.id, [])}) for j, n in rows]
 
 
 @router.post("/jobs", response_model=JobOut, status_code=201)
 async def create_job(body: JobIn, user: ApprovedEmployer, session: Session) -> JobOut:
     ratelimit.limit(f"job-create:{user.company_id}", 20, 24 * 3600,
                     "Bir kunda 20 tadan ortiq vakansiya yaratib bo'lmaydi")
+    _check_deadline(body)
     job = Job(**body.model_dump(), company_id=user.company_id, created_by_id=user.id)
     session.add(job)
     await session.commit()
     await session.refresh(job)
-    await _notify_admins(session, f"Yangi vakansiya tekshiruvni kutmoqda: {user.company.name}, «{job.title}».")
+    await admin_inbox.push(session, "jobs", "job_new",
+                           f"Yangi vakansiya tekshiruvni kutmoqda: {user.company.name}, «{job.title}».", "queue")
     return job_out(job)
+
+
+def _check_deadline(body: JobIn) -> None:
+    # an application deadline in the past would hide the job the moment it is approved
+    if body.deadline is not None and body.deadline < tashkent_today():
+        raise HTTPException(422, "Ariza muddati bugundan oldingi sana bo'lmasin: muddatni yangilang")
+
+
+# what a live job may change without going back to review: students read everything else
+QUIET_CHANGES = {"deadline", "hours_per_week"}
+ACTIVE_STATES = ("new", "viewed", "shortlisted", "interview", "offer")
 
 
 async def _own_job(session: Session, user: User, job_id: int) -> Job:
@@ -206,21 +224,42 @@ async def _own_job(session: Session, user: User, job_id: int) -> Job:
 
 @router.put("/jobs/{job_id}", response_model=JobOut)
 async def edit_job(job_id: int, body: JobIn, user: ApprovedEmployer, session: Session) -> JobOut:
+    """A change students would read goes back to the admin (who is told); a live job that only moves its deadline
+    or hours stays live. Editing a rejected or closed job sends it for review again, which reopens a closed one."""
     job = await _own_job(session, user, job_id)
-    if job.status == "closed":
-        raise HTTPException(409, "Yopilgan vakansiyani tahrirlab bo'lmaydi")
-    for field, value in body.model_dump().items():
+    _check_deadline(body)
+    values = body.model_dump()
+    changed = {k for k, v in values.items() if getattr(job, k) != v}
+    for field, value in values.items():
         setattr(job, field, value)
-    job.status, job.review_note = "pending", ""        # every edit is checked again before students see it
+    resubmit = job.status in ("rejected", "closed") or (job.status == "approved" and bool(changed - QUIET_CHANGES))
+    if resubmit:
+        reopened = job.status == "closed"
+        job.status, job.review_note = "pending", ""
     await session.commit()
+    if resubmit:
+        what = "qayta ochmoqchi" if reopened else "o'zgartirdi"
+        await admin_inbox.push(session, "jobs", "job_new",
+                               f"{user.company.name} «{job.title}» vakansiyasini {what}: qayta tekshiring.", "queue")
     return job_out(job)
 
 
 @router.post("/jobs/{job_id}/close", response_model=JobOut)
 async def close_job(job_id: int, user: Employer, session: Session) -> JobOut:
+    """Applicants still in the process are told the job closed; the company can still move them (e.g. hire)."""
     job = await _own_job(session, user, job_id)
+    was_open = job.status != "closed"
     job.status = "closed"
     await session.commit()
+    if was_open:
+        waiting = list(await session.scalars(select(Application.user_id).where(
+            Application.job_id == job.id, Application.status.in_(ACTIVE_STATES))))
+        if waiting:
+            company = job.company.name
+            await inbox.push(session, waiting, "job_closed",
+                             f"«{job.title}» ({company}) vakansiyasi yopildi. Arizangiz kompaniyada saqlanadi, "
+                             "javob shu yerga keladi. Boshqa vakansiyalarni ham ko'ring.",
+                             link="/talaba/arizalar", params={"job": job.title, "company": company})
     return job_out(job)
 
 
@@ -513,7 +552,12 @@ async def dashboard(user: ApprovedEmployer, session: Session, days: int = Query(
         **await _dashboard_extras(session, user.company, since, days),
         "previous": {"received": prev_received, "hired": prev_hired},
         "days": days,
-        "jobs": {s: jobs_by_status.get(s, 0) for s in ("approved", "pending", "rejected", "closed")},
+        # "approved" counts only jobs students can still see (an expired deadline drops a job from the site)
+        "jobs": {**{s: jobs_by_status.get(s, 0) for s in ("approved", "pending", "rejected", "closed")},
+                 "approved": await session.scalar(select(func.count()).select_from(
+                     visible_jobs().where(Job.company_id == user.company_id).subquery())),
+                 "expired": await session.scalar(select(func.count()).select_from(Job).where(
+                     Job.company_id == user.company_id, Job.status == "approved", Job.deadline < tashkent_today()))},
         "pipeline": {s: pipeline.get(s, 0) for s in ("new", "viewed", "shortlisted", "interview", "offer", "hired",
                                                      "rejected", "withdrawn")},
         "applications_total": sum(pipeline.values()),
@@ -632,6 +676,7 @@ async def universities_for_company(user: ApprovedEmployer, session: Session,
     partner_first = University.id.in_(list(mine)) if mine else false()
     rows = (await session.execute(query.order_by(partner_first.desc(), students.desc(), University.name).limit(100))).all()
     return [{"id": u.id, "name": u.name, "short_name": u.short_name, "city": u.city, "students": n,
+             "logo_url": uni_news.university_logo_url(u), "cooperation": u.cooperation,
              "partnership": partnerships.out(mine[u.id]) if u.id in mine else None} for u, n in rows]
 
 
@@ -643,7 +688,9 @@ async def university_for_company(university_id: int, user: ApprovedEmployer, ses
         raise HTTPException(404, "Universitet topilmadi")
     p = (await session.execute(select(Partnership).where(Partnership.company_id == user.company_id,
                                                          Partnership.university_id == university_id))).scalar_one_or_none()
-    return {**await university_profile(session, uni), "partnership": partnerships.out(p) if p else None}
+    # a partner company also sees the announcements the university sent to its partners
+    return {**await university_profile(session, uni), "partnership": partnerships.out(p) if p else None,
+            "news": await uni_news.company_items(session, user.company_id, university_id, limit=12)}
 
 
 class PartnershipIn(BaseModel):
@@ -715,5 +762,5 @@ async def decide_outcome_request(outcome_id: int, body: OutcomeDecisionIn, user:
     await inbox.push(session, [student_id], "outcome_company_review",
                      f"{company} sizning ish joyingizni tasdiqladi." if body.confirm
                      else f"{company} ish joyingiz haqidagi yozuvni tasdiqlamadi.",
-                     link="/talaba/universitetim", params={"approved": body.confirm, "company": company})
+                     link="/talaba/profil", params={"approved": body.confirm, "company": company})
     return {"confirmed": body.confirm}

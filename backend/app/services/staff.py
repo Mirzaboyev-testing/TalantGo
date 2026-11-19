@@ -11,8 +11,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core import ratelimit
-from ..models import Role, SubmissionFile, University, User
-from . import files, inbox, notify
+from ..models import SubmissionFile, University, User
+from . import admin_inbox, files, inbox
 
 # what the university is ready to do on the platform (asked in the request, shown on its profile)
 COOPERATION = ("invite_students", "verify_students", "ambassadors", "introduce_companies", "dual", "venue",
@@ -140,10 +140,9 @@ async def submit(session: AsyncSession, user: User, body) -> None:
         await inbox.push(session, [u.id for u in deciders], "staff_request",
                          f"{user.full_name} {uni.short_name} paneliga kirish so'radi. Jamoa bo'limida tasdiqlang.",
                          link="/universitet/profil?tab=team", params={"student": user.full_name, "university": uni.short_name})
-    admins = (await session.execute(select(User.telegram_id).where(
-        (User.role == Role.admin) | User.is_owner, User.is_blocked.is_(False)))).scalars().all()
-    notify.send(list(admins), f"Universitet xodimi tekshiruvni kutmoqda: {user.full_name} ({uni.name})"
-                + ("" if uni.is_active else " · yangi universitet"))
+    await admin_inbox.push(session, "universities", "staff_new",
+                           f"Universitet xodimi tekshiruvni kutmoqda: {user.full_name} ({uni.name})"
+                           + ("" if uni.is_active else " · yangi universitet"), "queue")
 
 
 def _apply_extras(uni: University, extra: dict) -> None:

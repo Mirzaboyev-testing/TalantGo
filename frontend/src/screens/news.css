@@ -1,0 +1,54 @@
+/* A university announcement card (NewsCard.tsx): students, companies, the public page and the university's preview. */
+
+.nw { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.nw-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.nw-uni { flex: none; width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--brand-soft); color: var(--brand-strong);
+          display: grid; place-items: center; padding: 0; overflow: hidden; font-size: 11.5px; font-weight: 800; letter-spacing: .02em; cursor: pointer; }
+.nw-uni:disabled { cursor: default; opacity: 1; }
+.nw-uni img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.nw-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.nw-meta span { font-size: 12px; color: var(--hint); }
+.nw-uni-name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nw-chip { flex: none; display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 3px 9px; font-size: 12px; font-weight: 600;
+           background: var(--bg2); color: var(--hint); white-space: nowrap; }
+.nw-chip.partner { background: #efe9fd; color: #6d28d9; }
+.nw-chip.cat-news { background: #e6effd; color: #1d4ed8; }
+.nw-chip.cat-career { background: #e3f4e9; color: #15803d; }
+.nw-chip.cat-internship { background: #e0f2fe; color: #0369a1; }
+.nw-chip.cat-event { background: #fdf1dc; color: #b45309; }
+.nw-chip.cat-scholarship { background: #fce7f3; color: #be185d; }
+
+.nw-gallery { display: grid; gap: 4px; border-radius: 12px; overflow: hidden; }
+.nw-gallery.n1 { grid-template-columns: 1fr; }
+.nw-gallery.n1 .nw-photo { aspect-ratio: 16 / 9; }
+.nw-gallery.n2 { grid-template-columns: 1fr 1fr; }
+.nw-gallery.n2 .nw-photo { aspect-ratio: 4 / 3; }
+.nw-gallery.n3 { grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; aspect-ratio: 16 / 9; }
+.nw-gallery.n3 .nw-photo:first-child { grid-row: span 2; }
+.nw-gallery.n4 { grid-template-columns: 1fr 1fr; }
+.nw-gallery.n4 .nw-photo { aspect-ratio: 16 / 10; }
+.nw-photo { position: relative; display: block; width: 100%; min-height: 0; padding: 0; border: 0; background: var(--bg2); cursor: zoom-in; overflow: hidden; }
+.nw-photo img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .2s; }
+.nw-photo:hover img { transform: scale(1.03); }
+.nw-plus { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(19, 38, 27, .55); color: #fff; font-size: 22px; font-weight: 700; }
+
+.nw-title { margin: 0; font-size: 16px; line-height: 1.35; overflow-wrap: anywhere; }
+.nw-text { margin: 0; white-space: pre-line; overflow-wrap: anywhere; font-size: 14px; line-height: 1.55; color: #2f4337; }
+.nw-text.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; line-clamp: 5; overflow: hidden; }
+.nw-more { align-self: flex-start; border: 0; background: none; padding: 0; width: auto; color: var(--link); font-weight: 600; font-size: 13px; cursor: pointer; margin-top: -4px; }
+.btn.nw-link { align-self: flex-start; max-width: 100%; white-space: nowrap; }
+.nw-host { color: var(--hint); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* full-size photos */
+.nw-lightbox { position: fixed; inset: 0; z-index: 60; background: rgba(8, 15, 11, .92); display: grid; place-items: center; padding: 56px 12px 24px; }
+.nw-lightbox > img { max-width: min(1100px, 100%); max-height: calc(100vh - 96px); object-fit: contain; border-radius: 8px; box-shadow: 0 10px 40px rgba(0, 0, 0, .4); }
+.nw-lb-top { position: fixed; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; color: #e8efe9; font-size: 14px; font-weight: 600; }
+.nw-lb-btn { width: 42px; height: 42px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, .14); color: #fff; display: grid; place-items: center; padding: 0; cursor: pointer; }
+.nw-lb-btn:hover { background: rgba(255, 255, 255, .26); }
+.nw-lb-prev, .nw-lb-next { position: fixed; top: 50%; transform: translateY(-50%); }
+.nw-lb-prev { left: 12px; }
+.nw-lb-next { right: 12px; }
+
+/* a list of cards */
+.nw-list { display: flex; flex-direction: column; gap: 12px; }
+.nw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 12px; align-items: start; }

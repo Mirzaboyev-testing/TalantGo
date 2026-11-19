@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { api, type PublicUniversity, type UniversityProfile } from "../api";
 import { BarList } from "../charts";
 import { BRAND } from "../brand";
-import { t, useLang } from "../i18n";
+import { t, useLang, type MsgKey } from "../i18n";
 import { Icon } from "../icons";
 import { navigate } from "../router";
 import { openLink } from "../tg";
 import { ErrorText, message } from "../ui";
+import { NewsCard } from "../screens/NewsCard";
+import "./universities.css";
 
 /** Aggregates only: verified students, placement (jobs and internships), employers, partners, tracks. */
 export function UniversityFacts({ u }: { u: UniversityProfile }) {
@@ -18,6 +20,13 @@ export function UniversityFacts({ u }: { u: UniversityProfile }) {
         <button className="btn small ghost" style={{ marginBottom: 10 }} onClick={() => openLink(u.website)}>
           <Icon name="globe" size={16} />{t("company.website")}
         </button>
+      )}
+      <UniversityAbout u={u} />
+      {u.news && u.news.length > 0 && (
+        <section className="uni-news">
+          <h2 className="pub-h2">{t("news.public_title")}</h2>
+          <div className="nw-grid">{u.news.map((n) => <NewsCard key={n.id} item={n} showUniversity={false} />)}</div>
+        </section>
       )}
       <div className="stats four">
         <div className="stat"><b>{u.students}</b><span>{t("uni.students")}</span></div>
@@ -50,6 +59,46 @@ export function UniversityFacts({ u }: { u: UniversityProfile }) {
       <p className="hint">{t("uni.method", { n: u.min_sample })}</p>
     </>
   );
+}
+
+const tgLink = (v: string) => (v.startsWith("https://") ? v : v.startsWith("@") ? `https://t.me/${v.slice(1)}` : "");
+
+/** What the university filled in on its profile: year, size, what it offers companies, its office contacts. */
+function UniversityAbout({ u }: { u: UniversityProfile }) {
+  useLang();
+  const facts = [u.founded_year && t("uni.founded", { year: u.founded_year }), u.students_total && t("uni.students_total", { n: u.students_total }),
+                 u.faculties_count ? t("uni.faculties_n", { n: u.faculties_count }) : ""].filter(Boolean) as string[];
+  const contacts = [u.telegram, u.email, u.phone, u.address].some(Boolean);
+  if (!facts.length && !u.cooperation?.length && !contacts) return null;
+  return (
+    <div className="uni-about">
+      {facts.length > 0 && <div className="chips">{facts.map((f) => <span key={f} className="chip">{f}</span>)}</div>}
+      {(u.cooperation?.length ?? 0) > 0 && (
+        <div className="card">
+          <b>{t("uni.cooperation")}</b>
+          <div className="chips" style={{ marginTop: 8 }}>
+            {u.cooperation!.map((c) => <span key={c} className="chip on"><Icon name="check" size={13} />{t(`u.coop.${c}` as MsgKey)}</span>)}
+          </div>
+        </div>
+      )}
+      {contacts && (
+        <div className="card uni-contacts">
+          <b>{t("uni.contacts")}</b>
+          {u.telegram && <div><Icon name="send" size={15} />{tgLink(u.telegram) ? <a href={tgLink(u.telegram)} target="_blank" rel="noreferrer">{u.telegram}</a> : u.telegram}</div>}
+          {u.email && <div><Icon name="mail" size={15} /><a href={`mailto:${u.email}`}>{u.email}</a></div>}
+          {u.phone && <div><Icon name="phone" size={15} /><a href={`tel:${u.phone.replace(/\s/g, "")}`}>{u.phone}</a></div>}
+          {u.address && <div><Icon name="pin" size={15} /><span>{u.address}</span></div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The university's mark: its logo when it uploaded one, otherwise its short name. */
+export function UniversityMark({ u, size = 44 }: { u: { short_name: string; logo_url?: string | null }; size?: number }) {
+  return u.logo_url
+    ? <img className="uni-mark img" src={u.logo_url} alt="" style={{ width: size, height: size }} />
+    : <span className="uni-mark" style={{ width: size, height: size }}>{u.short_name.slice(0, 4)}</span>;
 }
 
 export function UniversitiesPage() {
@@ -85,7 +134,7 @@ export function UniversitiesPage() {
           <a key={u.id} className="card job-card tap" href={`/universitetlar/${u.id}`}
              onClick={(e) => { e.preventDefault(); navigate(`/universitetlar/${u.id}`); }}>
             <div className="row" style={{ alignItems: "flex-start" }}>
-              <span className="avatar company-mark">{u.short_name.slice(0, 2).toUpperCase()}</span>
+              <UniversityMark u={u} size={40} />
               <div className="grow" style={{ minWidth: 0 }}>
                 <b className="job-title">{u.name}</b>
                 <div className="hint">{[u.short_name, u.city].filter(Boolean).join(" · ")}</div>
@@ -111,8 +160,13 @@ export function UniversityPage({ id }: { id: number }) {
   return (
     <div className="job-page">
       <button className="btn small ghost" onClick={() => navigate("/universitetlar")}><Icon name="back" size={16} />{t("uni.back")}</button>
-      <h1 style={{ marginTop: 12 }}>{u.name}</h1>
-      <div className="hint" style={{ marginBottom: 10 }}>{[u.short_name, u.city, u.region].filter(Boolean).join(" · ")}</div>
+      <div className="row uni-page-head" style={{ marginTop: 12, alignItems: "center" }}>
+        <UniversityMark u={u} size={56} />
+        <div className="grow" style={{ minWidth: 0 }}>
+          <h1 style={{ margin: 0 }}>{u.name}</h1>
+          <div className="hint">{[u.short_name, u.city, u.region].filter(Boolean).join(" · ")}</div>
+        </div>
+      </div>
       <UniversityFacts u={u} />
     </div>
   );

@@ -108,7 +108,7 @@ function Companies({ onChanged }: { onChanged: () => void }) {
             {c.website && <button className="btn small ghost" onClick={() => openLink(c.website)}>Sayt</button>}
             <button className="btn small ghost" onClick={() => openLink("https://module.stat.uz/egrpo/")}>Reyestr</button>
           </div>
-          {c.status === "pending" && <Decision onDecide={async (a, n) => { await api.admin.reviewCompany(c.id, a, n); void load(); onChanged(); }} needNote={false} />}
+          {c.status === "pending" && <Decision onDecide={async (a, n) => { await api.admin.reviewCompany(c.id, a, n); void load(); onChanged(); }} />}
           {c.review_note && <div className="hint">Izoh: {c.review_note}</div>}
         </div>
       ))}
@@ -116,10 +116,13 @@ function Companies({ onChanged }: { onChanged: () => void }) {
   );
 }
 
+const MODE: Record<string, string> = { office: "Ofisda", remote: "Masofaviy", hybrid: "Aralash" };
+
 function Jobs({ onChanged }: { onChanged: () => void }) {
   const [rows, setRows] = useState<Job[] | null>(null);
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
   const load = useCallback(() => api.admin.pendingJobs().then(setRows, () => setRows([])), []);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); loadCatalog().then(setCatalog, () => {}); }, [load]);
   return (
     <div>
       <p className="hint">Faqat talabalarga mos e'lonlar: amaliyot, yarim stavka, junior, loyiha. Talabadan pul so'raydigan, MLM yoki tafsiloti noaniq e'lonlarni qaytaring.</p>
@@ -128,10 +131,18 @@ function Jobs({ onChanged }: { onChanged: () => void }) {
         <div key={j.id} className="card">
           <span className="hint">{j.company_name}</span>
           <div><b>{j.title}</b></div>
-          <div className="hint">{JOB_KIND[j.kind]} · {salary(j)} · {j.city}</div>
+          <div className="hint">{JOB_KIND[j.kind]} · {salary(j)} · {j.city} · {MODE[j.work_mode] ?? j.work_mode}{j.hours_per_week ? ` · haftasiga ${j.hours_per_week} soat` : ""}</div>
+          <div className="chips" style={{ margin: "6px 0" }}>
+            <span className={`chip ${j.deadline && j.deadline < new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tashkent" }) ? "bad" : ""}`}>
+              {j.deadline ? `Muddat: ${j.deadline.split("-").reverse().join(".")}` : "Muddatsiz"}
+            </span>
+            {j.counts_as_practice && <span className="chip">Malakaviy amaliyot sifatida o'tadi</span>}
+            {(j.job_fields ?? []).map((f) => <span key={f} className="chip on">{catalog?.job_fields[f] ?? f}</span>)}
+            {j.skills.map((sk) => <span key={sk} className="chip">{sk}</span>)}
+          </div>
           <p style={{ whiteSpace: "pre-line" }}>{j.description}</p>
           {j.requirements && <p className="hint" style={{ whiteSpace: "pre-line" }}>{j.requirements}</p>}
-          <Decision needNote={false} onDecide={async (a, n) => { await api.admin.reviewJob(j.id, a, n); void load(); onChanged(); }} />
+          <Decision onDecide={async (a, n) => { await api.admin.reviewJob(j.id, a, n); void load(); onChanged(); }} />
         </div>
       ))}
     </div>

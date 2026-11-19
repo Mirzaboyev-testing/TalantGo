@@ -143,3 +143,4 @@
 .perm-group b { font-size: 13px; color: var(--hint); text-transform: uppercase; letter-spacing: .04em; }
 .perm-item { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; margin: 0; }
 .perm-item input { width: auto; margin: 0; }
+.chip.bad { background: #fdeeee; color: var(--bad); border-color: #f3c9c9; }

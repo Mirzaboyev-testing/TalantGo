@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from ..core import ratelimit
 from ..models import Challenge, Company, Complaint, EmploymentOutcome, Job, Partnership, University, User
-from ..services import partnerships, ranking
+from ..services import admin_inbox, partnerships, ranking
 from .deps import AdminActor, CurrentUser, Session, audit
 
 router = APIRouter(tags=["trust"])
@@ -46,6 +46,8 @@ async def complain(body: ComplaintIn, user: CurrentUser, session: Session) -> di
     session.add(Complaint(reporter_id=user.id, target_kind=body.target_kind, target_id=body.target_id,
                           reason=body.reason, text=body.text.strip()))
     await session.commit()
+    title = await _target_title(session, body.target_kind, body.target_id)
+    await admin_inbox.push(session, "complaints", "complaint_new", f"Yangi shikoyat: {title} ({body.reason}).", "complaints")
     return {"status": "open"}
 
 

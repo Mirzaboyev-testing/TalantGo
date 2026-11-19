@@ -179,6 +179,9 @@ class User(Base):
     telegram_id: Mapped[int | None] = mapped_column(BigInteger, unique=True)   # None: a website-only account
     email: Mapped[str | None] = mapped_column(String(160), unique=True)          # website sign-in, stored lower-case
     password_hash: Mapped[str] = mapped_column(String(255), default="", server_default="")
+    # raised by a password change or reset: every session token made before it stops working (core/security.py)
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")  # temporary one
     username: Mapped[str | None] = mapped_column(String(64))
     full_name: Mapped[str] = mapped_column(String(128))
     photo_url: Mapped[str | None] = mapped_column(String(512))
@@ -689,6 +692,56 @@ class AdminAccount(Base):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class AdminNotification(Base):
+    """The admin website's bell. Who gets a notice depends on the permissions the owner switched on
+    (services/admin_inbox.py); `link` is an admin page id such as "queue" or "complaints"."""
+    __tablename__ = "admin_notifications"
+    __table_args__ = (Index("ix_admin_notifications_account_id_id", "account_id", "id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("admin_accounts.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(40))
+    text: Mapped[str] = mapped_column(Text)
+    link: Mapped[str] = mapped_column(String(60), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PasswordReset(Base):
+    """A one-time password reset sent through the bot: a 6-digit code for the website form and a link.
+    Only hashes are stored; services/password_reset.py decides how long it lives."""
+    __tablename__ = "password_resets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    code_hash: Mapped[str] = mapped_column(String(64))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PasswordRequest(Base):
+    """Someone without Telegram forgot a password and asks the owner (user accounts) or an admin account forgot
+    its own. The owner checks who it is, by phone, before handing over a temporary password."""
+    __tablename__ = "password_requests"
+    __table_args__ = (_in("kind", ("user", "admin"), "password_request_kind_valid"),
+                      _in("status", ("open", "done", "closed"), "password_request_status_valid"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(8), default="user")
+    email: Mapped[str] = mapped_column(String(254))
+    full_name: Mapped[str] = mapped_column(String(128), default="")
+    phone: Mapped[str] = mapped_column(String(20), default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    admin_account_id: Mapped[int | None] = mapped_column(ForeignKey("admin_accounts.id", ondelete="SET NULL"))
+    status: Mapped[str] = mapped_column(String(8), default="open")
+    handled_by: Mapped[str] = mapped_column(String(160), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    handled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Group(Base):
     """A chat space inside CareerFlow. Official groups (the whole community, one per track) are open;
     groups people create themselves are private: invisible to others, joined only with the invite code."""
@@ -737,7 +790,7 @@ class GroupMessage(Base):
     user: Mapped[User | None] = relationship(lazy="selectin")
 
 
-TASK_AUDIENCES = ("all", "track", "university", "selected")
+TASK_AUDIENCES = ("all", "track", "fields", "university", "selected")
 
 
 class Challenge(Base):
@@ -762,6 +815,8 @@ class Challenge(Base):
     audience: Mapped[str] = mapped_column(String(12), default="all", server_default="all")      # TASK_AUDIENCES
     university_id: Mapped[int | None] = mapped_column(ForeignKey("universities.id", ondelete="SET NULL"))
     invited_ids: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, server_default="{}")
+    # audience "fields" (2026-11-19): students with any of these job functions (catalog.JOB_FIELDS)
+    job_fields: Mapped[list[str]] = mapped_column(ARRAY(String(24)), default=list, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     track: Mapped[Track | None] = relationship(lazy="selectin")
@@ -798,7 +853,7 @@ class ChallengeEntry(Base):
 # --------------------------------------------------------------------------- company tests and surveys
 
 TEST_STATES = ("draft", "pending", "approved", "rejected", "closed")
-TEST_AUDIENCES = ("all", "tracks", "applicants")
+TEST_AUDIENCES = ("all", "tracks", "fields", "applicants")
 QUESTION_KINDS = ("single", "multi", "text")
 ATTEMPT_STATES = ("in_progress", "submitted", "graded")
 
@@ -820,6 +875,7 @@ class CompanyTest(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     audience: Mapped[str] = mapped_column(String(16), default="all")
     track_ids: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, server_default="{}")
+    job_fields: Mapped[list[str]] = mapped_column(ARRAY(String(24)), default=list, server_default="{}")   # audience "fields"
     deadline: Mapped[date | None] = mapped_column(Date)
     time_limit_min: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(16), default="draft", index=True)
@@ -901,8 +957,13 @@ EVENT_KINDS = ("career_day", "job_fair", "hackathon", "workshop", "open_day", "m
 EVENT_STATES = ("published", "cancelled")
 
 
+ANNOUNCEMENT_CHANNELS = ("students", "companies", "public")
+ANNOUNCEMENT_CATEGORIES = ("news", "career", "internship", "event", "scholarship", "other")
+
+
 class UniversityAnnouncement(Base):
-    """A career centre's message to its own students (all, or by faculty / course / group); goes to their inbox."""
+    """A career centre's announcement, with photos: to its own students (all, or by faculty / course / group),
+    to its partner companies, and/or on its public page. Students and companies get it in their inbox."""
     __tablename__ = "university_announcements"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -913,9 +974,15 @@ class UniversityAnnouncement(Base):
     link: Mapped[str] = mapped_column(String(256), default="", server_default="")
     audience: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")     # the filters used
     recipients: Mapped[int] = mapped_column(Integer, default=0)
+    channels: Mapped[list[str]] = mapped_column(ARRAY(String(12)), default=lambda: ["students"], server_default="{students}")
+    category: Mapped[str] = mapped_column(String(16), default="news", server_default="news")
+    photo_ids: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, server_default="{}")   # submission_files
+    company_recipients: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    status: Mapped[str] = mapped_column(String(12), default="published", server_default="published")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     author: Mapped[User | None] = relationship(lazy="selectin")
+    university: Mapped[University] = relationship(lazy="selectin")
 
 
 class UniversityEvent(Base):
@@ -1043,4 +1110,101 @@ class TeamMember(Base):
     photo_media_id: Mapped[int | None] = mapped_column(ForeignKey("site_media.id", ondelete="SET NULL"))
     position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     is_visible: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# --------------------------------------------------------------------------- the posts feed ("Lenta", docs/12-talaba-postlar.md)
+
+POST_AUTHOR_KINDS = ("student", "company", "university")
+POST_KINDS = ("experience", "project", "achievement", "event", "question", "news")
+POST_VISIBILITY = ("all", "university")
+POST_STATES = ("visible", "hidden", "removed")          # hidden: by reports or an admin; removed: by its author
+REACTION_KINDS = ("like", "congrats")
+REPORT_REASONS = ("spam", "offensive", "false", "private", "other")
+
+
+class Post(Base):
+    """A post in the feed (api/feed.py). Students post most; approved companies and university staff post too.
+    university_id: the university for a university post, the student's university at posting time for a student
+    post (the "university" scope and the "only my university" visibility use it). Three reports from different
+    people hide a post until an admin decides. Images are kept submission files shown through signed /media links."""
+    __tablename__ = "posts"
+    __table_args__ = (
+        _in("author_kind", POST_AUTHOR_KINDS, "post_author_kind_valid"),
+        _in("kind", POST_KINDS, "post_kind_valid"),
+        _in("visibility", POST_VISIBILITY, "post_visibility_valid"),
+        _in("status", POST_STATES, "post_status_valid"),
+        CheckConstraint("cardinality(media_ids) <= 4", name="post_media_max"),
+        Index("ix_posts_author_id_id", "author_id", "id"),
+        Index("ix_posts_university_id_id", "university_id", "id"),
+        Index("ix_posts_media_ids", "media_ids", postgresql_using="gin"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    author_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    author_kind: Mapped[str] = mapped_column(String(12))
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id", ondelete="SET NULL"))
+    university_id: Mapped[int | None] = mapped_column(ForeignKey("universities.id", ondelete="SET NULL"))
+    kind: Mapped[str] = mapped_column(String(16))
+    text: Mapped[str] = mapped_column(Text, default="", server_default="")
+    media_ids: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, server_default="{}")
+    visibility: Mapped[str] = mapped_column(String(12), default="all", server_default="all")
+    status: Mapped[str] = mapped_column(String(12), default="visible", server_default="visible", index=True)
+    # counters change in SQL (UPDATE ... SET n = n + 1): two people reacting at once must both count
+    like_n: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    congrats_n: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    comments_n: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    reports_open: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    hidden_note: Mapped[str] = mapped_column(Text, default="", server_default="")      # the admin's reason
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PostReaction(Base):
+    """One reaction per person and post ("Yoqdi" or "Tabriklayman"); picking the other one switches it."""
+    __tablename__ = "post_reactions"
+    __table_args__ = (_in("kind", REACTION_KINDS, "post_reaction_kind_valid"),)
+
+    post_id: Mapped[int] = mapped_column(ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True)
+    kind: Mapped[str] = mapped_column(String(12))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PostComment(Base):
+    """A comment, one level deep: a reply to a reply is attached to the top-level comment."""
+    __tablename__ = "post_comments"
+    __table_args__ = (
+        _in("status", POST_STATES, "post_comment_status_valid"),
+        CheckConstraint("char_length(text) <= 1000", name="post_comment_text_len"),
+        Index("ix_post_comments_post_id_id", "post_id", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    post_id: Mapped[int] = mapped_column(ForeignKey("posts.id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("post_comments.id", ondelete="CASCADE"), index=True)
+    text: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(12), default="visible", server_default="visible")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PostReport(Base):
+    """A report on a post or a comment (exactly one of the two); one per person and target."""
+    __tablename__ = "post_reports"
+    __table_args__ = (
+        UniqueConstraint("reporter_id", "post_id"),
+        UniqueConstraint("reporter_id", "comment_id"),
+        _in("reason", REPORT_REASONS, "post_report_reason_valid"),
+        _in("status", ("open", "resolved"), "post_report_status_valid"),
+        CheckConstraint("(post_id IS NULL) <> (comment_id IS NULL)", name="post_report_one_target"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    post_id: Mapped[int | None] = mapped_column(ForeignKey("posts.id", ondelete="CASCADE"), index=True)
+    comment_id: Mapped[int | None] = mapped_column(ForeignKey("post_comments.id", ondelete="CASCADE"), index=True)
+    reporter_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    reason: Mapped[str] = mapped_column(String(12))
+    note: Mapped[str] = mapped_column(String(500), default="", server_default="")
+    status: Mapped[str] = mapped_column(String(10), default="open", server_default="open")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

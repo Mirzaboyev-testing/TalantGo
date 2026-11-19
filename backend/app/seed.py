@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import AppConfig, Group, Task, Track, University
 from .seed_catalog import ALL_UNIVERSITIES, FACULTIES
+from .seed_catalog2 import FACULTIES_BY_NAME, SHORT_BY_NAME
 from .core.brand import BRAND
 
 POINTS_BY_WEEK = {1: 10, 2: 15, 3: 20, 4: 30}
@@ -228,11 +229,45 @@ async def add_universities(session: AsyncSession) -> None:
     await session.commit()
 
 
+CATALOG_MARK_V2 = "seed_catalog_v2"
+# the region (catalog.REGIONS) of each city in the university list
+CITY_REGION = {
+    "Toshkent": "Toshkent shahri", "Toshkent viloyati": "Toshkent viloyati", "Chirchiq": "Toshkent viloyati",
+    "Olmaliq": "Toshkent viloyati", "Nurafshon": "Toshkent viloyati", "Angren": "Toshkent viloyati",
+    "Samarqand": "Samarqand", "Urgut": "Samarqand", "Kattaqo'rg'on": "Samarqand", "Nukus": "Qoraqalpog'iston",
+    "Buxoro": "Buxoro", "Andijon": "Andijon", "Urganch": "Xorazm", "Qarshi": "Qashqadaryo", "Shahrisabz": "Qashqadaryo",
+    "Farg'ona": "Farg'ona", "Qo'qon": "Farg'ona", "Namangan": "Namangan", "Jizzax": "Jizzax", "Termiz": "Surxondaryo",
+    "Denov": "Surxondaryo", "Navoiy": "Navoiy", "Guliston": "Sirdaryo", "Yangiyer": "Sirdaryo",
+}
+
+
+async def upgrade_catalog_v2(session: AsyncSession) -> None:
+    """Second catalogue pass (2026-11-19), ONCE per database: the region from the city where it is empty; the
+    researched short name where the first pass had cut the full name at 40 characters (a name staff changed stays);
+    the researched faculties where the list is still empty."""
+    if not FACULTIES_BY_NAME or await session.get(AppConfig, CATALOG_MARK_V2) is not None:
+        return
+    shorts, faculties, regions = 0, 0, 0
+    for uni in (await session.execute(select(University))).scalars().all():
+        if not uni.region and CITY_REGION.get(uni.city):
+            uni.region = CITY_REGION[uni.city]
+            regions += 1
+        if uni.name in SHORT_BY_NAME and uni.short_name == _short_from(uni.name):
+            uni.short_name = SHORT_BY_NAME[uni.name]
+            shorts += 1
+        if not uni.faculties and FACULTIES_BY_NAME.get(uni.name):
+            uni.faculties = list(FACULTIES_BY_NAME[uni.name])
+            faculties += 1
+    session.add(AppConfig(key=CATALOG_MARK_V2, value={"short_names": shorts, "faculties": faculties, "regions": regions}))
+    await session.commit()
+
+
 async def seed(session: AsyncSession) -> None:
     known = set((await session.execute(select(University.name))).scalars())
     session.add_all(University(name=n, short_name=sh, city=c) for n, sh, c in UNIVERSITIES if n not in known)
     await session.flush()
     await add_universities(session)
+    await upgrade_catalog_v2(session)
     existing = set((await session.execute(select(Track.slug))).scalars())
     for order, spec in enumerate(TRACKS):
         if spec["slug"] in existing:

@@ -14,8 +14,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.security import _subkey
-from ..models import (ChallengeEntry, EmploymentOutcome, PortfolioItem, Status, Submission, SubmissionFile, Task,
-                      User)
+from ..models import (ChallengeEntry, EmploymentOutcome, PortfolioItem, Post, Status, Submission, SubmissionFile,
+                      Task, User)
 
 IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp"}
 ATTACH_TYPES = IMAGE_TYPES | {"application/pdf"}
@@ -40,16 +40,25 @@ def media_url(file_id: int | None) -> str | None:
     return f"/api/v1/media/{file_id}?s={media_sig(file_id)}" if file_id else None
 
 
+_PROFILE = object()       # claim()'s default cap: MAX_KEPT, read at call time
+
+
 async def claim(session: AsyncSession, user: User, file_ids: list[int], kinds: set[str], what: str,
-                exts: set[str] | None = None) -> list[SubmissionFile]:
-    """Files the person uploaded themselves, of an allowed type (or extension), kept on the profile from now on."""
+                exts: set[str] | None = None, cap: int | None | object = _PROFILE) -> list[SubmissionFile]:
+    """Files the person uploaded themselves, of an allowed type (or extension), kept on the profile from now on.
+    `cap`: how many kept files the profile may have (MAX_KEPT by default, None: no cap). Feed post images do not
+    count towards it (the feed caps them itself)."""
     ids = list(dict.fromkeys(i for i in file_ids if i))
     if not ids:
         return []
-    kept = await session.scalar(select(func.count()).select_from(SubmissionFile).where(
-        SubmissionFile.user_id == user.id, SubmissionFile.kept.is_(True), SubmissionFile.id.notin_(ids)))
-    if kept + len(ids) > MAX_KEPT:
-        raise HTTPException(409, "Profilda fayllar juda ko'p: eskilarini o'chirib, keyin qo'shing")
+    limit = MAX_KEPT if cap is _PROFILE else cap
+    if limit is not None:
+        in_posts = select(func.unnest(Post.media_ids)).where(Post.author_id == user.id, Post.status != "removed")
+        kept = await session.scalar(select(func.count()).select_from(SubmissionFile).where(
+            SubmissionFile.user_id == user.id, SubmissionFile.kept.is_(True), SubmissionFile.id.notin_(ids),
+            SubmissionFile.id.notin_(in_posts)))
+        if kept + len(ids) > limit:
+            raise HTTPException(409, "Profilda fayllar juda ko'p: eskilarini o'chirib, keyin qo'shing")
     rows = (await session.execute(select(SubmissionFile).where(SubmissionFile.id.in_(ids)))).scalars().all()
     by_id = {r.id: r for r in rows}
     out = []
@@ -66,10 +75,11 @@ async def claim(session: AsyncSession, user: User, file_ids: list[int], kinds: s
 
 
 async def referenced(session: AsyncSession, file_id: int) -> bool:
-    """Whether a profile photo or cover, a portfolio item or a task entry still uses the file."""
+    """Whether a profile photo or cover, a portfolio item, a task entry or a feed post (not removed) still uses the file."""
     for query in (select(User.id).where((User.avatar_file_id == file_id) | (User.cover_file_id == file_id)),
                   select(PortfolioItem.id).where((PortfolioItem.cover_file_id == file_id) | PortfolioItem.file_ids.contains([file_id])),
-                  select(ChallengeEntry.id).where(ChallengeEntry.file_ids.contains([file_id]))):
+                  select(ChallengeEntry.id).where(ChallengeEntry.file_ids.contains([file_id])),
+                  select(Post.id).where(Post.media_ids.contains([file_id]), Post.status != "removed")):
         if await session.scalar(query.limit(1)) is not None:
             return True
     return False

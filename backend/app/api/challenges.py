@@ -7,9 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import and_, func, or_, select, update
 
-from ..models import Challenge, ChallengeEntry, Role, Task, Track, User
+from ..models import Challenge, ChallengeEntry, Company, Role, SubmissionFile, Task, Track, User
 from ..schemas import Url
 from ..services import inbox
+from ..services.applications import company_staff_ids
 from .deps import CurrentUser, Session
 
 router = APIRouter(tags=["challenges"])
@@ -145,17 +146,28 @@ def challenge_out(c: Challenge, now: datetime, **extra) -> dict:
             "starts_at": c.starts_at, "ends_at": c.ends_at, "state": state, "is_archived": c.is_archived,
             "mentor": c.created_by.full_name if c.created_by and not c.company_id else None,
             "company_id": c.company_id, "company": c.company.name if c.company else None,
-            "audience": c.audience, "university_id": c.university_id, "invited": len(c.invited_ids), **extra}
+            "audience": c.audience, "job_fields": c.job_fields or [], "university_id": c.university_id,
+            "invited": len(c.invited_ids), **extra}
 
 
-def entry_out(e: ChallengeEntry, with_username: bool = True) -> dict:
+def entry_out(e: ChallengeEntry, with_username: bool = True, file_names: dict[int, str] | None = None) -> dict:
     """`with_username` is off for company tasks: entering a task is not an application or a contact."""
     from ..services.portfolio import media_url
     return {"id": e.id, "user_id": e.user_id, "student": e.user.full_name, "username": e.user.username if with_username else None,
-            "files": [{"id": i, "url": media_url(i)} for i in (e.file_ids or [])],
+            "photo_url": e.user.photo_url, "faculty": e.user.faculty, "course": e.user.course,
+            "files": [{"id": i, "url": media_url(i), "name": (file_names or {}).get(i, "")} for i in (e.file_ids or [])],
             "university": e.user.university_ref.short_name if e.user.university_ref else None,
             "proof_url": e.proof_url, "note": e.note, "status": e.status, "score": e.score, "place": e.place,
             "comment": e.comment, "points_awarded": e.points_awarded, "created_at": e.created_at}
+
+
+async def file_names(session: Session, entries) -> dict[int, str]:
+    """Original names of the files attached to these entries, so reviewers see «report.xlsx», not «File 1»."""
+    ids = {i for e in entries for i in (e.file_ids or [])}
+    if not ids:
+        return {}
+    return dict((await session.execute(select(SubmissionFile.id, SubmissionFile.filename)
+                                       .where(SubmissionFile.id.in_(ids)))).all())
 
 
 async def _counts(session: Session, challenge_id: int) -> dict:
@@ -245,50 +257,68 @@ async def review_entry(challenge_id: int, entry_id: int, body: ReviewEntryIn, us
     return entry_out(entry)
 
 
+async def _capped(session: Session, c: Challenge, entry: ChallengeEntry, award: int) -> int:
+    """One company cannot lift one student up the rating: at most COMPANY_POINTS_CAP points in 30 days."""
+    if not c.company_id or not award:
+        return award
+    given = await session.scalar(select(func.coalesce(func.sum(ChallengeEntry.points_awarded), 0))
+                                 .join(Challenge, Challenge.id == ChallengeEntry.challenge_id).where(
+        Challenge.company_id == c.company_id, ChallengeEntry.user_id == entry.user_id, ChallengeEntry.id != entry.id,
+        ChallengeEntry.reviewed_at >= datetime.now(UTC) - timedelta(days=30)))
+    return max(0, min(award, COMPANY_POINTS_CAP - given))
+
+
 async def apply_review(session: Session, c: Challenge, entry: ChallengeEntry, body: ReviewEntryIn) -> None:
     """Accepts or rejects an entry, moves the place and its bonus, commits and tells the student."""
     if body.place and not body.accept:
         raise HTTPException(422, "Rad etilgan ishga o'rin berilmaydi")
+    before = (entry.status, entry.score, entry.place, entry.comment)
     if body.place:
-        # one winner per place: whoever held it loses the place and its bonus
+        # one winner per place: whoever held it loses the place and its bonus (the company cap still applies)
         holder = (await session.execute(select(ChallengeEntry).where(
             ChallengeEntry.challenge_id == c.id, ChallengeEntry.place == body.place,
             ChallengeEntry.id != entry.id))).scalar_one_or_none()
         if holder:
             holder.place = None
-            await _set_award(session, holder, c.points if holder.status == "accepted" else 0)
+            await _set_award(session, holder,
+                             await _capped(session, c, holder, c.points) if holder.status == "accepted" else 0)
     entry.status = "accepted" if body.accept else "rejected"
     entry.score, entry.place, entry.comment = body.score, body.place, body.comment.strip()
     entry.reviewed_at = datetime.now(UTC)
     award = (c.points + PLACE_BONUS.get(body.place or 0, 0)) if body.accept else 0
-    if c.company_id and award:
-        # one company cannot lift one student up the rating: at most COMPANY_POINTS_CAP points in 30 days
-        given = await session.scalar(select(func.coalesce(func.sum(ChallengeEntry.points_awarded), 0))
-                                     .join(Challenge, Challenge.id == ChallengeEntry.challenge_id).where(
-            Challenge.company_id == c.company_id, ChallengeEntry.user_id == entry.user_id, ChallengeEntry.id != entry.id,
-            ChallengeEntry.reviewed_at >= datetime.now(UTC) - timedelta(days=30)))
-        award = max(0, min(award, COMPANY_POINTS_CAP - given))
-    await _set_award(session, entry, award)
+    await _set_award(session, entry, await _capped(session, c, entry, award))
     await session.commit()
+    if (entry.status, entry.score, entry.place, entry.comment) == before:
+        return                                       # a repeated review that changed nothing: no second notice
+    now = datetime.now(UTC)
+    can_resubmit = not body.accept and not c.is_archived and c.starts_at <= now <= c.ends_at
+    company = c.company.name if c.company else None
     place = f" Siz {body.place}-o'rinni egalladingiz!" if body.place else ""
-    what = f"«{c.title}» ({c.company.name}) vazifasidagi" if c.company else f"«{c.title}» chellenjidagi"
+    what = f"«{c.title}» ({company}) vazifasidagi" if company else f"«{c.title}» chellenjidagi"
+    comment = (entry.comment or "-").rstrip(".")
+    again = " Muddat tugaguncha tuzatib qayta yuborishingiz mumkin." if can_resubmit else ""
     await inbox.push(session, [entry.user_id], "challenge_result",
                      f"{what} ishingiz qabul qilindi: +{entry.points_awarded} ball.{place}"
-                     if body.accept else f"{what} ishingiz qabul qilinmadi. Izoh: {entry.comment or '-'}",
-                     link="/talaba/topshiriqlar", params={"challenge": c.title, "accepted": body.accept})
+                     if body.accept else f"{what} ishingiz qabul qilinmadi. Izoh: {comment}.{again}",
+                     link=f"/talaba/topshiriqlar?vazifa={c.id}",
+                     params={"challenge": c.title, "accepted": body.accept, "company": company,
+                             "points": entry.points_awarded, "comment": entry.comment, "place": entry.place,
+                             "score": entry.score, "can_resubmit": can_resubmit})
 
 
 # --------------------------------------------------------------------------- students
 
 def _for_user(user: User):
     """What a student sees, finished items for 30 days: mentor challenges for everyone or their track,
-    and company tasks meant for everyone, their track, their university or them by name."""
+    and company tasks of approved companies meant for everyone, their track, one of their job functions,
+    their university or them by name."""
     recent = datetime.now(UTC) - timedelta(days=30)
     mentor_items = and_(Challenge.company_id.is_(None),
                         Challenge.track_id.is_(None) | (Challenge.track_id == user.track_id))
-    company_items = and_(Challenge.company_id.isnot(None), or_(
+    company_items = and_(Challenge.company_id.isnot(None), Challenge.company.has(Company.status == "approved"), or_(
         Challenge.audience == "all",
         and_(Challenge.audience == "track", Challenge.track_id == user.track_id),
+        and_(Challenge.audience == "fields", Challenge.job_fields.overlap(user.job_fields or [])),
         and_(Challenge.audience == "university", Challenge.university_id == user.university_id),
         and_(Challenge.audience == "selected", Challenge.invited_ids.contains([user.id]))))
     return select(Challenge).where(Challenge.is_archived.is_(False), Challenge.ends_at >= recent,
@@ -301,10 +331,12 @@ async def challenges(user: CurrentUser, session: Session) -> list[dict]:
     rows = (await session.execute(_for_user(user).order_by(Challenge.ends_at))).scalars().all()
     mine = {e.challenge_id: e for e in (await session.execute(select(ChallengeEntry).where(
         ChallengeEntry.user_id == user.id, ChallengeEntry.challenge_id.in_([c.id for c in rows])))).scalars()}
+    names = await file_names(session, mine.values())           # one query for the files of all the student's entries
     out = []
     for c in rows:
         entries = await session.scalar(select(func.count()).select_from(ChallengeEntry).where(ChallengeEntry.challenge_id == c.id))
-        out.append(challenge_out(c, now, entries=entries, my_entry=entry_out(mine[c.id]) if c.id in mine else None))
+        out.append(challenge_out(c, now, entries=entries,
+                                 my_entry=entry_out(mine[c.id], file_names=names) if c.id in mine else None))
     order = {"active": 0, "upcoming": 1, "finished": 2}
     return sorted(out, key=lambda x: order[x["state"]])
 
@@ -316,11 +348,14 @@ async def challenge_detail(challenge_id: int, user: CurrentUser, session: Sessio
         raise HTTPException(404, "Chellenj topilmadi")
     mine = (await session.execute(select(ChallengeEntry).where(ChallengeEntry.challenge_id == c.id,
                                                                ChallengeEntry.user_id == user.id))).scalar_one_or_none()
+    # names and scores of the accepted entrants are for students only (not companies or university staff)
     winners = (await session.execute(select(ChallengeEntry).where(
         ChallengeEntry.challenge_id == c.id, ChallengeEntry.status == "accepted")
-        .order_by(ChallengeEntry.place.nulls_last(), ChallengeEntry.score.desc().nulls_last()).limit(10))).scalars()
+        .order_by(ChallengeEntry.place.nulls_last(), ChallengeEntry.score.desc().nulls_last()).limit(10))).scalars() \
+        if user.account_type == "student" else []
     entries = await session.scalar(select(func.count()).select_from(ChallengeEntry).where(ChallengeEntry.challenge_id == c.id))
-    return challenge_out(c, datetime.now(UTC), entries=entries, my_entry=entry_out(mine) if mine else None,
+    return challenge_out(c, datetime.now(UTC), entries=entries,
+                         my_entry=entry_out(mine, file_names=await file_names(session, [mine])) if mine else None,
                          results=[{"student": w.user.full_name, "place": w.place, "score": w.score} for w in winners])
 
 
@@ -342,8 +377,9 @@ async def enter(challenge_id: int, body: EntryIn, user: CurrentUser, session: Se
         raise HTTPException(409, "Chellenj hozir ish qabul qilmaydi")
     entry = (await session.execute(select(ChallengeEntry).where(ChallengeEntry.challenge_id == c.id,
                                                                 ChallengeEntry.user_id == user.id))).scalar_one_or_none()
-    if entry and entry.status != "submitted":
-        raise HTTPException(409, "Ishingiz allaqachon baholangan")
+    if entry and entry.status == "accepted":
+        raise HTTPException(409, "Ishingiz allaqachon qabul qilingan")
+    resubmitted = entry is not None and entry.status == "rejected"      # fixed after a rejection, before the deadline
     from ..services import portfolio as pf
     files = await pf.claim(session, user, body.file_ids, pf.ATTACH_TYPES | pf.WORK_TYPES, "Fayl", pf.WORK_EXTS)
     if len(body.proof_url) < 10 and not files:
@@ -352,11 +388,18 @@ async def enter(challenge_id: int, body: EntryIn, user: CurrentUser, session: Se
         entry = ChallengeEntry(challenge_id=c.id, user_id=user.id, proof_url=body.proof_url, note=body.note.strip(),
                                file_ids=[f.id for f in files])
         session.add(entry)
-    else:                                                                 # can be improved until reviewed
+    else:                                         # can be improved until reviewed, or fixed after a rejection
         dropped = [i for i in (entry.file_ids or []) if i not in [f.id for f in files]]
         entry.proof_url, entry.note, entry.file_ids = body.proof_url, body.note.strip(), [f.id for f in files]
+        if resubmitted:                           # back in the company's queue; its comment stays for reference
+            entry.status, entry.score, entry.place, entry.reviewed_at = "submitted", None, None, None
         await session.flush()
         await pf.release(session, user, dropped)
     await session.commit()
     await session.refresh(entry)
-    return entry_out(entry)
+    out = entry_out(entry, file_names=await file_names(session, [entry]))
+    if resubmitted and c.company_id:
+        await inbox.push(session, await company_staff_ids(session, c.company_id), "task_resubmitted",
+                         f"«{c.title}»: {user.full_name} ishini tuzatib qayta yubordi.", link="/korxona/vazifalar",
+                         params={"task": c.title, "student": user.full_name})
+    return out

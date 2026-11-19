@@ -9,6 +9,7 @@ import { Field, useRequired } from "../form";
 import { BOT_URL, offerTelegram } from "../tg";
 import { ErrorText, isFullName, message } from "../ui";
 import { BotWaiting, useBotLink } from "./BotLink";
+import { ForgotPassword } from "./PasswordRecovery";
 import { BRAND, BrandLogo } from "../brand";
 
 type GetToken = () => Promise<{ token: string; moved_to?: string | null }>;
@@ -33,7 +34,7 @@ export default function WebLogin({ dev, panel, onSignIn, onDev }: {
   useLang();
   useEffect(() => { if (panel) rememberPanel(panel); }, [panel]);
   const panelInfo = PANELS.find((p) => p.id === panel);
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [f, setF] = useState({ name: "", email: "", password: "", password2: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -108,9 +109,10 @@ export default function WebLogin({ dev, panel, onSignIn, onDev }: {
             </nav>
           )}
 
-          {telegram}
+          {mode !== "forgot" && telegram}
 
-          <div className="login-form">
+          {mode === "forgot" && <ForgotPassword initialEmail={f.email.trim()} onSignIn={onSignIn} onBack={() => setMode("login")} />}
+          {mode !== "forgot" && <div className="login-form">
             <div className="segmented">
               <button className={mode === "login" ? "on" : ""} onClick={() => { setMode("login"); setError(""); }}>{t("s.web.login")}</button>
               <button className={mode === "register" ? "on" : ""} onClick={() => { setMode("register"); setError(""); }}>{t("s.web.register")}</button>
@@ -139,12 +141,13 @@ export default function WebLogin({ dev, panel, onSignIn, onDev }: {
                 {busy ? t("s.common.waiting") : mode === "register" ? t("s.web.register") : t("s.web.login")}
               </button>
             </form>
-            {(mode === "login" || offerTelegram) && (
+            {mode === "login" && (
               <p className="hint" style={{ marginBottom: 0 }}>
-                {mode === "register" ? t("s.web.hint_register") : t(offerTelegram ? "s.web.hint_login" : "s.web.hint_login_email")}
+                <button type="button" className="link-btn" onClick={() => { setMode("forgot"); setError(""); }}>{t("pw.forgot_link")}</button>
               </p>
             )}
-          </div>
+            {mode === "register" && offerTelegram && <p className="hint" style={{ marginBottom: 0 }}>{t("s.web.hint_register")}</p>}
+          </div>}
 
           {offerTelegram && <p className="hint">{t("s.web.phone_better")} <a href={BOT_URL}>{t("s.web.open_tg")}</a></p>}
 

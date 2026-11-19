@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type EventItem, type Job, type Me, type MyOutcome, type UniversityProfile } from "../api";
+import { api, type EventItem, type Job, type Me, type MyOutcome, type NewsItem, type UniversityProfile } from "../api";
 import { BarList } from "../charts";
-import { formatDateTime, t, useLang } from "../i18n";
+import { t, useLang } from "../i18n";
 import { Icon } from "../icons";
 import { navigate } from "../router";
 import { PublicJobCard } from "../public/PublicJobs";
@@ -9,9 +9,10 @@ import { openLink } from "../tg";
 import { ErrorText, message } from "../ui";
 import { PageHead, StatTile } from "./employer/kit";
 import { EventCard } from "./student/Events";
+import { NewsCard } from "./NewsCard";
 
 type Data = { university: UniversityProfile | null; verified?: boolean; recommended: (Job & { note: string })[]; outcomes: MyOutcome[] };
-type Feed = { announcements: { id: number; title: string; text: string; link: string; created_at: string }[]; events: EventItem[] };
+type Feed = { announcements: NewsItem[]; events: EventItem[] };
 
 /** "Universitetim" (student panel v2): the university's page for its own student — what it recommends, its news
  *  and events, how its students get placed. The student's own jobs moved to the profile ("Tajriba"). */
@@ -94,16 +95,10 @@ export default function MyUniversity({ me }: { me: Me }) {
           <div className="co-card">
             <div className="co-card-head"><b>{t("st.uni.news")}</b></div>
             {feed && feed.announcements.length === 0 && <div className="st-empty compact"><span className="hint">{t("st.uni.no_news")}</span></div>}
-            {feed?.announcements.map((a) => (
-              <div key={a.id} className="st-news">
-                <span className="co-stat-icon"><Icon name="megaphone" size={18} /></span>
-                <div className="grow" style={{ minWidth: 0 }}>
-                  <b>{a.title || u.short_name}</b>
-                  <p className="st-pre" style={{ margin: "2px 0 0" }}>{a.text}</p>
-                  <div className="hint">{formatDateTime(a.created_at)}{a.link && <> · <button className="link-btn" onClick={() => openLink(a.link)}>{t("s.common.open_link")}</button></>}</div>
-                </div>
-              </div>
-            ))}
+            {/* photos, category and the link (an app page opens here, a form in the browser): the same card companies see */}
+            <div className="nw-list">
+              {feed?.announcements.map((a) => <NewsCard key={a.id} item={a} showUniversity={false} />)}
+            </div>
           </div>
           {u.description && (
             <div className="co-card">

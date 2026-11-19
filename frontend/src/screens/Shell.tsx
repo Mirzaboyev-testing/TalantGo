@@ -20,8 +20,10 @@ const useWide = () => useSyncExternalStore((l) => { wideQuery.addEventListener("
                                            () => wideQuery.matches);
 
 /** Sidebar on a computer, top bar + bottom menu on a phone; the same screens inside. */
-export default function Shell<T extends string>({ tabs, active, onChange, user, onLogout, children, wide = false, onUser }: {
+export default function Shell<T extends string>({ tabs, active, onChange, user, onLogout, children, wide = false, onUser, phoneBar }: {
   tabs: ShellTab<T>[]; active: T; onChange: (t: T) => void;
+  /** the four sections on a phone's bottom bar (the rest go under «Ko'proq»); by default the first four */
+  phoneBar?: T[];
   user: { name: string; photo?: string | null; subtitle?: string; verified?: boolean; square?: boolean };
   onLogout?: () => void; children: ReactNode; wide?: boolean;
   /** the name card at the bottom of the sidebar opens the profile */
@@ -31,8 +33,9 @@ export default function Shell<T extends string>({ tabs, active, onChange, user, 
   const isWide = useWide();
   const [moreOpen, setMoreOpen] = useState(false);
   // a phone's bottom bar fits five buttons: with more sections the last one opens the rest
-  const bar = tabs.length > 5 ? tabs.slice(0, 4) : tabs;
-  const rest = tabs.length > 5 ? tabs.slice(4) : [];
+  const picked = phoneBar ? tabs.filter((tab) => phoneBar.includes(tab.id)) : null;
+  const bar = picked ?? (tabs.length > 5 ? tabs.slice(0, 4) : tabs);
+  const rest = picked ? tabs.filter((tab) => !phoneBar!.includes(tab.id)) : tabs.length > 5 ? tabs.slice(4) : [];
   const restActive = rest.some((tab) => tab.id === active);
   const restBadge = rest.reduce((n, tab) => n + (tab.badge ?? 0), 0);
   return (
@@ -61,7 +64,7 @@ export default function Shell<T extends string>({ tabs, active, onChange, user, 
         )}
         <div className="side-user">
           {user.square
-            ? (user.photo ? <img className="avatar square" src={user.photo} alt="" /> : <div className="avatar square">{user.name.slice(0, 1).toUpperCase()}</div>)
+            ? <Avatar name={user.name} url={user.photo} className="square" />
             : <Avatar name={user.name} url={user.photo} />}
           <div className={`grow ${onUser ? "side-user-link" : ""}`} style={{ minWidth: 0 }} role={onUser ? "button" : undefined}
                tabIndex={onUser ? 0 : undefined} onClick={onUser}
@@ -84,6 +87,11 @@ export default function Shell<T extends string>({ tabs, active, onChange, user, 
         <span className="grow"><BrandLogo size={34} /></span>
         <LangSwitch onChange={saveLanguage} />
         {!isWide && <NotificationBell />}
+        {onUser && !isWide && (
+          <button className="topbar-me" aria-label={user.name} onClick={onUser}>
+            <Avatar name={user.name} url={user.photo} className={user.square ? "square" : ""} />
+          </button>
+        )}
       </header>
       <main className={wide ? "app wide" : "app"}>{children}</main>
       <nav className="tabbar">
