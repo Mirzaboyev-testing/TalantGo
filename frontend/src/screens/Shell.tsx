@@ -116,6 +116,14 @@ export default function Shell<T extends string>({ tabs, active, onChange, user, 
               <Icon name={tab.icon} />{tab.label}{tab.badge ? <span className="dot">{tab.badge}</span> : null}
             </button>
           ))}
+          {/* the sidebar (with its sign-out) is hidden on phones: without this a company or university user
+              could not sign out of a shared phone */}
+          {onLogout && !insideTelegram && (
+            <button className="side-link" style={{ borderTop: "1px solid var(--line)", marginTop: 6, paddingTop: 12 }}
+                    onClick={() => { setMoreOpen(false); onLogout(); }}>
+              <Icon name="logout" />{t("shell.logout")}
+            </button>
+          )}
         </Sheet>
       )}
     </div>

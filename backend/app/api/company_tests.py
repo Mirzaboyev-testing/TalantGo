@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 from sqlalchemy import func, select
 
-from ..models import Application, CompanyTest, Job, Role, TestAttempt, TestQuestion, Track, User
+from ..models import Application, CompanyTest, ContactRequest, Job, Role, TestAttempt, TestQuestion, Track, User
 from ..schemas import JobField
 from ..core import ratelimit
 from ..services import admin_inbox, inbox
@@ -146,8 +146,22 @@ def test_full(t: CompanyTest, **counts) -> dict:
     return {**test_summary(t, **counts), "questions": [question_out(q, True) for q in t.questions]}
 
 
-def _student_brief(u: User) -> dict:
-    return {"id": u.id, "full_name": u.full_name, "username": u.username, "photo_url": u.photo_url,
+async def _contacts_open(session: Session, company_id: int, user_ids: list[int]) -> set[int]:
+    """Students who applied to one of the company's jobs (not withdrawn) or accepted its contact request:
+    the rule of employer.contacts_shared, for a whole results table in two queries."""
+    if not user_ids:
+        return set()
+    applied = (await session.execute(select(Application.user_id).join(Job).where(
+        Job.company_id == company_id, Application.user_id.in_(user_ids), Application.status != "withdrawn"))).scalars()
+    accepted = (await session.execute(select(ContactRequest.student_id).where(
+        ContactRequest.company_id == company_id, ContactRequest.student_id.in_(user_ids),
+        ContactRequest.status == "accepted"))).scalars()
+    return set(applied) | set(accepted)
+
+
+def _student_brief(u: User, contacts_open: bool) -> dict:
+    """Taking a test is not consent: the Telegram username shows only once contacts are open (as for applicants)."""
+    return {"id": u.id, "full_name": u.full_name, "username": u.username if contacts_open else None, "photo_url": u.photo_url,
             "university": u.university_ref.short_name if u.university_ref else None, "faculty": u.faculty,
             "course": u.course, "group_name": u.group_name, "track": u.track.title if u.track else None,
             "points": u.points}
@@ -276,10 +290,11 @@ async def results(test_id: int, user: ApprovedEmployer, session: Session) -> dic
         TestAttempt.test_id == test.id, TestAttempt.status != "in_progress")
         .order_by(TestAttempt.score.desc(), TestAttempt.submitted_at))).scalars().all()
     rows, place, previous = [], 0, None
+    open_ids = await _contacts_open(session, test.company_id, [a.user_id for a in attempts])
     for position, a in enumerate(attempts, start=1):
         if a.score != previous:
             place, previous = position, a.score
-        rows.append({"attempt_id": a.id, "place": place, "student": _student_brief(a.user), "status": a.status,
+        rows.append({"attempt_id": a.id, "place": place, "student": _student_brief(a.user, a.user_id in open_ids), "status": a.status,
                      "score": a.score, "max_score": a.max_score,
                      "percent": round(100 * a.score / a.max_score) if a.max_score else None,
                      "late": a.late, "submitted_at": a.submitted_at})
@@ -296,7 +311,8 @@ async def _own_attempt(session: Session, user: User, attempt_id: int) -> TestAtt
 @employer_router.get("/test-attempts/{attempt_id}")
 async def attempt_detail(attempt_id: int, user: ApprovedEmployer, session: Session) -> dict:
     attempt = await _own_attempt(session, user, attempt_id)
-    return {**attempt_out(attempt, with_correct=True), "student": _student_brief(attempt.user)}
+    shared = attempt.user_id in await _contacts_open(session, user.company_id, [attempt.user_id])
+    return {**attempt_out(attempt, with_correct=True), "student": _student_brief(attempt.user, shared)}
 
 
 @employer_router.post("/test-attempts/{attempt_id}/grade")
@@ -331,7 +347,8 @@ async def grade(attempt_id: int, body: GradingIn, user: ApprovedEmployer, sessio
                          f"{attempt.score:g} / {attempt.max_score} ball.",
                          link="/talaba/topshiriqlar/testlar", params={"test": attempt.test.title, "company": user.company.name,
                                                              "score": attempt.score, "max": attempt.max_score})
-    return {**attempt_out(attempt, with_correct=True), "student": _student_brief(attempt.user)}
+    shared = attempt.user_id in await _contacts_open(session, user.company_id, [attempt.user_id])
+    return {**attempt_out(attempt, with_correct=True), "student": _student_brief(attempt.user, shared)}
 
 
 # --------------------------------------------------------------------------- students

@@ -41,7 +41,7 @@ async def me_out(session: Session, user: User) -> MeOut:
         staff_university=UniversityOut.model_validate(user.staff_university) if user.staff_university else None,
         staff_status=user.staff_status, staff_position=user.staff_position,
         phone=user.phone, phone_verified=user.phone_verified, show_phone=user.show_phone,
-        invite_code=f"r{user.id}", headline=user.headline,
+        show_telegram=user.show_telegram, invite_code=f"r{user.id}", headline=user.headline,
         invited_count=await session.scalar(select(func.count()).select_from(User).where(User.referred_by_id == user.id)),
         completeness=completeness(user), consent_current=user.consent_version >= CONSENT_VERSION,
         work_industries=user.work_industries, job_fields=user.job_fields, job_title=user.job_title,
@@ -183,7 +183,8 @@ async def peers(user: CurrentUser, session: Session,
         else:
             return []
     rows = (await session.execute(query.order_by(User.points.desc(), User.id).limit(100))).all()
-    return [PeerOut(id=u.id, full_name=u.full_name, username=u.username, photo_url=u.photo_url,
+    # contacts stay closed unless the student opened them: the phone and the Telegram username separately
+    return [PeerOut(id=u.id, full_name=u.full_name, username=u.username if u.show_telegram else None, photo_url=u.photo_url,
                     track_title=u.track.title if u.track else None, track_icon=u.track.icon if u.track else "",
                     university=u.university_ref.short_name if u.university_ref else None, faculty=u.faculty,
                     course=u.course, phone=u.phone if u.show_phone and u.phone else None,

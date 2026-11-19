@@ -9,6 +9,7 @@ from sqlalchemy import func, or_, select
 
 from ..models import (Application, Challenge, Company, EmploymentOutcome, Job, Partnership, SubmissionFile, Track,
                       University, User)
+from ..core import shortcache
 from ..services import files, uni_news
 from ..services.outcomes import university_stats
 from ..services.progress import today as tashkent_today
@@ -49,6 +50,7 @@ def joined_universities():
 
 
 @router.get("/stats")
+@shortcache.public("stats")
 async def stats(session: Session) -> dict:
     """The site's headline numbers count only who has joined and been approved, never the sign-up catalogue:
     companies the admin approved, universities with an approved staff member (the catalogue of all 200+
@@ -65,6 +67,7 @@ async def stats(session: Session) -> dict:
 
 
 @router.get("/jobs")
+@shortcache.public("jobs")
 async def jobs(session: Session, q: str | None = Query(default=None, max_length=80),
                kind: str | None = Query(default=None, max_length=16),
                work_mode: str | None = Query(default=None, max_length=16),
@@ -107,6 +110,7 @@ async def job(job_id: int, session: Session) -> dict:
 
 
 @router.get("/companies")
+@shortcache.public("companies")
 async def companies(session: Session, q: str | None = Query(default=None, max_length=80),
                     industry: str | None = Query(default=None, max_length=24),
                     limit: int = Query(default=24, ge=1, le=60), offset: int = Query(default=0, ge=0, le=5000)) -> dict:
@@ -193,6 +197,7 @@ async def university_profile(session, uni: University) -> dict:
 
 
 @router.get("/universities")
+@shortcache.public("universities")
 async def universities(session: Session, q: str | None = Query(default=None, max_length=80),
                        limit: int = Query(default=60, ge=1, le=100), offset: int = Query(default=0, ge=0)) -> dict:
     students = _verified_students(University.id).correlate(University).scalar_subquery().label("students")

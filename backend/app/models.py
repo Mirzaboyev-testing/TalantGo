@@ -226,6 +226,8 @@ class User(Base):
     phone: Mapped[str] = mapped_column(String(20), default="", server_default="")
     phone_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")   # shared via Telegram
     show_phone: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")       # visible to peers
+    # Telegram @username in the peers list: off until the student switches it on (2026-11-19 live test)
+    show_telegram: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     referred_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     open_to_work: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     verification: Mapped[str] = mapped_column(String(16), default="none", server_default="none")
@@ -695,6 +697,8 @@ class AdminAccount(Base):
     # what the owner switched on for this account (services/admin_access.py); null = the role's defaults
     permissions: Mapped[list[str] | None] = mapped_column(JSONB)
     telegram_id: Mapped[int | None] = mapped_column(BigInteger, unique=True)   # linked in "Profilim": bot copies of the bell
+    # set by a temporary password from the owner (or manage.py): the admin site stays closed until it is replaced
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     status: Mapped[str] = mapped_column(String(16), default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

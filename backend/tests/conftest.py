@@ -17,6 +17,7 @@ import pytest  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy.engine import make_url  # noqa: E402
 
+from app.api import auth as auth_api  # noqa: E402
 from app.core import ratelimit  # noqa: E402
 from app.core.db import Base, SessionLocal, engine  # noqa: E402
 from app.core.security import create_token  # noqa: E402
@@ -51,6 +52,8 @@ async def fresh_db():
     rules._cache = None                      # in-process caches must not leak between tests
     settings_store._cache.clear()
     ratelimit.reset()
+    auth_api._by_ip.clear()                  # sign-up and sign-in limits per address and per e-mail
+    auth_api._fails.clear()
     ranking._cache = None
     ranking.forget_public()
     yield

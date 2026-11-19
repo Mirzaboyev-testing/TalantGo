@@ -135,9 +135,9 @@ function Permissions({ account, catalog, onChange }: {
   );
 }
 
-export function MyAccount({ me }: { me: { name: string; email: string; role: string; permissions: string[]; telegram_linked?: boolean } }) {
-  const [catalog, setCatalog] = useState<AdminPermissionCatalog | null>(null);
-  useEffect(() => { api.admin.permissions().then(setCatalog, () => {}); }, []);
+/** Change this account's password. `forced`: signed in with a temporary password from the owner, which must be
+ * replaced before anything else opens (the server refuses other admin calls until then). */
+export function AdminPasswordForm({ forced = false, onChanged }: { forced?: boolean; onChanged?: () => void }) {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [repeat, setRepeat] = useState("");
@@ -150,10 +150,34 @@ export function MyAccount({ me }: { me: { name: string; email: string; role: str
     try {
       saveToken((await api.adminAuth.changePassword(current, next)).token);
       setDone(true); setCurrent(""); setNext(""); setRepeat("");
+      onChanged?.();
     } catch (e) {
       setError(message(e));
     }
   }
+
+  return (
+    <div className="panel">
+      <h3 style={{ marginTop: 0 }}>{forced ? "Yangi parol qo'ying" : "Parolni o'zgartirish"}</h3>
+      <p className="hint">{forced
+        ? "Siz ilova egasi bergan vaqtinchalik parol bilan kirdingiz. Uni ega ham biladi, shuning uchun admin sayti o'zingizning parolingizni qo'ygandan keyin ochiladi."
+        : "O'zgartirgach, boshqa qurilmalardagi barcha kirishlar yopiladi. Shu oyna ochiq qoladi."}</p>
+      <label>{forced ? "Vaqtinchalik parol" : "Joriy parol"}</label>
+      <input type="password" value={current} autoComplete="current-password" onChange={(e) => setCurrent(e.target.value)} />
+      <label>Yangi parol (kamida 10 belgi)</label>
+      <input type="password" value={next} autoComplete="new-password" onChange={(e) => setNext(e.target.value)} />
+      <label>Yangi parolni takrorlang</label>
+      <input type="password" value={repeat} autoComplete="new-password" onChange={(e) => setRepeat(e.target.value)} />
+      <ErrorText error={error} />
+      {done && <p className="notice">Parol o'zgartirildi.</p>}
+      <button className="btn small" style={{ marginTop: 10 }} disabled={!current || next.length < 10 || !repeat} onClick={save}>Saqlash</button>
+    </div>
+  );
+}
+
+export function MyAccount({ me }: { me: { name: string; email: string; role: string; permissions: string[]; telegram_linked?: boolean } }) {
+  const [catalog, setCatalog] = useState<AdminPermissionCatalog | null>(null);
+  useEffect(() => { api.admin.permissions().then(setCatalog, () => {}); }, []);
 
   return (
     <div className="narrow">
@@ -169,19 +193,7 @@ export function MyAccount({ me }: { me: { name: string; email: string; role: str
           </>
         )}
       </div>
-      <div className="panel">
-        <h3 style={{ marginTop: 0 }}>Parolni o'zgartirish</h3>
-        <p className="hint">O'zgartirgach, boshqa qurilmalardagi barcha kirishlar yopiladi. Shu oyna ochiq qoladi.</p>
-        <label>Joriy parol</label>
-        <input type="password" value={current} autoComplete="current-password" onChange={(e) => setCurrent(e.target.value)} />
-        <label>Yangi parol (kamida 10 belgi)</label>
-        <input type="password" value={next} autoComplete="new-password" onChange={(e) => setNext(e.target.value)} />
-        <label>Yangi parolni takrorlang</label>
-        <input type="password" value={repeat} autoComplete="new-password" onChange={(e) => setRepeat(e.target.value)} />
-        <ErrorText error={error} />
-        {done && <p className="notice">Parol o'zgartirildi.</p>}
-        <button className="btn small" style={{ marginTop: 10 }} disabled={!current || next.length < 10 || !repeat} onClick={save}>Saqlash</button>
-      </div>
+      <AdminPasswordForm />
       <AdminTelegram linked={Boolean(me.telegram_linked)} />
     </div>
   );

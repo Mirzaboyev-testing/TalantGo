@@ -71,6 +71,14 @@ export default function PhoneField({ me, onChanged }: { me: Me; onChanged: (m: M
     }
   }
 
+  async function toggleTelegram(show: boolean) {
+    try {
+      onChanged(await api.updateMe({ show_telegram: show }));
+    } catch (e) {
+      setError(message(e));
+    }
+  }
+
   return (
     <div>
       {me.phone ? (
@@ -102,6 +110,12 @@ export default function PhoneField({ me, onChanged }: { me: Me; onChanged: (m: M
         <label className="row between" style={{ color: "var(--text)", marginTop: 10, cursor: "pointer" }}>
           <span>{t("s.phone.visible")}<div className="hint">{t("s.phone.visible_hint")}</div></span>
           <input type="checkbox" checked={me.show_phone} style={{ width: 22, height: 22, flex: "none" }} onChange={(e) => toggleVisible(e.target.checked)} />
+        </label>
+      )}
+      {me.username && me.account_type === "student" && (
+        <label className="row between" style={{ color: "var(--text)", marginTop: 10, cursor: "pointer" }}>
+          <span>{t("s.tg.visible", { username: me.username })}<div className="hint">{t("s.tg.visible_hint")}</div></span>
+          <input type="checkbox" checked={!!me.show_telegram} style={{ width: 22, height: 22, flex: "none" }} onChange={(e) => toggleTelegram(e.target.checked)} />
         </label>
       )}
     </div>

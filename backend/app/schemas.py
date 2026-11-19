@@ -209,6 +209,7 @@ class MeOut(ORM):
     phone: str
     phone_verified: bool
     show_phone: bool
+    show_telegram: bool = False
     invite_code: str
     invited_count: int
     headline: str
@@ -259,6 +260,7 @@ class MeUpdate(BaseModel):
     open_to_work: bool | None = None
     phone: Phone | None = None
     show_phone: bool | None = None
+    show_telegram: bool | None = None
     work_industries: list[Industry] | None = Field(default=None, max_length=6)
     job_fields: list[JobField] | None = Field(default=None, max_length=5)
     job_title: str | None = Field(default=None, max_length=120)

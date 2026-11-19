@@ -111,7 +111,8 @@ async def password_request(body: ForgotIn, request: Request, session: Session) -
 async def me(actor: AdminActor) -> dict:
     a = actor.account
     return {"id": a.id, "name": a.name, "email": a.email, "role": a.role, "is_owner": actor.is_owner,
-            "permissions": sorted(admin_access.effective(a)), "telegram_linked": a.telegram_id is not None}
+            "permissions": sorted(admin_access.effective(a)), "telegram_linked": a.telegram_id is not None,
+            "must_change_password": a.must_change_password}
 
 
 # --------------------------------------------------------------------------- Telegram for the bell (services/admin_inbox.py)
@@ -150,9 +151,13 @@ async def telegram_unlink(actor: AdminActor, session: Session) -> dict:
 @router.put("/password")
 async def change_password(body: PasswordIn, actor: AdminActor, session: Session) -> dict:
     account = actor.account
-    if not check_password(body.current_password, account.password_hash):
+    # scrypt is slow on purpose: off the event loop, so other requests keep moving
+    if not await asyncio.to_thread(check_password, body.current_password, account.password_hash):
         raise HTTPException(400, "Joriy parol noto'g'ri")
-    account.password_hash = hash_password(body.new_password)
+    if body.new_password == body.current_password:
+        raise HTTPException(400, "Yangi parol eskisidan farq qilsin")
+    account.password_hash = await asyncio.to_thread(hash_password, body.new_password)
+    account.must_change_password = False
     audit(session, actor, "account.password", account.email)
     await session.commit()
     return {"token": issue_token(account)}           # this session continues; all others end

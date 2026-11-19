@@ -62,6 +62,9 @@ async def admin_actor(request: Request, session: Session, authorization: Annotat
     # proxy prefix or root path, so a deployment change cannot silently widen a limited role
     route = request.scope.get("route")
     path = getattr(route, "path", request.url.path)
+    if account.must_change_password and not path.endswith(("/admin-auth/me", "/admin-auth/password")):
+        # a temporary password from the owner: nothing else works until the admin sets their own
+        raise HTTPException(403, "Avval vaqtinchalik parolni almashtiring: «Profilim» bo'limida yangi parol qo'ying")
     check_role(account, request.method, path[path.index("/admin"):] if "/admin" in path else path)
     return Actor(account=account)
 

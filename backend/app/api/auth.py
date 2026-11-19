@@ -163,7 +163,9 @@ class LoginIn(BaseModel):
 
 
 FAILS_ALLOWED, FAIL_WINDOW = 8, 15 * 60       # wrong passwords per email
-IP_LOGINS, IP_REGISTERS, IP_WINDOW = 40, 10, 60 * 60
+# Per IP, an hour. A whole class signs up from one campus Wi-Fi (one NAT address), so these are set for a room
+# full of students, and only wrong passwords count against the IP: right ones from a shared address never block it.
+IP_LOGIN_FAILS, IP_REGISTERS, IP_WINDOW = 60, 60, 60 * 60
 _fails: dict[str, list[float]] = defaultdict(list)
 _by_ip: dict[str, list[float]] = defaultdict(list)
 
@@ -182,12 +184,18 @@ def _check_rate(email: str) -> None:
         raise HTTPException(429, "Juda ko'p noto'g'ri urinish. 15 daqiqadan keyin qayta urinib ko'ring.")
 
 
-def _check_ip(request: Request, limit: int, kind: str) -> None:
-    ip = f"{kind}:{request.client.host if request.client else '-'}"
-    hits = _recent(_by_ip, ip, IP_WINDOW)
+def _ip_key(request: Request, kind: str) -> str:
+    return f"{kind}:{request.client.host if request.client else '-'}"
+
+
+def _check_ip(request: Request, limit: int, kind: str, count: bool = True) -> None:
+    """Raises 429 once `limit` hits happened from this address in the window; `count=False` only checks
+    (the caller records a hit itself, e.g. only for a wrong password)."""
+    hits = _recent(_by_ip, _ip_key(request, kind), IP_WINDOW)
     if len(hits) >= limit:
         raise HTTPException(429, "Juda ko'p urinish. Birozdan keyin qayta urinib ko'ring.")
-    hits.append(time.time())
+    if count:
+        hits.append(time.time())
 
 
 @router.post("/register", response_model=TokenOut, status_code=201)
@@ -211,10 +219,11 @@ async def register(body: RegisterIn, request: Request, session: Session) -> Toke
 @router.post("/login", response_model=TokenOut)
 async def login(body: LoginIn, request: Request, session: Session) -> TokenOut:
     _check_rate(body.email)
-    _check_ip(request, IP_LOGINS, "login")
+    _check_ip(request, IP_LOGIN_FAILS, "login", count=False)
     user = (await session.execute(select(User).where(User.email == body.email))).scalar_one_or_none()
     if user is None or not user.password_hash or not await asyncio.to_thread(check_password, body.password, user.password_hash):
         _fails[body.email].append(time.time())
+        _by_ip[_ip_key(request, "login")].append(time.time())
         raise HTTPException(401, "Email yoki parol noto'g'ri")
     if user.is_blocked:
         raise HTTPException(403, "Hisobingiz bloklangan. Savollar bo'lsa, adminga yozing.")

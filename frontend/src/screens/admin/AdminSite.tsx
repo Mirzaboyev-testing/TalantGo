@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { api, setAdminUnauthorizedHandler, type AdminMe } from "../../api";
 import "./admin.css";
 import { Icon, type IconName } from "../../icons";
-import { Accounts, MyAccount } from "./Accounts";
+import { Accounts, AdminPasswordForm, MyAccount } from "./Accounts";
 import Announcements from "./Announcements";
 import AuthScreen from "./AuthScreen";
 import Dashboard from "./Dashboard";
@@ -104,7 +104,7 @@ export default function AdminSite() {
   }, [loadMe, signOut]);
 
   useEffect(() => {
-    if (!me) return;
+    if (!me || me.must_change_password) return;
     const refresh = () => api.admin.inbox().then((c) => {
       setQueue(c.verifications + c.companies + c.jobs + c.staff);
       setPendingTests(c.tests ?? 0);
@@ -120,6 +120,20 @@ export default function AdminSite() {
 
   if (checking) return <div className="admin-site"><div className="auth-wrap hint">Yuklanmoqda…</div></div>;
   if (!me) return <div className="admin-site"><AuthScreen onSignedIn={loadMe} /></div>;
+  if (me.must_change_password) {
+    return (
+      <div className="admin-site">
+        <div className="auth-wrap">
+          <div className="auth-card">
+            <div className="admin-brand" style={{ justifyContent: "center" }}><BrandLogo size={44} suffix="admin" /></div>
+            <p className="hint" style={{ textAlign: "center" }}>{me.name} · {me.email}</p>
+            <AdminPasswordForm forced onChanged={loadMe} />
+            <button className="btn small ghost" onClick={signOut}>Chiqish</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const can = (permission: string) => me.is_owner || me.permissions.includes(permission);
   const ctx: AdminCtx = { isOwner: me.is_owner, name: me.name, can };

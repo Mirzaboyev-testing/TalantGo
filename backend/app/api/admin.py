@@ -998,6 +998,7 @@ async def reset_password(account_id: int, actor: OwnerActor, session: Session) -
         raise HTTPException(404, "Hisob topilmadi")
     temporary = secrets.token_urlsafe(9)
     account.password_hash = hash_password(temporary)
+    account.must_change_password = True          # the owner knows this one: the admin replaces it on first sign-in
     audit(session, actor, "account.reset", account.email)
     await _close_requests(session, actor, PasswordRequest.admin_account_id == account.id)
     await session.commit()

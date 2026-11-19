@@ -34,7 +34,7 @@ export interface Me {
   student_number: string; skills: string[]; languages: string[]; job_types: JobKind[]; city: string;
   open_to_work: boolean; verification: Verification; verified_by: string; verification_note: string;
   company: Company | null; staff_university: University | null; staff_status: string; staff_position: string;
-  phone: string; phone_verified: boolean; show_phone: boolean; invite_code: string; invited_count: number; headline: string;
+  phone: string; phone_verified: boolean; show_phone: boolean; show_telegram?: boolean; invite_code: string; invited_count: number; headline: string;
   completeness: { percent: number; missing: string[] };
   consent_current: boolean; work_industries: string[]; job_fields: string[]; job_title: string; signup_missing: string[];
   cover_url?: string | null; has_photo_upload?: boolean; portfolio_n?: number;
@@ -899,7 +899,7 @@ export interface AdminPermissionCatalog {
   permissions: { key: string; group: string; label: string }[];
   defaults: Record<string, string[]>;
 }
-export interface AdminMe { id: number; name: string; email: string; role: string; is_owner: boolean; permissions: string[]; telegram_linked?: boolean }
+export interface AdminMe { id: number; name: string; email: string; role: string; is_owner: boolean; permissions: string[]; telegram_linked?: boolean; must_change_password?: boolean }
 export interface AdminApplication {
   id: number; candidate: string; username: string | null; phone: string; university: string | null; job: string;
   kind: JobKind; company: string; status: string; note: string; created_at: string; updated_at: string;

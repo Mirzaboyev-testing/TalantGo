@@ -25,6 +25,7 @@ async def reset_admin_password(email: str) -> int:
             return 1
         temporary = secrets.token_urlsafe(9)
         account.password_hash = hash_password(temporary)           # the token fingerprint changes: old sessions end
+        account.must_change_password = True                        # replaced on the next sign-in
         session.add(AuditLog(actor="server", action="account.reset", target=account.email, details="manage.py"))
         await session.commit()
         print(f"{account.name} ({account.email}, {account.role}) uchun vaqtinchalik parol: {temporary}")

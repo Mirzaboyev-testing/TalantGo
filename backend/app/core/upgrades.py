@@ -201,6 +201,10 @@ STATEMENTS = [
     "ALTER TABLE university_announcements ADD COLUMN IF NOT EXISTS photo_ids integer[] NOT NULL DEFAULT '{}'",
     "ALTER TABLE university_announcements ADD COLUMN IF NOT EXISTS company_recipients integer NOT NULL DEFAULT 0",
     "ALTER TABLE university_announcements ADD COLUMN IF NOT EXISTS status varchar(12) NOT NULL DEFAULT 'published'",
+    # live test fixes (2026-11-19): peers see a Telegram username only with the student's consent;
+    # an admin given a temporary password must replace it before using the admin site
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS show_telegram boolean NOT NULL DEFAULT false",
+    "ALTER TABLE admin_accounts ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false",
 ]
 
 
