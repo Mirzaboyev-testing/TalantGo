@@ -25,8 +25,8 @@ export default function NotificationSettings({ me, onChanged, className = "card"
     finally { setBusy(false); }
   }
   const off = !me.has_telegram || !prefs.telegram;
-  const row = (label: string, hint: string, on: boolean, change: (v: boolean) => void, disabled = false) => (
-    <label className="st-switch-row">
+  const row = (key: string, label: string, hint: string, on: boolean, change: (v: boolean) => void, disabled = false) => (
+    <label key={key} className="st-switch-row">
       <span><b>{label}</b><small>{hint}</small></span>
       <input type="checkbox" className="st-switch" checked={on} disabled={busy || disabled} onChange={(e) => change(e.target.checked)} />
     </label>
@@ -41,10 +41,10 @@ export default function NotificationSettings({ me, onChanged, className = "card"
           {t("ns.blocked")} <a href={BOT_URL} target="_blank" rel="noreferrer">{t("bot.open")}</a>
         </p>
       )}
-      {row(t("ns.telegram"), t("ns.telegram_hint"), me.has_telegram && prefs.telegram,
+      {row("telegram", t("ns.telegram"), t("ns.telegram_hint"), me.has_telegram && prefs.telegram,
            (v) => save({ telegram: v, muted: prefs.muted }), !me.has_telegram)}
       {(FOR[me.account_type] ?? FOR.student).map((c) => row(
-        t(`ns.cat.${c}` as MsgKey), t(`ns.cat.${c}_hint` as MsgKey), !off && !prefs.muted.includes(c),
+        c, t(`ns.cat.${c}` as MsgKey), t(`ns.cat.${c}_hint` as MsgKey), !off && !prefs.muted.includes(c),
         (v) => save({ telegram: prefs.telegram, muted: v ? prefs.muted.filter((x) => x !== c) : [...prefs.muted, c] }), off))}
       <p className="hint" style={{ marginBottom: 0 }}>{t("ns.always")}</p>
     </div>
