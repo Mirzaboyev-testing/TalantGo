@@ -253,7 +253,7 @@ export const uz = {
   "login.points.university.2": "Talabalarni tasdiqlash va ro'yxatni CSV faylga yuklash",
   "login.points.university.3": "Korxonalar bilan hamkorlik va ochiq reyting",
   "login.university_hint": "Universitet karyera markazi xodimlari uchun. Ro'yxatdan o'tgach, universitet va lavozimingizni tanlaysiz, ilova egasi tasdiqlaydi.",
-  "login.student_hint": "Talabalar uchun: yo'nalish tanlang, tasdiqlangan portfolio yig'ing va amaliyot toping.",
+  "login.student_hint": "Talabalar uchun: korxona topshiriqlarini bajaring, tasdiqlangan portfolio yig'ing va amaliyot toping.",
   "industry.it": "IT / dasturlash",
   "industry.fintech": "Fintex",
   "industry.bank": "Bank",

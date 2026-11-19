@@ -255,7 +255,7 @@ export const en: Record<MsgKey, string> = {
   "login.points.university.2": "Verify students and export the list to CSV",
   "login.points.university.3": "Partnerships with companies and an open ranking",
   "login.university_hint": "For university career centre staff. After signing up you choose your university and position, and the platform owner confirms.",
-  "login.student_hint": "For students: choose a track, build a verified portfolio and find an internship.",
+  "login.student_hint": "For students: do company tasks, build a verified portfolio and find an internship.",
   "industry.it": "IT / software",
   "industry.fintech": "Fintech",
   "industry.bank": "Banking",

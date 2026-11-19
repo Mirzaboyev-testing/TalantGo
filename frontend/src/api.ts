@@ -500,6 +500,12 @@ export const api = {
   resetLinkInfo: (token: string) => request<ResetLinkInfo>("GET", `/auth/password/reset/${encodeURIComponent(token)}`),
   resetPassword: (b: { password: string; token?: string; email?: string; code?: string }) =>
     request<{ token: string }>("POST", "/auth/password/reset", b),
+  // the same reset from inside a panel (ChangePassword): the new password ends every session, so this one takes the fresh token
+  resetPasswordHere: async (b: { password: string; email: string; code: string }) => {
+    const r = await request<{ token: string }>("POST", "/auth/password/reset", b);
+    replaceUserToken(r.token);
+    return r;
+  },
   passwordHelp: (b: { email: string; full_name: string; phone: string; note: string }) =>
     request<{ ok: boolean }>("POST", "/auth/password/help", b),
   telegramLinkStart: () => request<BotLink>("POST", "/me/telegram-link"),

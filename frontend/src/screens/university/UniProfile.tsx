@@ -7,6 +7,7 @@ import { ask, haptic } from "../../tg";
 import { Avatar, ErrorText, message, toast } from "../../ui";
 import { COOPERATION, uapi, type StaffRow, type UniProfile as Profile } from "./uapi";
 import type { Go } from "./UniversityApp";
+import ChangePassword from "../ChangePassword";
 import LoginMethods from "../LoginMethods";
 import NotificationSettings from "../NotificationSettings";
 import { posLabel } from "./UniPending";
@@ -30,8 +31,14 @@ export default function UniProfile({ me, sub, go, onChanged, onMe }: { me: Me; s
       {view === "profile" && <ProfileForm />}
       {view === "team" && <Team onChanged={() => { onChanged(); setTeamCount(0); }} />}
       {view === "invite" && <Invite me={me} />}
-      {view === "login" && <div style={{ maxWidth: 640 }}><LoginMethods me={me} onChanged={onMe} />
-        <NotificationSettings me={me} onChanged={onMe} /></div>}
+      {/* the password (change it with the current one, or a bot code if forgotten), sign-in methods, bot notices */}
+      {view === "login" && (
+        <div style={{ maxWidth: 640, display: "flex", flexDirection: "column", gap: 14 }}>
+          <ChangePassword me={me} onChanged={onMe} />
+          <LoginMethods me={me} onChanged={onMe} withPassword={false} />
+          <NotificationSettings me={me} onChanged={onMe} />
+        </div>
+      )}
     </>
   );
 }

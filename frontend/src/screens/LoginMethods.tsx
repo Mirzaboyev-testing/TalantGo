@@ -10,7 +10,11 @@ import { BotWaiting, useBotLink } from "./BotLink";
  * "Kirish usullari": one account for the bot and the website.
  * A Telegram account adds an email and password (to sign in on a computer); a website account ties Telegram.
  */
-export default function LoginMethods({ me, onChanged }: { me: Me; onChanged: (m: Me) => void }) {
+export default function LoginMethods({ me, onChanged, withPassword = true }: {
+  me: Me; onChanged: (m: Me) => void;
+  /** false where a separate «Parol va xavfsizlik» card (ChangePassword) handles the email and password */
+  withPassword?: boolean;
+}) {
   useLang();
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ email: me.email ?? "", password: "", current: "" });
@@ -71,6 +75,7 @@ export default function LoginMethods({ me, onChanged }: { me: Me; onChanged: (m:
       {link.link && link.state !== "idle" && <BotWaiting link={link.link} state={link.state} onCancel={link.stop} onPin={link.submitPin} />}
       <ErrorText error={link.error} />
 
+      {withPassword && <>
       <div className="row between" style={{ marginTop: 12 }}>
         <span>{t("s.lm.email_pass")}{me.email ? `: ${me.email}` : ""}</span>
         <button className="btn small ghost" onClick={() => setOpen(!open)}>
@@ -100,6 +105,7 @@ export default function LoginMethods({ me, onChanged }: { me: Me; onChanged: (m:
           <button className="btn" type="submit" style={{ marginTop: 12 }} disabled={busy}>{busy ? t("s.common.saving") : t("common.save")}</button>
         </form>
       )}
+      </>}
     </div>
   );
 }

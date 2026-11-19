@@ -489,3 +489,17 @@
 .st-sheet-fields { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
 .st-sheet-fields .co-tag.match { background: var(--brand-soft); color: var(--brand-strong); border-color: #b9dcc5; }
 .st-jobcard .company-mark { object-fit: cover; }
+
+/* ------------------------------------------------------------------ password and security (ChangePassword.tsx) */
+.cp-lead { margin-top: 0; }
+.cp-account { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--hint); margin-bottom: 4px; overflow-wrap: anywhere; }
+.cp-secret { position: relative; }
+.cp-secret input { padding-right: 46px; }
+.cp-eye { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 38px; height: 38px; border: 0; background: none;
+          color: var(--hint); border-radius: 10px; display: grid; place-items: center; cursor: pointer; }
+.cp-eye:hover { color: var(--text); background: var(--bg2); }
+.cp-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-top: 14px; }
+.cp-actions .btn { width: auto; }
+.cp-sub { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
+.st-contact-pass { margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+@media (max-width: 520px) { .cp-actions .btn { width: 100%; } }

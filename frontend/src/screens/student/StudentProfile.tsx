@@ -11,6 +11,7 @@ import { ErrorText, initials, isFullName, message, nameTone, Sheet, toast } from
 import { missingLabel } from "../StudentHome";
 import Combo, { uniItems } from "./Combo";
 import ImageCropper from "./ImageCropper";
+import ChangePassword from "../ChangePassword";
 import FacultyPicker from "./FacultyPicker";
 import { UserPosts } from "./Feed";
 import { ExperienceEditor, ItemEditor, TagInput } from "./PortfolioEditors";
@@ -243,7 +244,7 @@ export default function StudentProfile({ me, onSaved }: { me: Me; onSaved: (m: M
             else if (k === "headline") setIntro(true);
             else openSection(SECTION_OF[k] ?? "about");
           }} />
-          <Contact me={me} />
+          <Contact me={me} onSaved={onSaved} />
           <Verification me={me} onSaved={onSaved} />
           <Visibility me={me} onSaved={onSaved} />
         </div>
@@ -670,9 +671,10 @@ function IntroEditor({ me, catalog, onSaved, onClose }: { me: Me; catalog: Catal
   );
 }
 
-/** Phone and Telegram as companies will see them after the student applies. */
-function Contact({ me }: { me: Me }) {
+/** Phone and Telegram as companies will see them after the student applies, and the password (2026-11-19). */
+function Contact({ me, onSaved }: { me: Me; onSaved: (m: Me) => void }) {
   useLang();
+  const [password, setPassword] = useState(false);
   return (
     <div className="co-card st-contact">
       <div className="co-card-head"><b>{t("st.pf2.contact")}</b></div>
@@ -680,6 +682,16 @@ function Contact({ me }: { me: Me }) {
         <button className="link-btn" onClick={() => navigate("/talaba/sozlamalar")}>{t("st.pf.edit")}</button></div>
       {me.username && <div className="st-contact-row"><Icon name="send" size={16} /><span className="grow">@{me.username}</span></div>}
       <p className="hint" style={{ margin: "8px 0 0" }}>{t("st.pf2.contact_hint")}</p>
+      <div className="st-contact-row st-contact-pass">
+        <Icon name="lock" size={16} /><span className="grow">{me.has_password ? t("cp.title") : t("cp.set")}</span>
+        <button className="btn small ghost" style={{ width: "auto" }} onClick={() => setPassword(true)}>{me.has_password ? t("cp.open") : t("cp.set")}</button>
+      </div>
+      {password && (
+        <Sheet onClose={() => setPassword(false)}>
+          <h2 style={{ margin: "0 0 6px" }}>{t("cp.title")}</h2>
+          <ChangePassword me={me} onChanged={(m) => { onSaved(m); }} bare />
+        </Sheet>
+      )}
     </div>
   );
 }

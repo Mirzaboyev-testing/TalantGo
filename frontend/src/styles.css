@@ -1022,6 +1022,10 @@ button.co-stat:hover { border-color: var(--tone); transform: translateY(-2px); b
 .co-form-title p { margin: 4px 0 0; color: var(--hint); font-size: 14px; }
 .co-form-icon { width: 46px; height: 46px; border-radius: 14px; background: var(--brand); color: #fff; display: grid; place-items: center; flex: none; box-shadow: 0 12px 22px -12px rgba(22,163,74,.8); }
 .co-block { margin-top: 16px; }
+.co-pass-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding-top: 14px; border-top: 1px solid var(--line);
+               color: var(--hint); font-size: 14px; }
+.co-pass-row .grow { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+.co-pass-row .btn { width: auto; }
 .co-choice-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 @media (min-width: 640px) { .co-choice-row { grid-template-columns: 1fr 1fr; } }
 .co-choice { position: relative; display: flex; align-items: center; gap: 12px; text-align: left; border: 1.5px solid var(--line); background: var(--bg); border-radius: 14px; padding: 14px; cursor: pointer; font: inherit; color: var(--text); transition: border-color .15s, background .15s; }

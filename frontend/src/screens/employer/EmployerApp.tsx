@@ -70,6 +70,7 @@ export default function EmployerApp({ me, onChanged, onLogout }: { me: Me; onCha
   const company = me.company!;
   return (
     <Shell tabs={tabs(counters, chats)} active={tab} onChange={(t) => { setAttempt(null); setTab(t); }} onLogout={onLogout} wide
+           onUser={() => { setAttempt(null); setTab("profile"); }}
            user={{ name: company.name, photo: company.logo_url, subtitle: me.full_name, verified: true, square: true }}>
         {tab === "home" && <CompanyHome me={me} counters={counters} onNewJob={() => navigate("/korxona/vakansiyalar?yangi=1")} />}
         {tab === "candidates" && <Candidates onChanged={refresh} />}

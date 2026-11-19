@@ -5,7 +5,8 @@ import { t, useLang, type MsgKey } from "../../i18n";
 import { Icon, type IconName } from "../../icons";
 import { navigate } from "../../router";
 import { ask, haptic } from "../../tg";
-import { ErrorText, isFullName, message, toast } from "../../ui";
+import { ErrorText, isFullName, message, Sheet, toast } from "../../ui";
+import ChangePassword from "../ChangePassword";
 import LoginMethods from "../LoginMethods";
 import NotificationSettings from "../NotificationSettings";
 import PhoneField from "../PhoneField";
@@ -28,6 +29,7 @@ export default function CompanyProfile({ me, onChanged }: { me: Me; onChanged: (
   useLang();
   const c = me.company!;
   const [section, setSection] = useState<Section>("company");
+  const [password, setPassword] = useState(false);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [files, setFiles] = useState<Files>({ registration: null, authority: null, logo: null });
@@ -207,6 +209,12 @@ export default function CompanyProfile({ me, onChanged }: { me: Me; onChanged: (
             <label style={{ marginTop: 0 }}>{t("p.signup.phone")}<Req /></label>
             <PhoneField me={me} onChanged={onChanged} />
           </div>
+          {/* the person signs in with their own e-mail and password: changing it is one tap away (2026-11-19) */}
+          <div className="co-block co-pass-row">
+            <Icon name="lock" size={16} />
+            <span className="grow">{me.has_password && me.email ? t("cp.login_email", { email: me.email }) : t("cp.hint_new")}</span>
+            <button type="button" className="btn small ghost" onClick={() => setPassword(true)}>{me.has_password ? t("cp.open") : t("cp.set")}</button>
+          </div>
           <div className="co-block">
             <label style={{ marginTop: 0 }}>{t("co.su.role")}</label>
             <div className="co-choice-row">
@@ -265,8 +273,15 @@ export default function CompanyProfile({ me, onChanged }: { me: Me; onChanged: (
         </div>
       )}
 
-      {section === "login" && <div className="co-narrow-block"><LoginMethods me={me} onChanged={onChanged} />
+      {section === "login" && <div className="co-narrow-block"><ChangePassword me={me} onChanged={onChanged} />
+        <LoginMethods me={me} onChanged={onChanged} withPassword={false} />
         <NotificationSettings me={me} onChanged={onChanged} /></div>}
+      {password && (
+        <Sheet onClose={() => setPassword(false)}>
+          <h2 style={{ margin: "0 0 6px" }}>{t("cp.title")}</h2>
+          <ChangePassword me={me} onChanged={onChanged} bare />
+        </Sheet>
+      )}
     </div>
   );
 }

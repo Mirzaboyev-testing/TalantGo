@@ -6,6 +6,7 @@ import { insideTelegram, openAfter, openLink } from "../../tg";
 import { message, toast } from "../../ui";
 import { PageHead } from "../employer/kit";
 import InviteCard from "../InviteCard";
+import ChangePassword from "../ChangePassword";
 import LoginMethods from "../LoginMethods";
 import NotificationSettings from "../NotificationSettings";
 import PhoneField from "../PhoneField";
@@ -33,7 +34,8 @@ export default function StudentSettings({ me, onSaved, onLogout }: { me: Me; onS
             <div className="co-card-head"><b className="row" style={{ gap: 8 }}><Icon name="phone" size={18} />{t("s.profile.phone")}</b></div>
             <PhoneField me={me} onChanged={onSaved} />
           </div>
-          <LoginMethods me={me} onChanged={onSaved} />
+          <ChangePassword me={me} onChanged={onSaved} />
+          <LoginMethods me={me} onChanged={onSaved} withPassword={false} />
           <div className="co-card">
             <div className="co-card-head"><b className="row" style={{ gap: 8 }}><Icon name="globe" size={18} />{t("shell.language")}</b></div>
             <div className="st-seg">
