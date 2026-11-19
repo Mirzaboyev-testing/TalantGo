@@ -21,8 +21,8 @@ const ROUTES: Record<Tab, string> = {
   events: "tadbirlar", messages: "xabarlar", profile: "profil",
 };
 // older links keep working: the verification queue now lives in Students, groups in Messages
-const ALIASES: Record<string, Tab> = { tasdiqlash: "students", guruhlar: "messages", hisobotlar: "employment" };
-const ALIAS_SUB: Record<string, string> = { tasdiqlash: "queue", guruhlar: "groups", hisobotlar: "reports" };
+const ALIASES: Record<string, Tab> = { tasdiqlash: "students", guruhlar: "messages", hisobotlar: "employment", lenta: "messages", postlar: "messages" };
+const ALIAS_SUB: Record<string, string> = { tasdiqlash: "queue", guruhlar: "groups", hisobotlar: "reports", lenta: "feed", postlar: "feed" };
 
 /** Opens a section, optionally on one of its tabs (?tab=...). */
 export type Go = (tab: Tab, sub?: string) => void;
@@ -67,7 +67,7 @@ export default function UniversityApp({ me, onMe, onLogout }: { me: Me; onMe: (m
         {tab === "partners" && <UniPartners sub={sub} go={go} onChanged={refreshCounts} />}
         {tab === "opportunities" && <UniOpportunities />}
         {tab === "events" && <UniEvents sub={sub} go={go} />}
-        {tab === "messages" && <UniMessages sub={sub} go={go} />}
+        {tab === "messages" && <UniMessages me={me} sub={sub} go={go} />}
         {tab === "profile" && <UniProfile me={me} sub={sub} go={go} onChanged={refreshCounts} onMe={onMe} />}
       </div>
     </Shell>

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, type NewsCategory, type NewsItem, type SubmittedFile } from "../../api";
+import { api, type Me, type NewsCategory, type NewsItem, type SubmittedFile } from "../../api";
 import { t, useLang } from "../../i18n";
 import { courseText } from "../../labels";
 import { ask, haptic } from "../../tg";
 import { ErrorText, message, toast } from "../../ui";
 import Groups from "../Groups";
+import Feed from "../student/Feed";
 import { NEWS_CATEGORIES, NewsCard, categoryLabel } from "../NewsCard";
 import { uapi, type Announcement, type Audience, type Channel, type Facets } from "./uapi";
 import type { Go } from "./UniversityApp";
@@ -13,16 +14,20 @@ import { Empty, PageHead, Panel, Tabs, Toggle, UIcon } from "./ukit";
 const TEMPLATES = ["career_day", "vacancy", "profile", "verify"] as const;
 const MAX_PHOTOS = 6;
 
-/** Messages to the university's own students (by faculty, course, group...) and the group chats. */
-export default function UniMessages({ sub, go }: { sub: string; go: Go }) {
+/** Announcements (with photos) to students, partner companies and the public page; the posts feed, where the
+ *  university posts as itself next to its students (student panel's Feed); and the group chats. */
+export default function UniMessages({ me, sub, go }: { me: Me; sub: string; go: Go }) {
   useLang();
-  const view = sub === "groups" ? "groups" : "news";
+  const view = sub === "groups" ? "groups" : sub === "feed" ? "feed" : "news";
   return (
     <>
       <PageHead title={t("u.nav.messages")} sub={t("u.msg.sub")} />
-      <Tabs value={view} onChange={(v) => go("messages", v === "groups" ? "groups" : undefined)}
-            items={[{ id: "news", label: t("u.msg.tab_news") }, { id: "groups", label: t("u.msg.tab_groups") }]} />
-      {view === "news" ? <News /> : <div style={{ maxWidth: 820 }}><Groups /></div>}
+      <Tabs value={view} onChange={(v) => go("messages", v === "news" ? undefined : v)}
+            items={[{ id: "news", label: t("u.msg.tab_news") }, { id: "feed", label: t("u.msg.tab_feed") },
+                    { id: "groups", label: t("u.msg.tab_groups") }]} />
+      {view === "news" && <News />}
+      {view === "feed" && <div style={{ maxWidth: 820 }}><Feed me={me} /></div>}
+      {view === "groups" && <div style={{ maxWidth: 820 }}><Groups /></div>}
     </>
   );
 }

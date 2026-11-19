@@ -496,6 +496,7 @@ export const en = {
   // messages
   "u.msg.sub": "Announcements with photos for students, partner companies and your university's public page. To students: everyone, or by faculty, year or group.",
   "u.msg.tab_news": "Announcements",
+  "u.msg.tab_feed": "Posts",
   "u.msg.tab_groups": "Groups",
   "u.msg.new": "New announcement",
   "u.msg.title": "Title",

@@ -500,6 +500,7 @@ const uz = {
   // messages
   "u.msg.sub": "Talabalar, hamkor korxonalar va universitetingizning ochiq sahifasi uchun rasmli e'lonlar. Talabalarga hammaga yoki fakultet, kurs, guruh bo'yicha yuboriladi.",
   "u.msg.tab_news": "E'lonlar",
+  "u.msg.tab_feed": "Postlar",
   "u.msg.tab_groups": "Guruhlar",
   "u.msg.new": "Yangi e'lon",
   "u.msg.title": "Sarlavha",
