@@ -118,3 +118,28 @@ async def test_public_lists_are_kept_for_a_few_seconds(client, monkeypatch):
     assert r.status_code == 200 and "items" in r.json()
     assert (await client.get(f"{API}/public/companies", params={"q": "yo'q-bunday"})).json()["total"] == 0
     shortcache.clear()
+
+
+async def test_a_company_without_partners_sees_the_universities_list(client, make_user):
+    """The live test: "Kutilmagan xato" on Universitetlar for every company with no partner yet ("ORDER BY false")."""
+    hr = await approved_employer(client, make_user)
+    r = await client.get(f"{API}/employer/universities", headers=hr["headers"])
+    assert r.status_code == 200 and len(r.json()) > 0
+    r = await client.get(f"{API}/employer/universities", params={"q": "TDIU"}, headers=hr["headers"])
+    assert r.status_code == 200 and all(u["partnership"] is None for u in r.json())
+
+
+async def test_an_unexpected_error_answers_with_a_plain_message(monkeypatch):
+    from httpx import ASGITransport, AsyncClient
+
+    from app.api import public
+    from app.main import app
+    from tests.test_career import uni_id
+
+    async def broken(*_args, **_kwargs):
+        raise RuntimeError("test: a bug in the statistics")
+    monkeypatch.setattr(public, "university_stats", broken)
+    async with AsyncClient(transport=ASGITransport(app=app, raise_app_exceptions=False), base_url="http://test") as c:
+        r = await c.get(f"{API}/public/universities/{await uni_id('TDIU')}")
+    assert r.status_code == 500
+    assert "Serverda xatolik" in r.json()["detail"]

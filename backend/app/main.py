@@ -3,8 +3,8 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import (admin, admin_auth, assistant, auth, challenges, chat, company_tasks, company_tests, employer, groups, jobs, learning,
@@ -41,6 +41,16 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title=f"{BRAND} API", version="0.1.0", lifespan=lifespan,
               docs_url="/api/docs" if settings.app_env == "dev" else None, openapi_url="/api/openapi.json")
+
+
+@app.exception_handler(Exception)
+async def unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+    """A bug answers in JSON with a plain message instead of a bare "Internal Server Error", so the screens say
+    what happened rather than "Kutilmagan xato". The traceback is still logged (uvicorn logs the re-raised error)."""
+    logging.getLogger("careerup.errors").error("500 on %s %s: %r", request.method, request.url.path, exc)
+    return JSONResponse(status_code=500, content={
+        "detail": "Serverda xatolik yuz berdi. Bir daqiqadan keyin qayta urinib ko'ring; takrorlansa, adminga yozing."})
+
 
 for router in (auth.router, admin_auth.router, public.router, people.router, notifications.router, learning.router, groups.router,
                challenges.router, work.router, assistant.router, jobs.router, employer.router, company_tasks.router,

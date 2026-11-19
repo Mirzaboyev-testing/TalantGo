@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import false, func, select
+from sqlalchemy import func, select
 
 from ..models import (Application, ApplicationEvent, Challenge, ChallengeEntry, Company, ContactRequest, EmploymentOutcome,
                       Job, JobRecommendation, Partnership, Role, Status, Submission, SubmissionFile, Track, University, User)
@@ -672,9 +672,13 @@ async def universities_for_company(user: ApprovedEmployer, session: Session,
         query = query.where(University.name.ilike(like) | University.short_name.ilike(like))
     mine = {p.university_id: p for p in (await session.execute(select(Partnership).where(
         Partnership.company_id == user.company_id))).scalars()}
-    # ~200 universities since 2026-11-17: the company's own partners always come first, then by verified students
-    partner_first = University.id.in_(list(mine)) if mine else false()
-    rows = (await session.execute(query.order_by(partner_first.desc(), students.desc(), University.name).limit(100))).all()
+    # ~200 universities since 2026-11-17: the company's own partners always come first, then by verified students.
+    # Only when it has any: "ORDER BY false" is an error in PostgreSQL, and that broke this page with a 500 for
+    # every company without a partner yet (found in the 2026-11-19 live test).
+    order = [students.desc(), University.name]
+    if mine:
+        order.insert(0, University.id.in_(list(mine)).desc())
+    rows = (await session.execute(query.order_by(*order).limit(100))).all()
     return [{"id": u.id, "name": u.name, "short_name": u.short_name, "city": u.city, "students": n,
              "logo_url": uni_news.university_logo_url(u), "cooperation": u.cooperation,
              "partnership": partnerships.out(mine[u.id]) if u.id in mine else None} for u, n in rows]

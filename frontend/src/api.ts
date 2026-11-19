@@ -396,6 +396,16 @@ function describe(detail: unknown): string {
   return "Kutilmagan xato";
 }
 
+/** When the answer carries no message of its own (a bare 500, or the proxy's empty 502 while the app restarts). */
+function byStatus(status: number): string {
+  if (status === 502 || status === 503 || status === 504) return "Server hozir yangilanmoqda yoki band. Bir daqiqadan keyin qayta urinib ko'ring.";
+  if (status >= 500) return "Serverda xatolik yuz berdi. Bir daqiqadan keyin qayta urinib ko'ring; takrorlansa, adminga yozing.";
+  if (status === 429) return "Juda ko'p urinish. Birozdan keyin qayta urinib ko'ring.";
+  if (status === 413) return "Fayl juda katta";
+  if (status === 404) return "Topilmadi: sahifani yangilab, qayta urinib ko'ring.";
+  return "Kutilmagan xato";
+}
+
 export async function request<T>(method: string, path: string, body?: unknown, admin = false): Promise<T> {
   // the admin API accepts the owner's password session or an admin's own Telegram session
   const token = admin ? adminToken || userToken : userToken;
@@ -414,7 +424,7 @@ export async function request<T>(method: string, path: string, body?: unknown, a
   const data = text && resp.headers.get("content-type")?.includes("json") ? JSON.parse(text) : null;
   if (resp.status === 401 && admin) onAdminUnauthorized();
   if (resp.status === 401 && !admin && token && !path.startsWith("/auth/")) onUserUnauthorized();
-  if (!resp.ok) throw new ApiError(resp.status, describe(data?.detail));
+  if (!resp.ok) throw new ApiError(resp.status, data?.detail !== undefined ? describe(data.detail) : byStatus(resp.status));
   return data as T;
 }
 
@@ -429,7 +439,7 @@ async function uploadFile(file: File): Promise<SubmittedFile> {
     throw new ApiError(0, "Internet aloqasi yo'q");
   }
   const data = resp.headers.get("content-type")?.includes("json") ? await resp.json() : null;
-  if (!resp.ok) throw new ApiError(resp.status, resp.status === 413 ? "Fayl juda katta" : describe(data?.detail));
+  if (!resp.ok) throw new ApiError(resp.status, data?.detail !== undefined ? describe(data.detail) : byStatus(resp.status));
   return data as SubmittedFile;
 }
 
@@ -445,7 +455,8 @@ async function uploadSiteMedia(file: File): Promise<{ id: number; url: string }>
   }
   const data = resp.headers.get("content-type")?.includes("json") ? await resp.json() : null;
   if (resp.status === 401) onAdminUnauthorized();
-  if (!resp.ok) throw new ApiError(resp.status, resp.status === 413 ? "Rasm juda katta" : describe(data?.detail));
+  if (!resp.ok) throw new ApiError(resp.status, resp.status === 413 ? "Rasm juda katta"
+    : data?.detail !== undefined ? describe(data.detail) : byStatus(resp.status));
   return data as { id: number; url: string };
 }
 

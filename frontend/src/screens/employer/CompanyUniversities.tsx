@@ -30,7 +30,8 @@ export default function CompanyUniversities() {
   useEffect(() => { api.employer.universityNews().then(setNews, () => setNews([])); }, []);
   const [tab, setTab] = useState<UniTab>(search.tab === "requests" ? "requests" : search.tab === "partners" ? "partners" : "all");
   const [error, setError] = useState("");
-  const load = useCallback(() => api.employer.universities(q.trim()).then(setRows, (e) => setError(message(e))), [q]);
+  const load = useCallback(() => api.employer.universities(q.trim())
+    .then((list) => { setRows(list); setError(""); }, (e) => setError(message(e))), [q]);
   useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (open) return <UniversityDetail id={open} onBack={() => { setOpen(null); if (search.u) navigate("/korxona/universitetlar", { replace: true }); void load(); }} />;
