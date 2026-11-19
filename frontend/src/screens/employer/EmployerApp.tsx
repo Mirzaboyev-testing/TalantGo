@@ -20,12 +20,13 @@ import CompanyProfile from "./CompanyProfile";
 import { fieldLabel } from "../student/StudentSignup";
 import DirectChat from "../student/DirectChat";
 import CompanyEvents from "./CompanyEvents";
+import Feed from "../student/Feed";
 import { formatDateTime, t, useLang } from "../../i18n";
 import { statusLabel } from "../../pipeline";
 import { ApplicantCard, CardBody } from "./ApplicantCard";
 import { CompanyMark, daysLeft, EmptyState, PageHead, Tabs } from "./kit";
 
-type Tab = "home" | "candidates" | "jobs" | "students" | "messages" | "tasks" | "events" | "universities" | "tests" | "groups" | "profile";
+type Tab = "home" | "candidates" | "jobs" | "students" | "messages" | "tasks" | "events" | "feed" | "universities" | "tests" | "groups" | "profile";
 const tabs = (n: EmployerCounters | null, chats = 0): ShellTab<Tab>[] => [
   { id: "home", icon: "home", label: t("nav.company.home"), group: t("co.nav.main"), badge: n?.outcomes || undefined },
   { id: "candidates", icon: "inbox", label: t("nav.company.candidates"), group: t("co.nav.hiring"), badge: n?.new_applications || undefined },
@@ -35,13 +36,14 @@ const tabs = (n: EmployerCounters | null, chats = 0): ShellTab<Tab>[] => [
   { id: "tasks", icon: "flag", label: t("nav.company.tasks"), group: t("co.nav.talent"), badge: n?.to_review || undefined },
   { id: "tests", icon: "check", label: t("nav.company.tests"), group: t("co.nav.talent"), badge: n?.to_grade || undefined },
   { id: "events", icon: "calendar", label: t("co.ev.nav"), group: t("co.nav.talent") },
+  { id: "feed", icon: "megaphone", label: t("co.feed.nav"), group: t("co.nav.talent") },
   { id: "universities", icon: "school", label: t("nav.company.universities"), group: t("co.nav.network"), badge: n?.partnerships_in || undefined },
   { id: "groups", icon: "chat", label: t("nav.company.groups"), group: t("co.nav.network") },
   { id: "profile", icon: "building", label: t("nav.company.profile"), group: t("co.nav.company") },
 ];
 // /korxona/<segment>
 const ROUTES: Record<Tab, string> = {
-  home: "", candidates: "nomzodlar", jobs: "vakansiyalar", students: "talabalar", messages: "xabarlar", tasks: "vazifalar", events: "tadbirlar",
+  home: "", candidates: "nomzodlar", jobs: "vakansiyalar", students: "talabalar", messages: "xabarlar", tasks: "vazifalar", events: "tadbirlar", feed: "lenta",
   universities: "universitetlar", tests: "testlar",
   groups: "guruhlar", profile: "profil",
 };
@@ -73,6 +75,7 @@ export default function EmployerApp({ me, onChanged, onLogout }: { me: Me; onCha
         {tab === "tasks" && <CompanyTasks />}
         {tab === "messages" && <DirectChat side="company" onUnread={refresh} />}
         {tab === "events" && <CompanyEvents />}
+        {tab === "feed" && <div className="co-page co-narrow"><Feed me={me} /></div>}
         {tab === "universities" && <CompanyUniversities />}
         {tab === "students" && (
           <div className="co-page">
