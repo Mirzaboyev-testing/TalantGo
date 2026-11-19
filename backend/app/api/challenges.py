@@ -384,6 +384,7 @@ async def enter(challenge_id: int, body: EntryIn, user: CurrentUser, session: Se
     files = await pf.claim(session, user, body.file_ids, pf.ATTACH_TYPES | pf.WORK_TYPES, "Fayl", pf.WORK_EXTS)
     if len(body.proof_url) < 10 and not files:
         raise HTTPException(422, "Ish havolasini qo'shing yoki kamida bitta fayl yuklang")
+    first = entry is None
     if entry is None:
         entry = ChallengeEntry(challenge_id=c.id, user_id=user.id, proof_url=body.proof_url, note=body.note.strip(),
                                file_ids=[f.id for f in files])
@@ -402,4 +403,9 @@ async def enter(challenge_id: int, body: EntryIn, user: CurrentUser, session: Se
         await inbox.push(session, await company_staff_ids(session, c.company_id), "task_resubmitted",
                          f"«{c.title}»: {user.full_name} ishini tuzatib qayta yubordi.", link="/korxona/vazifalar",
                          params={"task": c.title, "student": user.full_name})
+    elif first and c.company_id:          # new entries of one task collapse into one notice until the company looks
+        await inbox.push(session, await company_staff_ids(session, c.company_id), "task_entry_new",
+                         f"«{c.title}»: yangi ish keldi ({user.full_name}).", link="/korxona/vazifalar",
+                         params={"task": c.title, "student": user.full_name},
+                         group=f"task_entries:{c.id}", quiet_minutes=120, many=" Jami {count} ta yangi ish.")
     return out

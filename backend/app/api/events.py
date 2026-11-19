@@ -9,12 +9,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 
 from ..core import ratelimit
-from ..models import Company, EventRegistration, UniversityEvent, User
+from ..models import (Application, Challenge, ChallengeEntry, Company, Conversation, EventRegistration, Job, Partnership,
+                      UniversityEvent, User)
 from ..services import inbox
 from ..services.files import logo_url
 from .deps import CurrentUser, Session
 from .employer import ApprovedEmployer
-from .uni_comms import Audience, EventIn, _counts, _event_out
+from .uni_comms import TASHKENT, Audience, EventIn, _counts, _event_out
 
 router = APIRouter(tags=["events"])
 
@@ -123,7 +124,25 @@ async def create_company_event(body: CompanyEventIn, user: ApprovedEmployer, ses
     session.add(e)
     await session.commit()
     await session.refresh(e)
+    if e.starts_at > datetime.now(UTC):
+        when = e.starts_at.astimezone(TASHKENT).strftime("%d.%m.%Y %H:%M")
+        await inbox.push(session, await company_circle(session, user.company_id), "company_event",
+                         f"{user.company.name}: «{e.title}» ({when}). Tadbirlar bo'limida ro'yxatdan o'ting.",
+                         link="/talaba/tadbirlar", params={"company": user.company.name, "title": e.title})
     return _event_out(e)
+
+
+async def company_circle(session, company_id: int) -> list[int]:
+    """Students who know this company: applied to its jobs, entered its tasks, chatted with it, or study at a
+    partner university. A company event is open to every student, but only these people get a notice."""
+    applied = select(Application.user_id).join(Job, Job.id == Application.job_id).where(Job.company_id == company_id)
+    entered = select(ChallengeEntry.user_id).join(Challenge, Challenge.id == ChallengeEntry.challenge_id).where(
+        Challenge.company_id == company_id)
+    chatted = select(Conversation.student_id).where(Conversation.company_id == company_id)
+    partners = select(Partnership.university_id).where(Partnership.company_id == company_id, Partnership.status == "accepted")
+    return list((await session.execute(select(User.id).where(
+        User.account_type == "student", User.is_blocked.is_(False),
+        or_(User.id.in_(applied), User.id.in_(entered), User.id.in_(chatted), User.university_id.in_(partners))))).scalars())
 
 
 @router.put("/employer/events/{event_id}")

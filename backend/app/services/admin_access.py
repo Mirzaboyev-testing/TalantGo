@@ -21,7 +21,7 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     "content": ("Moderatsiya", "Yo'nalishlar, topshiriqlar va ishlar"),
     "catalog": ("Boshqaruv", "Universitetlar katalogi"),
     "site": ("Boshqaruv", "Sayt kontenti"),
-    "announcements": ("Boshqaruv", "E'lonlar (bot orqali xabar)"),
+    "announcements": ("Boshqaruv", "E'lonlar (bildirishnoma va bot)"),
     "ranking": ("Boshqaruv", "Reytingni sozlash va e'lon qilish"),
     "reports": ("Ma'lumotlar", "Hisobotlar va CSV yuklab olish"),
     "ai_chats": ("Ma'lumotlar", "AI yordamchi suhbatlarini ko'rish"),

@@ -80,13 +80,13 @@ def test_weekly_streak(monkeypatch):
 
 
 async def test_monday_reminder_names_next_task_and_runs_once(client, make_user):
-    u = await make_user("Aziza")
-    track = (await client.get("/api/v1/tracks")).json()[0]
-    await client.patch("/api/v1/me", json={"track_id": track["id"]}, headers=u["headers"])
+    from tests.test_signup_and_tests import full_student
+    u = await full_student(client, make_user, "Aziza Karimova")       # the digest goes to signed-up students
+    track = {"id": u["track_id"]}
     async with SessionLocal() as s:
         messages = await reminders.build_messages(s)
         starter = (await s.execute(select(Task).where(Task.track_id == track["id"], Task.sort_order == 0))).scalar_one()
-    assert len(messages) == 1 and starter.title in messages[0][1]
+    assert len(messages) == 1 and starter.title in messages[0].text
     # not Monday, or before 10:00: nothing happens
     assert await reminders.run_once(datetime(2026, 10, 7, 12, tzinfo=TASHKENT)) == 0
     assert await reminders.run_once(datetime(2026, 10, 12, 8, tzinfo=TASHKENT)) == 0

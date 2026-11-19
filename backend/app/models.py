@@ -419,6 +419,7 @@ class Announcement(Base):
     total: Mapped[int] = mapped_column(Integer, default=0)
     sent: Mapped[int] = mapped_column(Integer, default=0)
     failed: Mapped[int] = mapped_column(Integer, default=0)
+    in_app: Mapped[int] = mapped_column(Integer, default=0, server_default="0")    # bell copies (everyone in the audience)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -473,6 +474,7 @@ class Application(Base):
     employer_note: Mapped[str] = mapped_column(Text, default="")
     interview_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     interview_place: Mapped[str] = mapped_column(String(300), default="", server_default="")   # address or call link
+    interview_reminded_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))   # the time reminded about
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -611,6 +613,8 @@ class Notification(Base):
     text: Mapped[str] = mapped_column(Text)
     link: Mapped[str] = mapped_column(String(200), default="")               # an in-app path such as /talaba/arizalar
     params: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    # notices of one thread (a chat, a task's new entries) collapse into one unread row (services/inbox.py)
+    group_key: Mapped[str] = mapped_column(String(60), default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -818,6 +822,7 @@ class Challenge(Base):
     # audience "fields" (2026-11-19): students with any of these job functions (catalog.JOB_FIELDS)
     job_fields: Mapped[list[str]] = mapped_column(ARRAY(String(24)), default=list, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deadline_reminded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))   # services/reminders.py
 
     track: Mapped[Track | None] = relationship(lazy="selectin")
     created_by: Mapped[User | None] = relationship(lazy="selectin")
@@ -882,6 +887,7 @@ class CompanyTest(Base):
     review_note: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    deadline_reminded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))   # services/reminders.py
 
     company: Mapped[Company] = relationship(lazy="selectin")
     job: Mapped[Job | None] = relationship(lazy="selectin")

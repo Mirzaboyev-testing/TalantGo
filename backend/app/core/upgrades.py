@@ -176,6 +176,14 @@ STATEMENTS = [
     # notifications and password recovery (2026-11-19); create_all makes the new tables
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version integer NOT NULL DEFAULT 0",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false",
+    # notifications phase 2 (2026-11-19): collapsing threads, interview and deadline reminders, announcements in the bell
+    "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS group_key varchar(60) NOT NULL DEFAULT ''",
+    "CREATE INDEX IF NOT EXISTS ix_notifications_unread_group ON notifications (user_id, group_key) "
+    "WHERE read_at IS NULL AND group_key <> ''",
+    "ALTER TABLE applications ADD COLUMN IF NOT EXISTS interview_reminded_for timestamptz",
+    "ALTER TABLE challenges ADD COLUMN IF NOT EXISTS deadline_reminded_at timestamptz",
+    "ALTER TABLE company_tests ADD COLUMN IF NOT EXISTS deadline_reminded_at timestamptz",
+    "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS in_app integer NOT NULL DEFAULT 0",
 
     # company tests and tasks aimed at job functions instead of a track (2026-11-19)
     "ALTER TABLE challenges ADD COLUMN IF NOT EXISTS job_fields varchar(24)[] NOT NULL DEFAULT '{}'",

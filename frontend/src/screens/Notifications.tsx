@@ -8,7 +8,7 @@ import { ErrorText, Sheet, message } from "../ui";
 import "./notifications.css";
 
 const PLACEHOLDERS = ["job", "company", "student", "university", "task", "test", "challenge", "note", "verifier",
-                      "points", "score", "max", "status", "text", "title", "comment", "place", "when", "name"];
+                      "points", "score", "max", "status", "text", "title", "comment", "place", "when", "name", "count"];
 
 /** The message in the reader's language: Uzbek is stored as written; ru/en use a template by kind. */
 export function notificationText(n: AppNotification): string {
@@ -36,6 +36,9 @@ const KIND_ICON: [RegExp, IconName, Tone][] = [
   [/^job_/, "briefcase", "green"],
   [/hire/, "award", "green"],                    // university_hire: a company hired one of the university's students
   [/^university_announcement/, "megaphone", "violet"],
+  [/^admin_announcement/, "megaphone", "violet"],
+  [/^interview_|deadline/, "clock", "amber"],     // reminders: an interview soon, a test or task closing tomorrow
+  [/^weekly_/, "spark", "green"],
   [/event/, "calendar", "blue"],
   [/^verification_/, "verified", "green"],
   [/^staff_/, "users", "amber"],

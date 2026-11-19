@@ -333,7 +333,8 @@ export interface AdminSubmission {
 }
 export interface AdminTrack extends Track { sort_order: number; is_active: boolean; student_count: number; task_count: number }
 export interface AdminTask { id: number; track_id: number; week: number; sort_order: number; title: string; description: string; proof_hint: string; points: number; is_active: boolean }
-export interface Announcement { id: number; text: string; audience: string; created_by: string; total: number; sent: number; failed: number; created_at: string; finished_at: string | null }
+export interface Announcement { id: number; text: string; audience: string; created_by: string; total: number; sent: number; failed: number; in_app?: number; created_at: string; finished_at: string | null }
+export type AnnouncementAudience = "students" | "companies" | "universities" | "all";
 export interface AuditEntry { id: number; actor: string; action: string; target: string; details: string; created_at: string }
 export interface Rules { peer_approvals_required: number; review_points: number; mentor_bonus_percent: number }
 export interface AdminStats {
@@ -773,7 +774,8 @@ export const api = {
     createTask: (t: Omit<AdminTask, "id" | "sort_order" | "is_active">) => request<AdminTask>("POST", "/admin/tasks", t, true),
     updateTask: (id: number, changes: Partial<AdminTask>) => request<AdminTask>("PATCH", `/admin/tasks/${id}`, changes, true),
     announcements: () => request<Announcement[]>("GET", "/admin/announcements", undefined, true),
-    announce: (a: { text: string; track_id: number | null; group_name: string | null }) => request<Announcement>("POST", "/admin/announcements", a, true),
+    announce: (a: { text: string; audience: AnnouncementAudience; track_id: number | null; group_name: string | null; university_id: number | null }) =>
+      request<Announcement>("POST", "/admin/announcements", a, true),
     rules: () => request<Rules>("GET", "/admin/rules", undefined, true),
     saveRules: (r: Rules) => request<Rules>("PUT", "/admin/rules", r, true),
     audit: () => request<AuditEntry[]>("GET", "/admin/audit", undefined, true),

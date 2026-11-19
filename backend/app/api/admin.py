@@ -293,19 +293,27 @@ async def list_announcements(_: AdminActor, session: Session) -> list[Announceme
 
 @router.post("/announcements", response_model=AnnouncementOut, status_code=201)
 async def send_announcement(body: AnnouncementIn, actor: AdminActor, session: Session) -> Announcement:
-    if not await settings_store.get_value(session, settings_store.BOT_TOKEN):
-        raise HTTPException(400, "Bot tokeni sozlanmagan")
-    group = (body.group_name or "").strip() or None
-    track = await session.get(Track, body.track_id) if body.track_id else None
-    chat_ids = list((await session.execute(announcements.audience_query(body.track_id, group))).scalars())
-    if not chat_ids:
+    """Everyone in the audience gets it in the bell; those with Telegram also get it from the bot (if one is set up)."""
+    students = body.audience == "students"
+    group = ((body.group_name or "").strip() or None) if students else None
+    track = await session.get(Track, body.track_id) if students and body.track_id else None
+    uni = await session.get(University, body.university_id) if students and body.university_id else None
+    people = (await session.execute(announcements.audience_query(
+        body.audience, track.id if track else None, group, uni.id if uni else None))).all()
+    if not people:
         raise HTTPException(400, "Bu auditoriyada hech kim yo'q")
-    audience = " · ".join(filter(None, [track.title if track else "Hamma", f"guruh {group}" if group else None]))
-    row = Announcement(text=body.text.strip(), audience=audience, created_by=actor.name, total=len(chat_ids))
+    has_bot = bool(await settings_store.get_value(session, settings_store.BOT_TOKEN))
+    recipients = [(tg, kind) for _, tg, kind in people if tg] if has_bot else []
+    audience = " · ".join(filter(None, [announcements.KINDS[body.audience], track.title if track else None,
+                                        uni.short_name if uni else None, f"guruh {group}" if group else None]))
+    row = Announcement(text=body.text.strip(), audience=audience, created_by=actor.name, total=len(recipients),
+                       in_app=len(people), finished_at=None if recipients else datetime.now(UTC))
     session.add(row)
+    announcements.store(session, row, people)
     audit(session, actor, "announcement.send", audience, body.text[:200])
     await session.commit()
-    announcements.start(row.id, chat_ids)
+    if recipients:
+        announcements.start(row.id, recipients)
     return row
 
 

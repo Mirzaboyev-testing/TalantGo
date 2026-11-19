@@ -685,8 +685,10 @@ class TaskPatch(BaseModel):
 
 class AnnouncementIn(BaseModel):
     text: str = Field(min_length=3, max_length=3500)
-    track_id: int | None = None
+    audience: Literal["students", "companies", "universities", "all"] = "students"
+    track_id: int | None = None                     # the three filters below narrow "students" only
     group_name: str | None = Field(default=None, max_length=40)
+    university_id: int | None = None
 
 
 class AnnouncementOut(ORM):
@@ -697,6 +699,7 @@ class AnnouncementOut(ORM):
     total: int
     sent: int
     failed: int
+    in_app: int = 0
     created_at: datetime
     finished_at: datetime | None
 

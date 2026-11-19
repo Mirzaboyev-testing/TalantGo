@@ -62,7 +62,7 @@ const MENU: { group: string; pages: Page[] }[] = [
   { group: "Aloqa", pages: [
     { id: "groups", label: "Guruhlar", icon: "chat", need: ["groups"] },
     { id: "site", label: "Sayt kontenti", icon: "globe", need: ["site"] },
-    { id: "announcements", label: "E'lonlar (bot)", icon: "send", need: ["announcements"] },
+    { id: "announcements", label: "E'lonlar", icon: "send", need: ["announcements"] },
     { id: "bot", label: "Telegram bot", icon: "chat", ownerOnly: true },
     { id: "ai", label: "AI yordamchi", icon: "spark", need: ["settings", "ai_chats"] },
   ] },

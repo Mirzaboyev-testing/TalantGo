@@ -12,7 +12,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Review, ReviewKind, Role, Status, Submission, SubmissionFile, Task, User
-from . import ai_review, inbox, notify
+from . import ai_review, inbox
 from .rules import get_rules
 
 TASHKENT = ZoneInfo("Asia/Tashkent")
@@ -88,13 +88,7 @@ async def submit(session: AsyncSession, user: User, task_id: int, proof_url: str
     await session.commit()
     if checking:
         ai_review.schedule(sub.id, sub.round)
-    rules = await get_rules(session)
-    peers = (await session.execute(select(User.telegram_id).where(
-        User.track_id == task.track_id, User.id != user.id, User.account_type == "student",
-        User.is_blocked.is_(False)))).scalars().all()
-    notify.send(list(peers), f"📝 {user.full_name} «{task.title}» ishini topshirdi. "
-                             f"«Topshiriqlar → Boshqalarni tekshirish»da baholang va +{rules.review_points} ball oling.",
-                path="/talaba/tekshirish")
+    # no ping to the whole track on every submission (it was noise): the Monday digest says how many works wait
     return await _reload(session, sub.id)
 
 

@@ -75,20 +75,50 @@ Xabar kimga borishi admin ruxsatlariga qarab tanlanadi (`admin_access.effective`
   yangilangan tavsifi Telegram'da ko'rinadi.
 - Yangi jadvallarni `create_all` o'zi yaratadi. `users` jadvaliga 2 ta ustun `core/upgrades.py` orqali qo'shiladi.
 
-## Keyingi bosqichlar
-- **2-bosqich.**
-  - Spamni kamaytirish: chatda suhbatga bitta qator va 30 daqiqada bitta Telegram xabari bo'ladi; topshirilgan ish
-    haqidagi umumiy xabar olib tashlanadi.
-  - Eslatma xatolarini tuzatish (nudge, dushanba eslatmasi).
-  - Yangi xabarlar: korxona tadbiri, korxona vazifasiga topshirilgan ish, suhbat va muddat eslatmalari.
-  - Admin e'lonlari qo'ng'iroqchaga ham tushadi va korxona hamda universitetlarga ham boradi.
-- **3-bosqich.**
-  - Telegram xabari o'quvchi tilida bo'ladi.
-  - Panellarda "Bildirishnomalar" sozlamalari.
-  - Botni bloklagan foydalanuvchilar belgilanadi.
-  - Eski xabarlar tozalanadi.
-  - Admin hisobini Telegram'ga ulash mumkin bo'ladi.
+## 2-bosqich: qilingan ishlar (2026-11-19)
+
+### Spam kamaydi
+- **Chat.** Bitta suhbat uchun qo'ng'iroqchada bitta o'qilmagan qator turadi: unda oxirgi xabar va
+  "· N ta yangi xabar" yozuvi bo'ladi. Telegram'ga bitta suhbat bo'yicha 30 daqiqada ko'pi bilan bitta xabar boradi.
+  O'qilgandan keyin kelgan xabar yangi qator ochadi. Buning uchun `notifications.group_key` ustuni va
+  `inbox.push(group=...)` qo'shildi.
+- **Topshirilgan ishlar.** Har bir topshirilgan ish haqida yo'nalishdagi hamma talabaga boradigan Telegram xabari
+  olib tashlandi. Baholashni kutayotgan ishlar soni dushanba dayjestida aytiladi.
+
+### Yangi xabarlar
+| Xabar | Kimga | Qachon |
+|---|---|---|
+| `task_entry_new` | korxona xodimlari | Talaba korxona vazifasiga birinchi marta ish yuborganda. Bitta qatorga yig'iladi ("Jami N ta yangi ish"), Telegram 2 soatda bir marta. Qayta yuborilgan ish uchun avvalgidek alohida `task_resubmitted` boradi. |
+| `company_event` | korxonani taniydigan talabalar: unga ariza berganlar, vazifasiga ish yuborganlar, u bilan yozishganlar va hamkor universitet talabalari | Korxona yangi tadbir yaratganda |
+| `interview_reminder` | talaba | Suhbatdan taxminan bir kun oldin. Korxona vaqtni o'zgartirsa, yana eslatiladi. |
+| `test_deadline` | testni boshlab, tugatmagan talaba | Test muddati tugashidan bir kun oldin, bir marta |
+| `task_deadline` | vazifaga ismi bilan taklif qilingan, lekin ish yubormagan talaba | Muddat tugashidan 24 soat oldin, bir marta. Hammaga ochiq vazifalar uchun eslatma yuborilmaydi, shovqin bo'lmasin. |
+| `weekly_digest` | ro'yxatdan to'liq o'tgan har bir talaba, yo'nalishi bo'lmasa ham | Dushanba 10:00. Unda: yo'nalishdagi navbatdagi topshiriq, kasb yo'nalishlari bo'yicha yangi vakansiyalar, ochiq korxona vazifalari. Yangilik bo'lmasa, xabar yuborilmaydi. Qo'ng'iroqchaga ham tushadi. |
+| `admin_announcement` | tanlangan auditoriya | Admin e'loni |
+
+### Admin e'lonlari
+- Auditoriyani tanlash mumkin: talabalar (yo'nalish, universitet yoki guruh bo'yicha), tasdiqlangan korxonalar,
+  universitet xodimlari yoki hamma.
+- Har bir qabul qiluvchining qo'ng'iroqchasiga tushadi, Telegram'siz bo'lsa ham. Bot sozlanmagan bo'lsa ham e'lon
+  qo'ng'iroqchaga yetib boradi.
+- Telegram ulanganlarga botdan ham keladi: talabalarda Mini App tugmasi, korxona va universitetlarda "Saytda ochish".
+- Admin sahifasida ikkita son ko'rinadi: qo'ng'iroqchaga necha kishiga tushgani va botda necha kishiga yetgani.
+
+### Eslatmalar sikli
+`services/reminders.py` har 15 daqiqada ishlaydi (faqat prod'da): haftalik dayjest, suhbat eslatmasi, muddat
+eslatmalari va ro'yxatdan o'tishni yakunlash eslatmasi. Har bir eslatma yuborishdan oldin belgilab qo'yiladi
+(`interview_reminded_for`, `deadline_reminded_at`), shuning uchun qayta ishga tushganda ikki marta bormaydi.
+
+## Keyingi bosqich (3-bosqich)
+- Telegram xabari o'quvchi tilida bo'ladi.
+- Panellarda "Bildirishnomalar" sozlamalari: Telegram nusxasini yoqish yoki o'chirish, turkumlarni tanlash.
+- Botni bloklagan foydalanuvchilar belgilanadi.
+- Eski xabarlar tozalanadi.
+- Admin hisobini Telegram'ga ulash mumkin bo'ladi.
 
 ## Testlar
-`backend/tests/test_notifications_and_password.py`: ruxsat bo'yicha yo'naltirish, bot kodi va havolasi, 5 marta
-xato kod, owner'ga so'rov, majburiy yangi parol, sessiyalarning yopilishi va bot buyruqlari.
+- `backend/tests/test_notifications_and_password.py`: ruxsat bo'yicha yo'naltirish, bot kodi va havolasi, 5 marta
+  xato kod, owner'ga so'rov, majburiy yangi parol, sessiyalarning yopilishi va bot buyruqlari.
+- `backend/tests/test_notifications_phase2.py`: chatni yig'ish va bitta Telegram xabari, vazifa ishlarini yig'ish,
+  korxona tadbiri auditoriyasi, suhbat eslatmasi (yangi vaqt bilan qayta), muddat eslatmalari, yo'nalishsiz
+  talabaga dayjest va admin e'loni auditoriyalari.

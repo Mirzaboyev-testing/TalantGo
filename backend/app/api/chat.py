@@ -101,13 +101,16 @@ async def _send(session, c: Conversation, user: User, side: str, text: str) -> d
     await session.refresh(c)
     await session.refresh(m)
     short = text if len(text) <= 120 else text[:117] + "…"
+    # one unread row per conversation (the chat has its own unread count); Telegram at most every 30 minutes
     if side == "company":
         await inbox.push(session, [c.student_id], "chat_message", f"{c.company.name}: {short}",
-                         link=f"/talaba/xabarlar?c={c.id}", params={"company": c.company.name, "text": short})
+                         link=f"/talaba/xabarlar?c={c.id}", params={"company": c.company.name, "text": short},
+                         group=f"chat:{c.id}", many=" · {count} ta yangi xabar")
     else:
         await inbox.push(session, await company_staff_ids(session, c.company_id), "chat_message",
                          f"{user.full_name}: {short}", link=f"/korxona/xabarlar?c={c.id}",
-                         params={"student": user.full_name, "text": short})
+                         params={"student": user.full_name, "text": short},
+                         group=f"chat:{c.id}", many=" · {count} ta yangi xabar")
     return _msg_out(m)
 
 
