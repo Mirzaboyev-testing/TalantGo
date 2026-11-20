@@ -9,6 +9,9 @@ import UniStudents from "./UniStudents";
 import UniEmployment from "./UniEmployment";
 import UniPartners from "./UniPartners";
 import UniOpportunities from "./UniOpportunities";
+import CompetitionManager from "../competitions/CompetitionManager";
+import { competitionsApi } from "../../competitionsApi";
+import { Tabs } from "./ukit";
 import UniEvents from "./UniEvents";
 import UniMessages from "./UniMessages";
 import UniProfile from "./UniProfile";
@@ -21,8 +24,10 @@ const ROUTES: Record<Tab, string> = {
   events: "tadbirlar", messages: "xabarlar", profile: "profil",
 };
 // older links keep working: the verification queue now lives in Students, groups in Messages
-const ALIASES: Record<string, Tab> = { tasdiqlash: "students", guruhlar: "messages", hisobotlar: "employment", lenta: "messages", postlar: "messages" };
-const ALIAS_SUB: Record<string, string> = { tasdiqlash: "queue", guruhlar: "groups", hisobotlar: "reports", lenta: "feed", postlar: "feed" };
+const ALIASES: Record<string, Tab> = { tasdiqlash: "students", guruhlar: "messages", hisobotlar: "employment", lenta: "messages", postlar: "messages",
+                                       musobaqalar: "opportunities" };
+const ALIAS_SUB: Record<string, string> = { tasdiqlash: "queue", guruhlar: "groups", hisobotlar: "reports", lenta: "feed", postlar: "feed",
+                                            musobaqalar: "competitions" };
 
 /** Opens a section, optionally on one of its tabs (?tab=...). */
 export type Go = (tab: Tab, sub?: string) => void;
@@ -65,7 +70,15 @@ export default function UniversityApp({ me, onMe, onLogout }: { me: Me; onMe: (m
         {tab === "students" && <UniStudents sub={sub} go={go} onChanged={refreshCounts} />}
         {tab === "employment" && <UniEmployment sub={sub} go={go} onChanged={refreshCounts} />}
         {tab === "partners" && <UniPartners sub={sub} go={go} onChanged={refreshCounts} />}
-        {tab === "opportunities" && <UniOpportunities />}
+        {/* Imkoniyatlar: companies' vacancies and the university's own competitions (docs/13-musobaqalar.md);
+            /universitet/musobaqalar?c=<id> (organizer notices) opens a competition */}
+        {tab === "opportunities" && (
+          <>
+            <Tabs value={sub === "competitions" ? "competitions" : "jobs"} onChange={(v) => go("opportunities", v === "jobs" ? undefined : v)}
+                  items={[{ id: "jobs", label: t("corg.uni_jobs") }, { id: "competitions", label: t("corg.title") }]} />
+            {sub === "competitions" ? <CompetitionManager api={competitionsApi.organizer} kind="university" me={me} /> : <UniOpportunities />}
+          </>
+        )}
         {tab === "events" && <UniEvents sub={sub} go={go} />}
         {tab === "messages" && <UniMessages me={me} sub={sub} go={go} />}
         {tab === "profile" && <UniProfile me={me} sub={sub} go={go} onChanged={refreshCounts} onMe={onMe} />}

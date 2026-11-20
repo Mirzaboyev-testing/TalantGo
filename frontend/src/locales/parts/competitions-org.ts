@@ -2,6 +2,7 @@
 // and the site's highlights block (CompetitionHighlights). ru and en must have exactly the keys of uz.
 const uz = {
   "corg.title": "Musobaqalar",
+  "corg.uni_jobs": "Vakansiyalar",
   "corg.title_admin": "Barcha musobaqalar",
   "corg.sub.company": "Talabalarga individual yoki jamoaviy musobaqa bering: bosqichma-bosqich baholang, eng yaxshilarini keyingi bosqichga o'tkazing va g'oliblarni aniqlang.",
   "corg.sub.university": "Talabalaringiz uchun ichki yoki ochiq musobaqa o'tkazing: jamoalar, bosqichlar, baholash va natijalar bir joyda.",
@@ -280,6 +281,7 @@ export const competitionsOrg = {
   uz,
   ru: {
     "corg.title": "Соревнования",
+    "corg.uni_jobs": "Вакансии",
     "corg.title_admin": "Все соревнования",
     "corg.sub.company": "Проводите для студентов индивидуальные или командные соревнования: оценивайте по этапам, переводите лучших дальше и определяйте победителей.",
     "corg.sub.university": "Проводите внутренние или открытые соревнования для своих студентов: команды, этапы, оценки и итоги в одном месте.",
@@ -555,6 +557,7 @@ export const competitionsOrg = {
   } satisfies Record<keyof typeof uz, string>,
   en: {
     "corg.title": "Competitions",
+    "corg.uni_jobs": "Jobs",
     "corg.title_admin": "All competitions",
     "corg.sub.company": "Run individual or team competitions for students: score them stage by stage, move the best on and pick the winners.",
     "corg.sub.university": "Run internal or open competitions for your students: teams, stages, scoring and results in one place.",
