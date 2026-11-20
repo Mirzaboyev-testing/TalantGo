@@ -96,7 +96,7 @@ export function PendingScreen({ me, onChanged, onLogout }: { me: Me; onChanged: 
   // the decision is picked up without a reload (accounts without Telegram get no bot message)
   useEffect(() => {
     if (rejected || editing) return;
-    const timer = window.setInterval(() => { api.me().then(onChanged, () => {}); }, 30000);
+    const timer = window.setInterval(() => { if (document.hidden) return; api.me().then(onChanged, () => {}); }, 30000);
     return () => window.clearInterval(timer);
   }, [rejected, editing, onChanged]);
 

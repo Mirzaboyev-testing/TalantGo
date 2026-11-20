@@ -39,7 +39,7 @@ export function PanelCards() {
           <div className="panel-art-box"><PanelArt panel={p.id} /></div>
           <div className="panel-title"><span className="panel-icon"><Icon name={p.icon} size={20} /></span><b>{t(p.title)}</b></div>
           <p className="hint">{t(p.text)}</p>
-          <button className="btn" onClick={() => navigate(`/kirish/${p.id}`)}>{t("pub.panel.enter")}</button>
+          <button className="btn" onClick={() => navigate(`/kirish/${p.id}${window.location.search}`)}>{t("pub.panel.enter")}</button>
         </div>
       ))}
     </div>

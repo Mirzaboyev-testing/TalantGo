@@ -8,6 +8,7 @@ import { Icon } from "../../icons";
 import { navigate, useSearch } from "../../router";
 import { Avatar, ErrorText, autoGrow, message, sendsOnEnter } from "../../ui";
 import { PageHead } from "../employer/kit";
+import { everyVisible } from "../../poll";
 
 type Side = "student" | "company";
 const adapter = (side: Side) => side === "student"
@@ -36,7 +37,7 @@ export default function DirectChat({ side, onUnread }: { side: Side; onUnread?: 
 
   const loadList = useCallback(() => api2.list().then((r) => { setThreads(r.threads); setCanStart(r.can_start); }, (e) => setError(message(e))),
                                [side]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { void loadList(); const timer = setInterval(loadList, 30000); return () => clearInterval(timer); }, [loadList]);
+  useEffect(() => { void loadList(); return everyVisible(() => void loadList(), 30000); }, [loadList]);
 
   // a company opens /korxona/xabarlar?student=<id> from a student's card: the thread is opened (or created)
   const started = useRef("");

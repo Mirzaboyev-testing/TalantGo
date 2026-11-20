@@ -683,7 +683,7 @@ function Contact({ me, onSaved }: { me: Me; onSaved: (m: Me) => void }) {
       {me.username && <div className="st-contact-row"><Icon name="send" size={16} /><span className="grow">@{me.username}</span></div>}
       <p className="hint" style={{ margin: "8px 0 0" }}>{t("st.pf2.contact_hint")}</p>
       <div className="st-contact-row st-contact-pass">
-        <Icon name="lock" size={16} /><span className="grow">{me.has_password ? t("cp.title") : t("cp.set")}</span>
+        <Icon name="lock" size={16} /><span className="grow">{me.has_password ? t("cp.title") : t("cp.no_password")}</span>
         <button className="btn small ghost" style={{ width: "auto" }} onClick={() => setPassword(true)}>{me.has_password ? t("cp.open") : t("cp.set")}</button>
       </div>
       {password && (

@@ -3,6 +3,7 @@ import { api, type AdminAccount, type AdminMe, type AdminPermissionCatalog, type
 import { BotWaiting, useBotLink } from "../BotLink";
 import { saveToken } from "./session";
 import { ErrorText, message } from "../../ui";
+import PasswordInput from "../PasswordInput";
 
 const STATUS: Record<AdminAccount["status"], [string, string]> = {
   pending: ["Tasdiq kutmoqda", "pending"], active: ["Faol", "peer_verified"], disabled: ["O'chirilgan", "rejected"],
@@ -163,11 +164,11 @@ export function AdminPasswordForm({ forced = false, onChanged }: { forced?: bool
         ? "Siz ilova egasi bergan vaqtinchalik parol bilan kirdingiz. Uni ega ham biladi, shuning uchun admin sayti o'zingizning parolingizni qo'ygandan keyin ochiladi."
         : "O'zgartirgach, boshqa qurilmalardagi barcha kirishlar yopiladi. Shu oyna ochiq qoladi."}</p>
       <label>{forced ? "Vaqtinchalik parol" : "Joriy parol"}</label>
-      <input type="password" value={current} autoComplete="current-password" onChange={(e) => setCurrent(e.target.value)} />
+      <PasswordInput value={current} autoComplete="current-password" onChange={setCurrent} />
       <label>Yangi parol (kamida 10 belgi)</label>
-      <input type="password" value={next} autoComplete="new-password" onChange={(e) => setNext(e.target.value)} />
+      <PasswordInput value={next} autoComplete="new-password" onChange={setNext} />
       <label>Yangi parolni takrorlang</label>
-      <input type="password" value={repeat} autoComplete="new-password" onChange={(e) => setRepeat(e.target.value)} />
+      <PasswordInput value={repeat} autoComplete="new-password" onChange={setRepeat} />
       <ErrorText error={error} />
       {done && <p className="notice">Parol o'zgartirildi.</p>}
       <button className="btn small" style={{ marginTop: 10 }} disabled={!current || next.length < 10 || !repeat} onClick={save}>Saqlash</button>

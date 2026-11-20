@@ -5,6 +5,7 @@ import { t, useLang } from "../i18n";
 import { BOT_URL, insideTelegram } from "../tg";
 import { ErrorText, message, toast } from "../ui";
 import { BotWaiting, useBotLink } from "./BotLink";
+import PasswordInput from "./PasswordInput";
 
 /**
  * "Kirish usullari": one account for the bot and the website.
@@ -93,13 +94,13 @@ export default function LoginMethods({ me, onChanged, withPassword = true }: {
           </Field>
           {me.has_password && (
             <Field id="lm-cur" label={t("s.lm.cur_pass")} required error={errors["lm-cur"] && t("s.lm.cur_pass_error")}>
-              <input id="lm-cur" type="password" className={cls("lm-cur")} value={f.current} autoComplete="current-password"
-                     onChange={(e) => { setF({ ...f, current: e.target.value }); clear("lm-cur"); }} />
+              <PasswordInput id="lm-cur" className={cls("lm-cur")} value={f.current} autoComplete="current-password"
+                             onChange={(v) => { setF({ ...f, current: v }); clear("lm-cur"); }} />
             </Field>
           )}
           <Field id="lm-pass" label={me.has_password ? t("s.lm.new_pass") : t("s.common.password")} required error={errors["lm-pass"] && t("s.common.min8")}>
-            <input id="lm-pass" type="password" className={cls("lm-pass")} value={f.password} autoComplete="new-password"
-                   onChange={(e) => { setF({ ...f, password: e.target.value }); clear("lm-pass"); }} />
+            <PasswordInput id="lm-pass" className={cls("lm-pass")} value={f.password} autoComplete="new-password"
+                           onChange={(v) => { setF({ ...f, password: v }); clear("lm-pass"); }} />
           </Field>
           <ErrorText error={error} />
           <button className="btn" type="submit" style={{ marginTop: 12 }} disabled={busy}>{busy ? t("s.common.saving") : t("common.save")}</button>

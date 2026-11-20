@@ -406,7 +406,12 @@ function byStatus(status: number): string {
   return "Kutilmagan xato";
 }
 
-export async function request<T>(method: string, path: string, body?: unknown, admin = false): Promise<T> {
+/** The token this browser saved last (a sign-in or a password change in any tab writes it). */
+function storedToken(key: string): string {
+  try { return localStorage.getItem(key) ?? ""; } catch { return ""; }
+}
+
+export async function request<T>(method: string, path: string, body?: unknown, admin = false, retried = false): Promise<T> {
   // the admin API accepts the owner's password session or an admin's own Telegram session
   const token = admin ? adminToken || userToken : userToken;
   let resp: Response;
@@ -422,6 +427,18 @@ export async function request<T>(method: string, path: string, body?: unknown, a
   // 204 answers (save, withdraw...) can carry a JSON content type with an empty body
   const text = resp.status === 204 ? "" : await resp.text();
   const data = text && resp.headers.get("content-type")?.includes("json") ? JSON.parse(text) : null;
+  if (resp.status === 401 && token && !retried && !path.startsWith("/auth/")) {
+    // A password change ends older sessions, and the tab that made it saves a fresh token. Another open tab, or a
+    // request that left just before the change, then holds the old one: switch to the newer token and try once more
+    // instead of signing out (signing out also deleted the fresh token, 2026-11-20 review).
+    const current = admin ? adminToken : userToken;
+    const saved = storedToken(admin ? "cf_admin_token" : "cf_user_token");
+    const newer = current && current !== token ? current : saved && saved !== token ? saved : "";
+    if (newer) {
+      if (admin) adminToken = newer; else userToken = newer;
+      return request<T>(method, path, body, admin, true);
+    }
+  }
   if (resp.status === 401 && admin) onAdminUnauthorized();
   if (resp.status === 401 && !admin && token && !path.startsWith("/auth/")) onUserUnauthorized();
   if (!resp.ok) throw new ApiError(resp.status, data?.detail !== undefined ? describe(data.detail) : byStatus(resp.status));
@@ -495,6 +512,8 @@ export const api = {
     if (me.token) replaceUserToken(me.token);
     return me;
   },
+  // only the sign-in e-mail (PUT /me/email): the password stays and no session ends
+  changeEmail: (email: string, current_password: string) => request<Me>("PUT", "/me/email", { email, current_password }),
   // a forgotten password (services/password_reset.py): the bot's code or link, or a request to the owner
   forgotPassword: (email: string) => request<{ ok: boolean }>("POST", "/auth/password/forgot", { email }),
   resetLinkInfo: (token: string) => request<ResetLinkInfo>("GET", `/auth/password/reset/${encodeURIComponent(token)}`),

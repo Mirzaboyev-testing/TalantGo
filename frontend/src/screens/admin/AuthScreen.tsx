@@ -3,6 +3,7 @@ import { api } from "../../api";
 import { ErrorText, message } from "../../ui";
 import { saveToken } from "./session";
 import { BrandLogo } from "../../brand";
+import PasswordInput from "../PasswordInput";
 
 /** Email + password sign-in and sign-up for the admin website. */
 export default function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
@@ -77,11 +78,11 @@ export default function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
             <label>Email</label>
             <input type="email" value={email} autoComplete="email" placeholder="ism@gmail.com" onChange={(e) => setEmail(e.target.value)} />
             <label>Parol{mode === "register" ? " (kamida 10 belgi)" : ""}</label>
-            <input type="password" value={password} autoComplete={mode === "login" ? "current-password" : "new-password"} onChange={(e) => setPassword(e.target.value)} />
+            <PasswordInput value={password} autoComplete={mode === "login" ? "current-password" : "new-password"} onChange={setPassword} />
             {mode === "register" && (
               <>
                 <label>Parolni takrorlang</label>
-                <input type="password" value={repeat} autoComplete="new-password" onChange={(e) => setRepeat(e.target.value)} />
+                <PasswordInput value={repeat} autoComplete="new-password" onChange={setRepeat} />
               </>
             )}
             {mode === "register" && needsOwner && (

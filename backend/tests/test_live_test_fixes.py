@@ -70,7 +70,7 @@ async def test_a_classroom_behind_one_address_signs_up_and_signs_in(client):
 async def test_wrong_passwords_from_one_address_are_still_limited(client):
     for i in range(60):                                             # a different e-mail each time: no per-e-mail lock
         r = await client.post(f"{API}/auth/login", json={"email": f"yoq{i}@sinf.uz", "password": "notogri-parol"})
-        assert r.status_code == 401
+        assert r.status_code == 404                                 # no such account (still counted against the address)
     r = await client.post(f"{API}/auth/login", json={"email": "yoq-yana@sinf.uz", "password": "notogri-parol"})
     assert r.status_code == 429
 
@@ -143,3 +143,87 @@ async def test_an_unexpected_error_answers_with_a_plain_message(monkeypatch):
         r = await c.get(f"{API}/public/universities/{await uni_id('TDIU')}")
     assert r.status_code == 500
     assert "Serverda xatolik" in r.json()["detail"]
+
+
+# --------------------------------------------------------------------------- 2026-11-20: logs and review of e9ec19a
+
+def other_address():
+    from httpx import ASGITransport, AsyncClient
+
+    from app.main import app
+    return AsyncClient(transport=ASGITransport(app=app, client=("10.20.30.40", 5000)), base_url="http://test")
+
+
+async def register(client, email: str, password: str = "kuchli-parol-1") -> dict:
+    r = await client.post(f"{API}/auth/register", json={"full_name": "Sinov Talaba", "email": email, "password": password})
+    assert r.status_code == 201, r.text
+    return {"Authorization": f"Bearer {r.json()['token']}"}
+
+
+async def test_sign_in_says_what_to_do_for_an_unknown_email_or_a_telegram_only_account(client, make_user):
+    """52 tries from people who had no account yet (2026-11-20 logs): they now hear to sign up."""
+    r = await client.post(f"{API}/auth/login", json={"email": "yangi-odam@mail.uz", "password": "nimadir-123"})
+    assert r.status_code == 404 and "Ro'yxatdan o'tish" in r.json()["detail"]
+    u = await make_user("Telegram Foydalanuvchi")
+    async with SessionLocal() as session:
+        await session.execute(update(User).where(User.id == u["id"]).values(email="tg-odam@mail.uz"))
+        await session.commit()
+    r = await client.post(f"{API}/auth/login", json={"email": "tg-odam@mail.uz", "password": "nimadir-123"})
+    assert r.status_code == 409 and "Telegram" in r.json()["detail"]
+    for _ in range(12):                                             # neither counts towards an e-mail lockout
+        await client.post(f"{API}/auth/login", json={"email": "yangi-odam@mail.uz", "password": "nimadir-123"})
+    await register(client, "yangi-odam@mail.uz")
+    ok = await client.post(f"{API}/auth/login", json={"email": "yangi-odam@mail.uz", "password": "kuchli-parol-1"})
+    assert ok.status_code == 200
+
+
+async def test_a_stranger_typing_wrong_passwords_does_not_lock_the_owner_out(client):
+    await register(client, "egasi@mail.uz")
+    async with other_address() as stranger:
+        for _ in range(8):
+            r = await stranger.post(f"{API}/auth/login", json={"email": "egasi@mail.uz", "password": "taxmin-qilaman"})
+            assert r.status_code == 401
+        r = await stranger.post(f"{API}/auth/login", json={"email": "egasi@mail.uz", "password": "taxmin-qilaman"})
+        assert r.status_code == 429                                 # the guesser is stopped
+    r = await client.post(f"{API}/auth/login", json={"email": "egasi@mail.uz", "password": "kuchli-parol-1"})
+    assert r.status_code == 200                                     # the owner, from another address, is not
+
+
+async def test_the_sign_in_email_changes_without_a_new_password(client):
+    h = await register(client, "eski@mail.uz")
+    await register(client, "band@mail.uz")
+    r = await client.put(f"{API}/me/email", json={"email": "yangi@mail.uz", "current_password": "notogri-123"}, headers=h)
+    assert r.status_code == 403
+    r = await client.put(f"{API}/me/email", json={"email": "band@mail.uz", "current_password": "kuchli-parol-1"}, headers=h)
+    assert r.status_code == 409
+    r = await client.put(f"{API}/me/email", json={"email": " Yangi@Mail.uz ", "current_password": "kuchli-parol-1"}, headers=h)
+    assert r.status_code == 200 and r.json()["email"] == "yangi@mail.uz"
+    assert (await client.get(f"{API}/me", headers=h)).status_code == 200          # this session goes on
+    assert (await client.post(f"{API}/auth/login", json={"email": "yangi@mail.uz", "password": "kuchli-parol-1"})).status_code == 200
+    assert (await client.post(f"{API}/auth/login", json={"email": "eski@mail.uz", "password": "kuchli-parol-1"})).status_code == 404
+    kinds = [n["kind"] for n in (await client.get(f"{API}/me/notifications", headers=h)).json()["items"]]
+    assert "email_changed" in kinds
+
+
+async def test_guessing_the_current_password_on_a_signed_in_session_is_limited(client):
+    h = await register(client, "sessiya@mail.uz")
+    for _ in range(8):
+        r = await client.put(f"{API}/me/password", json={"email": "sessiya@mail.uz", "password": "yangi-parol-9",
+                                                          "current_password": "taxmin-123"}, headers=h)
+        assert r.status_code == 403
+    r = await client.put(f"{API}/me/password", json={"email": "sessiya@mail.uz", "password": "yangi-parol-9",
+                                                      "current_password": "kuchli-parol-1"}, headers=h)
+    assert r.status_code == 429
+    r = await client.put(f"{API}/me/email", json={"email": "boshqa@mail.uz", "current_password": "kuchli-parol-1"}, headers=h)
+    assert r.status_code == 429                                     # the same counter guards the e-mail change
+
+
+async def test_only_students_pick_a_university(client, make_user):
+    from tests.test_career import uni_id
+    hr = await approved_employer(client, make_user)
+    tdiu = await uni_id("TDIU")
+    r = await client.patch(f"{API}/me", json={"university_id": tdiu}, headers=hr["headers"])
+    assert r.status_code == 403
+    s = await make_user("Talaba Bir")
+    r = await client.patch(f"{API}/me", json={"university_id": tdiu}, headers=s["headers"])
+    assert r.status_code == 200 and r.json()["university_ref"]["id"] == tdiu

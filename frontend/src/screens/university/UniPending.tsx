@@ -52,6 +52,7 @@ export default function UniPending({ me, onChanged, onLogout }: { me: Me; onChan
   useEffect(() => {
     if (editing || status === "rejected" || opened) return;
     const timer = window.setInterval(() => {
+      if (document.hidden) return;
       api.me().then((fresh) => {
         if (fresh.staff_status === "approved") { haptic("success"); setOpened(fresh); }
         else if (fresh.staff_status !== status) onChanged(fresh);

@@ -148,6 +148,7 @@ function Chat({ groupId, onBack }: { groupId: number; onBack: () => void }) {
       setTimeout(() => bottom.current?.scrollIntoView(), 50);
     }, (e) => setError(message(e)));
     const timer = setInterval(async () => {
+      if (document.hidden) return;                   // a hidden tab waits; it catches up when shown
       try {
         const fresh = await api.groups.messages(groupId, { after: lastId.current });
         if (fresh.length) {

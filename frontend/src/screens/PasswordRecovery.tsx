@@ -5,6 +5,7 @@ import { t, useLang } from "../i18n";
 import { navigate, useSearch } from "../router";
 import { BOT_URL } from "../tg";
 import { ErrorText, isFullName, message, toast } from "../ui";
+import PasswordInput from "./PasswordInput";
 
 type GetToken = () => Promise<{ token: string }>;
 const EMAIL = /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i;
@@ -17,12 +18,12 @@ function NewPassword({ value, onChange, errors, cls, clear }: {
   return (
     <>
       <Field id="pw-new" label={t("pw.new")} required error={errors["pw-new"] && t("s.common.min8")}>
-        <input id="pw-new" type="password" className={cls("pw-new")} value={value.password} maxLength={128} autoComplete="new-password"
-               onChange={(e) => { onChange({ ...value, password: e.target.value }); clear("pw-new"); }} />
+        <PasswordInput id="pw-new" className={cls("pw-new")} value={value.password} autoComplete="new-password"
+                       onChange={(v) => { onChange({ ...value, password: v }); clear("pw-new"); }} />
       </Field>
       <Field id="pw-new2" label={t("pw.new2")} required error={errors["pw-new2"] && t("s.web.pass_mismatch")}>
-        <input id="pw-new2" type="password" className={cls("pw-new2")} value={value.password2} maxLength={128} autoComplete="new-password"
-               onChange={(e) => { onChange({ ...value, password2: e.target.value }); clear("pw-new2"); }} />
+        <PasswordInput id="pw-new2" className={cls("pw-new2")} value={value.password2} autoComplete="new-password"
+                       onChange={(v) => { onChange({ ...value, password2: v }); clear("pw-new2"); }} />
       </Field>
     </>
   );

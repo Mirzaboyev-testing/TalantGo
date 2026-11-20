@@ -80,6 +80,10 @@ async def update_me(body: MeUpdate, user: CurrentUser, session: Session) -> MeOu
         if track is None or not track.is_active:
             raise HTTPException(404, "Bunday yo'l yo'q")
     if changes.get("university_id") is not None:
+        # only students pick a university: a company or staff account could otherwise read a university's
+        # student-only announcements and posts (2026-11-19 live test); staff ask for access with /me/staff-request
+        if user.account_type != "student" and changes["university_id"] != user.university_id:
+            raise HTTPException(403, "Universitetni faqat talabalar tanlaydi")
         uni = await session.get(University, changes["university_id"])
         if uni is None or not uni.is_active:
             raise HTTPException(404, "Universitet topilmadi")
@@ -301,8 +305,11 @@ async def set_password(body: PasswordIn, user: CurrentUser, session: Session) ->
         raise HTTPException(422, str(exc)) from exc
     import asyncio
     changing = bool(user.password_hash)
+    guess_key = f"pw-guess:{user.id}"
+    ratelimit.check_guesses(guess_key)
     if changing and not user.must_change_password and not await asyncio.to_thread(
             check_password, body.current_password, user.password_hash):
+        ratelimit.hit(guess_key)
         raise HTTPException(403, "Joriy parol noto'g'ri")
     if await session.scalar(select(User.id).where(User.email == email, User.id != user.id)):
         raise HTTPException(409, "Bu email boshqa akkauntga bog'langan")
@@ -315,6 +322,42 @@ async def set_password(body: PasswordIn, user: CurrentUser, session: Session) ->
     out = await me_out(session, user)
     out.token = user_token(user) if changing else None
     return out
+
+
+class EmailIn(BaseModel):
+    email: str = Field(max_length=160)
+    current_password: str = Field(max_length=128)
+
+
+@router.put("/me/email", response_model=MeOut)
+async def change_email(body: EmailIn, user: CurrentUser, session: Session) -> MeOut:
+    """Only the sign-in e-mail. The password stays and no session ends (it used to be hidden in the password form,
+    which forced a new password for it). Needs the current password, like any change to how one signs in."""
+    import asyncio
+
+    from ..services.admin_accounts import check_password
+    from .auth import _email
+    try:
+        email = _email(body.email)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if not user.password_hash:
+        raise HTTPException(409, "Avval parol qo'ying: kirish emaili parol bilan birga saqlanadi")
+    guess_key = f"pw-guess:{user.id}"
+    ratelimit.check_guesses(guess_key)
+    if not await asyncio.to_thread(check_password, body.current_password, user.password_hash):
+        ratelimit.hit(guess_key)
+        raise HTTPException(403, "Joriy parol noto'g'ri")
+    if email != user.email:
+        if await session.scalar(select(User.id).where(User.email == email, User.id != user.id)):
+            raise HTTPException(409, "Bu email boshqa akkauntga bog'langan")
+        old, user.email = user.email, email
+        await session.commit()
+        await inbox.push(session, [user.id], "email_changed",
+                         f"Kirish emailingiz o'zgartirildi: {old} → {email}. Bu siz bo'lmasangiz, darhol parolni almashtiring "
+                         "va Careerup adminiga yozing.", params={"old": old or "", "email": email})
+    await session.refresh(user)
+    return await me_out(session, user)
 
 
 class NotifyPrefsIn(BaseModel):

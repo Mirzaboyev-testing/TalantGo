@@ -27,5 +27,28 @@ def limit(key: str, max_hits: int, window_seconds: float, message: str = TOO_MAN
     _hits[key] = hits
 
 
+def recent(key: str, window_seconds: float) -> int:
+    """How many hits `key` had within the window, without adding one."""
+    now = time.time()
+    hits = [t for t in _hits.get(key, []) if now - t < window_seconds]
+    _hits[key] = hits
+    return len(hits)
+
+
+def hit(key: str) -> None:
+    _hits[key].append(time.time())
+
+
+GUESSES, GUESS_WINDOW = 8, 15 * 60
+GUESS_MESSAGE = "Joriy parol 8 marta noto'g'ri kiritildi. 15 daqiqadan keyin qayta urinib ko'ring."
+
+
+def check_guesses(key: str) -> None:
+    """Wrong current passwords on a signed-in session (password or e-mail change): the same 8 per 15 minutes
+    as the sign-in page, so an unattended session cannot be used to guess the password."""
+    if recent(key, GUESS_WINDOW) >= GUESSES:
+        raise HTTPException(429, GUESS_MESSAGE)
+
+
 def reset() -> None:
     _hits.clear()

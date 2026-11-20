@@ -22,6 +22,7 @@ import Users from "./Users";
 import { Complaints, Outcomes, Partnerships, Ranking } from "./Trust";
 import { clearToken, loadToken, saveToken } from "./session";
 import { BrandLogo } from "../../brand";
+import { everyVisible } from "../../poll";
 
 export interface AdminCtx { isOwner: boolean; name: string; can: (permission: string) => boolean }
 type Me = AdminMe;
@@ -112,8 +113,7 @@ export default function AdminSite() {
       setPasswordRequests(c.password_requests ?? 0);
     }, () => {});
     void refresh();
-    const timer = window.setInterval(refresh, 60000);      // new requests show up without changing page
-    return () => window.clearInterval(timer);
+    return everyVisible(() => void refresh(), 60000);      // new requests show up without changing page
   }, [me, page]);
 
   const go = (id: string) => { window.location.hash = id; setPage(id); setMenuOpen(false); };

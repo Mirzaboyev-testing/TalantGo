@@ -28,7 +28,8 @@ export default function About({ me }: { me: Me | null }) {
   const [stats, setStats] = useState<PublicStats | null>(null);
   useEffect(() => { api.public.stats().then(setStats, () => {}); }, []);
   const tiles = statTiles(stats);
-  const start = me ? panelBase(me) : "/kirish";
+  // a first visit means signing up: the sign-in page opens on «Ro'yxatdan o'tish» (?yangi), not on «Kirish»
+  const start = me ? panelBase(me) : "/kirish?yangi=1";
   const contacts = CONTACT_FIELDS.filter((f) => site?.contacts[f]);
 
   return (

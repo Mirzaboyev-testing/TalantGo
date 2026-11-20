@@ -6,6 +6,7 @@ import { Icon, type IconName } from "../icons";
 import { navigate, usePath } from "../router";
 import { ErrorText, Sheet, message } from "../ui";
 import "./notifications.css";
+import { everyVisible } from "../poll";
 
 const PLACEHOLDERS = ["job", "company", "student", "university", "task", "test", "challenge", "note", "verifier",
                       "points", "score", "max", "status", "text", "title", "comment", "place", "when", "name", "count"];
@@ -97,10 +98,10 @@ export default function NotificationBell() {
 
   useEffect(() => {
     void refresh();
-    const timer = setInterval(refresh, POLL_MS);
+    const stop = everyVisible(() => void refresh(), POLL_MS);
     const onFocus = () => void refresh();
     window.addEventListener("focus", onFocus);
-    return () => { clearInterval(timer); window.removeEventListener("focus", onFocus); };
+    return () => { stop(); window.removeEventListener("focus", onFocus); };
   }, [refresh]);
 
   const close = useCallback(() => { setOpen(false); void refresh(); bell.current?.focus(); }, [refresh]);

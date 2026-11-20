@@ -31,6 +31,7 @@ import { navigate, usePath, useRouteTab } from "./router";
 import { courseText } from "./labels";
 import PublicSite, { isPublicPath } from "./public/PublicSite";
 import { chosenPanel } from "./public/panels";
+import { everyVisible } from "./poll";
 
 // A group invite (t.me/<bot>?start=g<code>) opens the app with ?join=<code>.
 const joinCode = new URLSearchParams(window.location.search).get("join");
@@ -86,8 +87,18 @@ export default function App() {
     showLogin();
   }, [showLogin]);
 
-  // an expired website session goes back to the sign-in screen instead of failing on every screen
-  useEffect(() => { if (!insideTelegram) setUserUnauthorizedHandler(logout); }, [logout]);
+  // an expired website session goes back to the sign-in screen instead of failing on every screen; inside Telegram
+  // (a password changed on the website ends this session too) the Mini App signs in again with Telegram, once a minute
+  // at most, instead of failing on every call until it is reopened
+  useEffect(() => {
+    if (!insideTelegram) { setUserUnauthorizedHandler(logout); return; }
+    let last = 0;
+    setUserUnauthorizedHandler(() => {
+      if (Date.now() - last < 60_000) return;
+      last = Date.now();
+      void signIn(() => api.telegramLogin(initData));
+    });
+  }, [logout, signIn]);
 
   useEffect(() => {
     if (insideTelegram) {
@@ -217,8 +228,7 @@ function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
   // unread group messages on the community tab, refreshed every 30 seconds
   useEffect(() => {
     void refreshUnread(); void refreshChats();
-    const timer = setInterval(() => { void refreshUnread(); void refreshChats(); }, 30000);
-    return () => clearInterval(timer);
+    return everyVisible(() => { void refreshUnread(); void refreshChats(); }, 30000);
   }, [refreshUnread, refreshChats]);
 
   const seeker = me.role === "student";

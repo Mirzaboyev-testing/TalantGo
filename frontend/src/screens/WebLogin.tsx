@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import { t, useLang, type MsgKey } from "../i18n";
 import { Icon } from "../icons";
 import { PanelArt } from "../public/art";
@@ -10,6 +10,7 @@ import { BOT_URL, offerTelegram } from "../tg";
 import { ErrorText, isFullName, message } from "../ui";
 import { BotWaiting, useBotLink } from "./BotLink";
 import { ForgotPassword } from "./PasswordRecovery";
+import PasswordInput from "./PasswordInput";
 import { BRAND, BrandLogo } from "../brand";
 
 type GetToken = () => Promise<{ token: string; moved_to?: string | null }>;
@@ -34,7 +35,10 @@ export default function WebLogin({ dev, panel, onSignIn, onDev }: {
   useLang();
   useEffect(() => { if (panel) rememberPanel(panel); }, [panel]);
   const panelInfo = PANELS.find((p) => p.id === panel);
-  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
+  // «Bepul boshlash» sends ?yangi: new people start on sign-up (they kept typing into «Kirish», 2026-11-20 logs)
+  const [mode, setMode] = useState<"login" | "register" | "forgot">(
+    () => (new URLSearchParams(window.location.search).has("yangi") ? "register" : "login"));
+  const [noAccount, setNoAccount] = useState(false);
   const [f, setF] = useState({ name: "", email: "", password: "", password2: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -58,7 +62,7 @@ export default function WebLogin({ dev, panel, onSignIn, onDev }: {
          ["w-pass2", f.password2 === f.password && f.password2 !== "", t("s.web.c_pass2")]]
       : [["w-email", emailOk, t("s.common.c_email")], ["w-pass", f.password.length > 0, t("s.web.c_pass")]]);
     if (!ok) return;
-    setBusy(true); setError("");
+    setBusy(true); setError(""); setNoAccount(false);
     try {
       const r = mode === "register"
         ? await api.emailRegister(f.name.trim(), f.email.trim(), f.password)
@@ -66,9 +70,12 @@ export default function WebLogin({ dev, panel, onSignIn, onDev }: {
       onSignIn(() => Promise.resolve(r));
     } catch (e) {
       setError(message(e));
+      setNoAccount(mode === "login" && e instanceof ApiError && e.status === 404);
       setBusy(false);
     }
   }
+
+  const switchMode = (next: "login" | "register" | "forgot") => { setMode(next); setError(""); setNoAccount(false); };
 
   const telegram = offerTelegram && (
     <>
@@ -114,8 +121,8 @@ export default function WebLogin({ dev, panel, onSignIn, onDev }: {
           {mode === "forgot" && <ForgotPassword initialEmail={f.email.trim()} onSignIn={onSignIn} onBack={() => setMode("login")} />}
           {mode !== "forgot" && <div className="login-form">
             <div className="segmented">
-              <button className={mode === "login" ? "on" : ""} onClick={() => { setMode("login"); setError(""); }}>{t("s.web.login")}</button>
-              <button className={mode === "register" ? "on" : ""} onClick={() => { setMode("register"); setError(""); }}>{t("s.web.register")}</button>
+              <button className={mode === "login" ? "on" : ""} onClick={() => switchMode("login")}>{t("s.web.login")}</button>
+              <button className={mode === "register" ? "on" : ""} onClick={() => switchMode("register")}>{t("s.web.register")}</button>
             </div>
             <form onSubmit={(e) => { e.preventDefault(); void submit(); }}>
               {mode === "register" && (
@@ -128,22 +135,29 @@ export default function WebLogin({ dev, panel, onSignIn, onDev }: {
               </Field>
               <Field id="w-pass" label={t("s.common.password")} required
                      error={errors["w-pass"] && (mode === "register" ? t("s.common.min8") : t("s.web.pass_needed"))}>
-                <input id="w-pass" type="password" className={cls("w-pass")} value={f.password} maxLength={128}
-                       autoComplete={mode === "register" ? "new-password" : "current-password"} onChange={set("password", "w-pass")} />
+                <PasswordInput id="w-pass" className={cls("w-pass")} value={f.password}
+                               autoComplete={mode === "register" ? "new-password" : "current-password"}
+                               onChange={(v) => { setF((cur) => ({ ...cur, password: v })); clear("w-pass"); }} />
               </Field>
               {mode === "register" && (
                 <Field id="w-pass2" label={t("s.web.pass2")} required error={errors["w-pass2"] && t("s.web.pass_mismatch")}>
-                  <input id="w-pass2" type="password" className={cls("w-pass2")} value={f.password2} maxLength={128} autoComplete="new-password" onChange={set("password2", "w-pass2")} />
+                  <PasswordInput id="w-pass2" className={cls("w-pass2")} value={f.password2} autoComplete="new-password"
+                                 onChange={(v) => { setF((cur) => ({ ...cur, password2: v })); clear("w-pass2"); }} />
                 </Field>
               )}
               <ErrorText error={error} />
+              {noAccount && (
+                <button type="button" className="btn ghost" style={{ marginTop: 10 }} onClick={() => switchMode("register")}>
+                  {t("s.web.register_this", { email: f.email.trim() })}
+                </button>
+              )}
               <button className="btn" type="submit" style={{ marginTop: 16 }} disabled={busy}>
                 {busy ? t("s.common.waiting") : mode === "register" ? t("s.web.register") : t("s.web.login")}
               </button>
             </form>
             {mode === "login" && (
               <p className="hint" style={{ marginBottom: 0 }}>
-                <button type="button" className="link-btn" onClick={() => { setMode("forgot"); setError(""); }}>{t("pw.forgot_link")}</button>
+                <button type="button" className="link-btn" onClick={() => switchMode("forgot")}>{t("pw.forgot_link")}</button>
               </p>
             )}
             {mode === "register" && offerTelegram && <p className="hint" style={{ marginBottom: 0 }}>{t("s.web.hint_register")}</p>}

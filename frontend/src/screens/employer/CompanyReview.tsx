@@ -54,7 +54,7 @@ export default function CompanyReview({ me, onChanged, onLogout }: { me: Me; onC
   // the decision arrives without a reload (accounts without Telegram get no bot message)
   useEffect(() => {
     if (rejected || editing) return;
-    const timer = window.setInterval(() => { api.me().then(onChanged, () => {}); setNow(Date.now()); }, 30000);
+    const timer = window.setInterval(() => { if (document.hidden) return; api.me().then(onChanged, () => {}); setNow(Date.now()); }, 30000);
     return () => window.clearInterval(timer);
   }, [rejected, editing, onChanged]);
   useEffect(() => {

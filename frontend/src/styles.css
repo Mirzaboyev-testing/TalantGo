@@ -636,7 +636,7 @@ input.invalid, textarea.invalid, select.invalid { border-color: var(--bad) !impo
 .co-page { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .co-page > * { margin-top: 0; margin-bottom: 0; }
 .co-narrow { max-width: 900px; width: 100%; margin: 0 auto; }
-.co-narrow-block { max-width: 760px; }
+.co-narrow-block { max-width: 760px; display: flex; flex-direction: column; gap: 16px; }   /* stacked cards keep a gap */
 .co-back { align-self: flex-start; }
 .co-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px 20px; }
 .co-head-text { min-width: 0; flex: 1 1 360px; }

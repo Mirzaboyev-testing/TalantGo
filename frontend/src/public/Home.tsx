@@ -43,7 +43,8 @@ export default function Home({ me }: { me: Me | null }) {
 
   // a zero next to a label reads as "nothing here yet"; such numbers are left out
   const tiles = statTiles(stats).slice(0, 3);
-  const start = me ? panelBase(me) : "/kirish";
+  // a first visit means signing up: the sign-in page opens on «Ro'yxatdan o'tish» (?yangi), not on «Kirish»
+  const start = me ? panelBase(me) : "/kirish?yangi=1";
 
   return (
     <>

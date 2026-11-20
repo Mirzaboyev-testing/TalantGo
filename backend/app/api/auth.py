@@ -162,7 +162,9 @@ class LoginIn(BaseModel):
     password: str = Field(max_length=128)
 
 
-FAILS_ALLOWED, FAIL_WINDOW = 8, 15 * 60       # wrong passwords per email
+# Wrong passwords for one account: 8 from one address, 40 from all addresses together. Keyed by address too, so a
+# stranger typing someone's e-mail eight times no longer locks the owner out (2026-11-19 live test).
+FAILS_ALLOWED, FAILS_ALLOWED_ALL, FAIL_WINDOW = 8, 40, 15 * 60
 # Per IP, an hour. A whole class signs up from one campus Wi-Fi (one NAT address), so these are set for a room
 # full of students, and only wrong passwords count against the IP: right ones from a shared address never block it.
 IP_LOGIN_FAILS, IP_REGISTERS, IP_WINDOW = 60, 60, 60 * 60
@@ -179,13 +181,24 @@ def _recent(store: dict[str, list[float]], key: str, window: float) -> list[floa
     return store[key]
 
 
-def _check_rate(email: str) -> None:
-    if len(_recent(_fails, email, FAIL_WINDOW)) >= FAILS_ALLOWED:
+def _client(request: Request) -> str:
+    return request.client.host if request.client else "-"
+
+
+def _check_rate(email: str, request: Request) -> None:
+    if (len(_recent(_fails, f"{email}|{_client(request)}", FAIL_WINDOW)) >= FAILS_ALLOWED
+            or len(_recent(_fails, email, FAIL_WINDOW)) >= FAILS_ALLOWED_ALL):
         raise HTTPException(429, "Juda ko'p noto'g'ri urinish. 15 daqiqadan keyin qayta urinib ko'ring.")
 
 
+def _record_fail(email: str, request: Request) -> None:
+    now = time.time()
+    _fails[f"{email}|{_client(request)}"].append(now)
+    _fails[email].append(now)
+
+
 def _ip_key(request: Request, kind: str) -> str:
-    return f"{kind}:{request.client.host if request.client else '-'}"
+    return f"{kind}:{_client(request)}"
 
 
 def _check_ip(request: Request, limit: int, kind: str, count: bool = True) -> None:
@@ -218,16 +231,24 @@ async def register(body: RegisterIn, request: Request, session: Session) -> Toke
 
 @router.post("/login", response_model=TokenOut)
 async def login(body: LoginIn, request: Request, session: Session) -> TokenOut:
-    _check_rate(body.email)
+    _check_rate(body.email, request)
     _check_ip(request, IP_LOGIN_FAILS, "login", count=False)
     user = (await session.execute(select(User).where(User.email == body.email))).scalar_one_or_none()
-    if user is None or not user.password_hash or not await asyncio.to_thread(check_password, body.password, user.password_hash):
-        _fails[body.email].append(time.time())
+    # New people kept typing into "Kirish" before signing up (52 tries, one lockout, 2026-11-20 logs), so an unknown
+    # e-mail says so plainly. Sign-up already tells whether an e-mail is taken, so this reveals nothing new.
+    if user is None:
+        _by_ip[_ip_key(request, "login")].append(time.time())
+        raise HTTPException(404, "Bu email bilan akkaunt topilmadi. Platformada yangi bo'lsangiz, «Ro'yxatdan o'tish»ni bosing.")
+    if not user.password_hash:
+        raise HTTPException(409, "Bu akkauntga hali parol qo'yilmagan: Telegram orqali kiring yoki «Parolni unutdingizmi?» "
+                                 "orqali parol o'rnating.")
+    if not await asyncio.to_thread(check_password, body.password, user.password_hash):
+        _record_fail(body.email, request)
         _by_ip[_ip_key(request, "login")].append(time.time())
         raise HTTPException(401, "Email yoki parol noto'g'ri")
     if user.is_blocked:
         raise HTTPException(403, "Hisobingiz bloklangan. Savollar bo'lsa, adminga yozing.")
-    _fails.pop(body.email, None)
+    _fails.pop(f"{body.email}|{_client(request)}", None)
     user.last_seen_at = datetime.now(UTC)
     await session.commit()
     return TokenOut(token=user_token(user))

@@ -151,8 +151,11 @@ async def telegram_unlink(actor: AdminActor, session: Session) -> dict:
 @router.put("/password")
 async def change_password(body: PasswordIn, actor: AdminActor, session: Session) -> dict:
     account = actor.account
+    guess_key = f"admin-pw-guess:{account.id}"
+    ratelimit.check_guesses(guess_key)                # 8 wrong current passwords per 15 minutes
     # scrypt is slow on purpose: off the event loop, so other requests keep moving
     if not await asyncio.to_thread(check_password, body.current_password, account.password_hash):
+        ratelimit.hit(guess_key)
         raise HTTPException(400, "Joriy parol noto'g'ri")
     if body.new_password == body.current_password:
         raise HTTPException(400, "Yangi parol eskisidan farq qilsin")
