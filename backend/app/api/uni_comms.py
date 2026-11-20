@@ -39,9 +39,10 @@ class Audience(BaseModel):
     open_to_work: bool | None = None
 
     def to_filter(self) -> StudentFilter:
+        # always verified students only: the university on a profile is self-declared, so an unverified person
+        # must not get the career centre's notices (they carry the full text). verified_only stays for old clients.
         return StudentFilter(faculty=self.faculty or None, course=self.course, group=self.group or None,
-                             graduation_year=self.graduation_year, open_to_work=self.open_to_work,
-                             verification="verified" if self.verified_only else None)
+                             graduation_year=self.graduation_year, open_to_work=self.open_to_work, verification="verified")
 
     def matches(self, u: User) -> bool:
         return ((not self.faculty or u.faculty == self.faculty) and (not self.course or u.course == self.course)
@@ -303,7 +304,9 @@ async def registrations_csv(event_id: int, user: Staff, session: Session) -> Str
 async def my_feed(user: CurrentUser, session: Session) -> dict:
     """The student's university: its recent messages and the events open to them."""
     if not user.university_id:
-        return {"announcements": [], "events": []}
+        return {"announcements": [], "events": [], "verified": False}
+    # until the university verifies the student: its public announcements only, and none of its events
+    member = uni_news.is_member(user, user.university_id)
     news = await uni_news.student_items(session, user, lambda audience, u: Audience(**audience).matches(u), limit=10)
     rows = (await session.execute(select(UniversityEvent).where(
         UniversityEvent.university_id == user.university_id, UniversityEvent.status == "published",
@@ -312,8 +315,8 @@ async def my_feed(user: CurrentUser, session: Session) -> dict:
         EventRegistration.user_id == user.id, EventRegistration.event_id.in_([e.id for e in rows])))).scalars()) if rows else set()
     counts = await _counts(session, [e.id for e in rows])
     events_out = [_event_out(e, *counts.get(e.id, (0, 0)), me_registered=e.id in registered) for e in rows
-                  if e.id in registered or Audience(**e.audience).matches(user)]
-    return {"announcements": news, "events": events_out}
+                  if e.id in registered or (member and Audience(**e.audience).matches(user))]
+    return {"announcements": news, "events": events_out, "verified": member}
 
 
 # --------------------------------------------------------------------------- the company side
@@ -335,6 +338,8 @@ async def _open_event(session, user: User, event_id: int) -> UniversityEvent:
 @student_router.post("/events/{event_id}/register", status_code=201)
 async def register(event_id: int, user: CurrentUser, session: Session) -> dict:
     e = await _open_event(session, user, event_id)
+    if not uni_news.is_member(user, e.university_id):
+        raise HTTPException(403, uni_news.LOCKED)
     if e.status != "published" or e.starts_at < datetime.now(UTC) - timedelta(hours=6):
         raise HTTPException(409, "Bu tadbirga ro'yxatdan o'tib bo'lmaydi")
     if not Audience(**e.audience).matches(user):
@@ -356,7 +361,9 @@ async def unregister(event_id: int, user: CurrentUser, session: Session) -> dict
     e = await _open_event(session, user, event_id)
     row = (await session.execute(select(EventRegistration).where(EventRegistration.event_id == e.id,
                                                                   EventRegistration.user_id == user.id))).scalar_one_or_none()
-    if row is not None:
+    if row is None and not uni_news.is_member(user, e.university_id):
+        raise HTTPException(403, uni_news.LOCKED)
+    if row is not None:            # one's own registration can always be dropped (e.g. after the verification was withdrawn)
         await session.delete(row)
         await session.commit()
     return {"registered": False}

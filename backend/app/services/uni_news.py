@@ -1,7 +1,7 @@
 """University announcements as students, companies and the public see them (one place for who sees what).
 
-- students: their own university's announcements on the "students" channel whose filters match them, and the
-  university's public ones;
+- students: their own university's announcements on the "students" channel whose filters match them — only once
+  that university verified them (anyone can type a university in their profile) — and the university's public ones;
 - companies: announcements on the "companies" channel of universities they are accepted partners of, and the
   public ones of any active university;
 - the public page: only the "public" channel.
@@ -15,6 +15,15 @@ from ..models import Company, Partnership, SubmissionFile, University, Universit
 from . import files
 
 MAX_PHOTOS = 6
+LOCKED = ("Talabalar uchun e'lonlar va tadbirlar universitet talabaligingizni tasdiqlagandan keyin ochiladi. "
+          "Profilingizda tasdiqlash so'rang.")
+
+
+def is_member(user: User, university_id: int | None) -> bool:
+    """A student this university verified as its own. Only they get its student-only announcements and events:
+    the university on a profile is typed by the person, so it proves nothing until the career centre confirms it."""
+    return bool(university_id) and user.account_type == "student" and user.verification == "verified" \
+        and user.university_id == university_id and not user.is_blocked
 
 
 def university_logo_url(uni: University) -> str | None:
@@ -71,7 +80,8 @@ async def student_items(session: AsyncSession, user: User, matches, limit: int =
         return []
     rows = (await session.execute(_published().where(UniversityAnnouncement.university_id == user.university_id)
                                   .order_by(UniversityAnnouncement.created_at.desc()).limit(40))).scalars().all()
-    mine = [a for a in rows if ("students" in a.channels and matches(a.audience, user)) or "public" in a.channels][:limit]
+    member = is_member(user, user.university_id)
+    mine = [a for a in rows if ("students" in a.channels and member and matches(a.audience, user)) or "public" in a.channels][:limit]
     photos = await photos_by_id(session, mine)
     return [item_out(a, photos) for a in mine]
 

@@ -1,5 +1,5 @@
 """Events in one list for the student (student panel v2, phase 3): their university's events (audience rules of the
-university panel) and company events open to every student. Companies create and manage their own events here;
+university panel, and only once that university verified them) and company events open to every student. Companies create and manage their own events here;
 a student who registers for a company event shares their name with that company (the app says so)."""
 from datetime import UTC, datetime, timedelta
 from typing import Literal
@@ -11,7 +11,7 @@ from sqlalchemy import or_, select
 from ..core import ratelimit
 from ..models import (Application, Challenge, ChallengeEntry, Company, Conversation, EventRegistration, Job, Partnership,
                       UniversityEvent, User)
-from ..services import inbox
+from ..services import inbox, uni_news
 from ..services.files import logo_url
 from .deps import CurrentUser, Session
 from .employer import ApprovedEmployer
@@ -33,7 +33,8 @@ def _organiser(e: UniversityEvent) -> dict:
 def _open_to(e: UniversityEvent, user: User) -> bool:
     if e.company_id:
         return bool(e.company and e.company.status == "approved")     # a company sent back to review loses its events
-    return e.university_id == user.university_id and Audience(**e.audience).matches(user)
+    # a university's events are for the students it verified (the university on a profile is self-declared)
+    return uni_news.is_member(user, e.university_id) and Audience(**e.audience).matches(user)
 
 
 @router.get("/me/events")
@@ -70,7 +71,8 @@ async def register(event_id: int, user: CurrentUser, session: Session) -> dict:
     if e.status != "published" or e.starts_at < datetime.now(UTC) - timedelta(hours=6):
         raise HTTPException(409, "Bu tadbirga ro'yxatdan o'tib bo'lmaydi")
     if not _open_to(e, user):
-        raise HTTPException(403, "Bu tadbir boshqa fakultet yoki kurs uchun")
+        raise HTTPException(403, uni_news.LOCKED if e.university_id and not uni_news.is_member(user, e.university_id)
+                            else "Bu tadbir boshqa fakultet yoki kurs uchun")
     if await session.scalar(select(EventRegistration.id).where(EventRegistration.event_id == e.id, EventRegistration.user_id == user.id)):
         return {"registered": True}
     if e.capacity:

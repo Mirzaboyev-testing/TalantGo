@@ -38,7 +38,6 @@ function audienceTags(a: Audience): string[] {
   if (a.course) out.push(courseText(a.course));
   if (a.group) out.push(a.group);
   if (a.graduation_year) out.push(t("u.st.grad", { year: a.graduation_year }));
-  if (a.verified_only) out.push(t("u.msg.verified_only"));
   if (a.open_to_work) out.push(t("u.st.f.ready"));
   return out.length ? out : [t("u.msg.everyone")];
 }
@@ -199,9 +198,9 @@ function News() {
                   {facets?.years.map((x) => <option key={x.value} value={x.value}>{t("u.st.grad", { year: x.value })}</option>)}</select>
               </div>
               <div className="u-filter-row" style={{ marginTop: 8 }}>
-                <Toggle on={Boolean(aud.verified_only)} onChange={(v) => setA("verified_only", v)}>{t("u.msg.verified_only")}</Toggle>
                 <Toggle on={Boolean(aud.open_to_work)} onChange={(v) => setA("open_to_work", v)}>{t("u.st.f.ready")}</Toggle>
               </div>
+              <div className="hint" style={{ marginTop: 6 }}><UIcon name="verified" size={13} /> {t("u.msg.verified_note")}</div>
             </>
           )}
           <div className="u-reach-grid">

@@ -239,6 +239,9 @@ def test_the_chosen_job_field_beats_skills_left_from_an_old_track():
 async def test_university_event_link_and_tashkent_date(client, make_user):
     staff = await approved_staff(client, make_user)
     s = await make_student(client, make_user, "Ali Valiyev")
+    async with SessionLocal() as db:                 # a university's event notices reach only students it verified
+        (await db.get(User, s["id"])).verification = "verified"
+        await db.commit()
     day = date.today() + timedelta(days=3)
     start = datetime.combine(day, time(20, 30), UTC)                # 01:30 the next day in Tashkent
     r = await client.post(f"{API}/university/events", json={"title": "Ish yarmarkasi", "kind": "job_fair",

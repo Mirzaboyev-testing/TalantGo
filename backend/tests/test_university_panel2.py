@@ -12,6 +12,14 @@ from tests.test_pipeline_and_inbox import API, live_job
 from tests.test_university_panel import approved_staff
 
 
+async def verified(*users: dict) -> None:
+    """The university confirmed these students: only then its student-only announcements and events reach them."""
+    async with SessionLocal() as s:
+        for u in users:
+            (await s.get(User, u["id"])).verification = "verified"
+        await s.commit()
+
+
 async def staff_form(client, make_user, name="Aziza Karimova", short="TDIU", **extra) -> dict:
     """A person who fills in the full website form (phone, document, cooperation, pledge)."""
     u = await make_user(name)
@@ -180,6 +188,7 @@ async def test_messages_reach_only_the_chosen_students(client, make_user):
     a = await make_student(client, make_user, "Ali Valiyev")
     c = await make_student(client, make_user, "Charos Olimova")
     await client.patch(f"{API}/me", json={"faculty": "Moliya"}, headers=c["headers"])
+    await verified(a, c)
     h = staff["headers"]
     assert (await client.post(f"{API}/university/announcements/preview", json={"faculty": "Moliya"}, headers=h)).json() == {"recipients": 1, "companies": 0}
     r = await client.post(f"{API}/university/announcements", json={
@@ -197,6 +206,7 @@ async def test_events_signup_capacity_cancel_and_attendance(client, make_user):
     staff = await approved_staff(client, make_user)
     a = await make_student(client, make_user, "Ali Valiyev")
     b = await make_student(client, make_user, "Bobur Karimov")
+    await verified(a, b)
     h = staff["headers"]
     start = (datetime.now(UTC) + timedelta(days=3)).isoformat()
     r = await client.post(f"{API}/university/events", json={"title": "Ish yarmarkasi", "kind": "job_fair", "starts_at": start,
@@ -243,6 +253,7 @@ async def test_university_never_sees_student_contacts_and_csv_cannot_run_formula
     async with SessionLocal() as s:
         u = await s.get(User, a["id"])
         u.phone, u.email, u.username, u.group_name = "+998901110000", "ali@mail.uz", "ali_tg", "=HYPERLINK(\"http://x\")"
+        u.verification = "verified"              # registers for the university's event below
         await s.commit()
     h = staff["headers"]
     row = (await client.get(f"{API}/university/roster", headers=h)).json()["items"][0]
@@ -266,7 +277,7 @@ async def test_university_never_sees_student_contacts_and_csv_cannot_run_formula
 
 async def test_message_links_stay_inside_the_app(client, make_user):
     staff = await approved_staff(client, make_user)
-    await make_student(client, make_user, "Ali Valiyev")
+    await verified(await make_student(client, make_user, "Ali Valiyev"))
     h = staff["headers"]
     for bad in ("/\\evil.example", "/\t/evil.example", "//evil.example", "/ok page"):
         r = await client.post(f"{API}/university/announcements", json={"title": "Havola", "text": "Havola tekshiruvi",
@@ -341,6 +352,7 @@ async def test_announcements_with_photos_reach_students_partner_companies_and_th
     a = await make_student(client, make_user, "Ali Valiyev")
     c = await make_student(client, make_user, "Charos Olimova")
     await client.patch(f"{API}/me", json={"faculty": "Moliya"}, headers=c["headers"])
+    await verified(a, c)
     h = staff["headers"]
     p1, p2 = await _photo(client, h), await _photo(client, h, "ikki.webp")
     foreign = await _photo(client, a["headers"])
@@ -431,3 +443,55 @@ async def test_the_company_sees_who_recommended_its_vacancy_and_a_university_can
     assert (await client.get(f"{API}/employer/jobs", headers=hr["headers"])).json()[0]["recommended_by"] == []
     opp = (await client.get(f"{API}/university/opportunities", headers=staff["headers"])).json()
     assert next(j for j in opp if j["id"] == job["id"])["recommended"] is False
+
+
+
+async def test_only_students_the_university_verified_get_its_student_posts_and_events(client, make_user):
+    """The university on a profile is typed by the person: a company account or another university's student who
+    puts it in must not read the career centre's student-only announcements or sign up for its events."""
+    hr, _ = await live_job(client, make_user)
+    staff = await approved_staff(client, make_user)
+    h, tdiu = staff["headers"], await uni_id("TDIU")
+    await verified(await make_student(client, make_user, "Tasdiqlangan Talaba"))     # someone the post can reach
+    r = await client.post(f"{API}/university/announcements", json={"title": "Faqat talabalarga", "text": "Ichki stipendiya tanlovi",
+                                                                  "channels": ["students"]}, headers=h)
+    assert r.status_code == 201 and r.json()["recipients"] == 1
+    await client.post(f"{API}/university/announcements", json={"title": "Hammaga", "text": "Ochiq eshiklar kuni haqida",
+                                                              "channels": ["public"]}, headers=h)
+    start = (datetime.now(UTC) + timedelta(days=2)).isoformat()
+    event = (await client.post(f"{API}/university/events", json={"title": "Ichki karyera kuni", "starts_at": start}, headers=h)).json()
+    student = await make_student(client, make_user, "Ali Valiyev")         # chose TDIU, not verified yet
+    # unverified people got no notice of it either (the notice carries the full text)
+    assert not any(n["kind"] == "university_announcement" for n in
+                   (await client.get(f"{API}/me/notifications", headers=student["headers"])).json()["items"])
+    async with SessionLocal() as s:                                      # a company account that typed TDIU in its profile
+        (await s.get(User, hr["id"])).university_id = tdiu
+        await s.commit()
+    titles = lambda r: [x["title"] for x in r.json()["announcements"]]  # noqa: E731
+
+    for who in (student, hr):
+        feed = await client.get(f"{API}/me/university/feed", headers=who["headers"])
+        assert titles(feed) == ["Hammaga"] and feed.json()["events"] == [] and feed.json()["verified"] is False
+    r = await client.post(f"{API}/me/university/events/{event['id']}/register", headers=student["headers"])
+    assert r.status_code == 403 and "tasdiqlagandan" in r.text
+    assert (await client.post(f"{API}/me/university/events/{event['id']}/register", headers=hr["headers"])).status_code == 404
+    assert all(e["organiser"] != "university" for e in (await client.get(f"{API}/me/events", headers=student["headers"])).json())
+    r = await client.post(f"{API}/me/events/{event['id']}/register", headers=student["headers"])
+    assert r.status_code == 403 and "tasdiqlagandan" in r.text
+
+    # the career centre verifies the student: the student-only post and the event open
+    await client.post(f"{API}/me/verification", headers=student["headers"])
+    assert (await client.post(f"{API}/university/verifications/{student['id']}", json={"approve": True}, headers=h)).status_code == 200
+    feed = await client.get(f"{API}/me/university/feed", headers=student["headers"])
+    assert titles(feed) == ["Hammaga", "Faqat talabalarga"] and feed.json()["verified"] is True
+    assert [e["title"] for e in feed.json()["events"]] == ["Ichki karyera kuni"]
+    assert (await client.post(f"{API}/me/university/events/{event['id']}/register", headers=student["headers"])).status_code == 201
+    assert any(e["id"] == event["id"] for e in (await client.get(f"{API}/me/events", headers=student["headers"])).json())
+
+    # the verification is withdrawn: the posts close again, but one's own registration can still be dropped
+    async with SessionLocal() as s:
+        (await s.get(User, student["id"])).verification = "rejected"
+        await s.commit()
+    assert titles(await client.get(f"{API}/me/university/feed", headers=student["headers"])) == ["Hammaga"]
+    assert (await client.delete(f"{API}/me/university/events/{event['id']}/register", headers=student["headers"])).status_code == 200
+    assert (await client.delete(f"{API}/me/university/events/{event['id']}/register", headers=student["headers"])).status_code == 403

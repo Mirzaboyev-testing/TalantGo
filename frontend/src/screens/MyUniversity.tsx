@@ -12,7 +12,8 @@ import { EventCard } from "./student/Events";
 import { NewsCard } from "./NewsCard";
 
 type Data = { university: UniversityProfile | null; verified?: boolean; recommended: (Job & { note: string })[]; outcomes: MyOutcome[] };
-type Feed = { announcements: NewsItem[]; events: EventItem[] };
+/** `verified`: the university confirmed this student, so its student-only announcements and events are open */
+type Feed = { announcements: NewsItem[]; events: EventItem[]; verified?: boolean };
 
 /** "Universitetim" (student panel v2): the university's page for its own student — what it recommends, its news
  *  and events, how its students get placed. The student's own jobs moved to the profile ("Tajriba"). */
@@ -40,6 +41,11 @@ export default function MyUniversity({ me }: { me: Me }) {
     );
   }
   const verified = me.verification === "verified";
+  const locked = feed ? feed.verified === false : !verified;    // the server decides: verified by this very university
+  const Locked = ({ text }: { text: string }) => (
+    <div className="st-empty compact"><Icon name="lock" size={18} /><span className="hint">{text}</span>
+      {me.verification !== "pending" && <button className="btn small ghost" onClick={() => navigate("/talaba/profil")}>{t("u.feed.verify_cta")}</button>}</div>
+  );
   return (
     <div className="co-page st-page">
       <section className="st-uni-hero">
@@ -94,10 +100,11 @@ export default function MyUniversity({ me }: { me: Me }) {
           </div>
           <div className="co-card">
             <div className="co-card-head"><b>{t("st.uni.news")}</b></div>
-            {feed && feed.announcements.length === 0 && <div className="st-empty compact"><span className="hint">{t("st.uni.no_news")}</span></div>}
+            {feed && feed.announcements.length === 0 && !locked && <div className="st-empty compact"><span className="hint">{t("st.uni.no_news")}</span></div>}
             {/* photos, category and the link (an app page opens here, a form in the browser): the same card companies see */}
             <div className="nw-list">
               {feed?.announcements.map((a) => <NewsCard key={a.id} item={a} showUniversity={false} />)}
+              {feed && locked && <Locked text={t("u.feed.locked_news")} />}
             </div>
           </div>
           {u.description && (
@@ -114,7 +121,8 @@ export default function MyUniversity({ me }: { me: Me }) {
               <b>{t("st.uni.events")}</b>
               <a href="/talaba/tadbirlar" onClick={(e) => { e.preventDefault(); navigate("/talaba/tadbirlar"); }}>{t("home.see_all")}</a>
             </div>
-            {feed && feed.events.length === 0 && <div className="st-empty compact"><span className="hint">{t("st.uni.no_events")}</span></div>}
+            {feed && feed.events.length === 0 && (locked ? <Locked text={t("u.feed.locked_events")} />
+              : <div className="st-empty compact"><span className="hint">{t("st.uni.no_events")}</span></div>)}
             <div className="co-col" style={{ gap: 10 }}>
               {feed?.events.slice(0, 3).map((e) => <EventCard key={e.id} e={{ ...e, organiser: "university", organiser_name: u.short_name }} onChanged={load} />)}
             </div>
