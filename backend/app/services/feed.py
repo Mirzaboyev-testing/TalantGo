@@ -3,7 +3,9 @@ authors and comments are shown. The routes are in api/feed.py.
 
 Readers: signed-in students, people of an approved company and approved university staff. A post is shown when it
 is visible (its author also sees it while reports keep it hidden), its author is not blocked, and a post limited to
-one university reaches only people of that university (students by their university, staff by theirs).
+one university reaches only people of that university: approved staff, and students whose studentship the university
+VERIFIED (a student could otherwise pick any university in their profile and read its closed posts; live test
+2026-11-20). Only reports from trusted people (a verified student, an approved company, approved staff) hide a post.
 """
 from dataclasses import dataclass
 
@@ -11,11 +13,11 @@ from fastapi import HTTPException
 from sqlalchemy import and_, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import Company, Post, PostComment, PostReaction, University, User
+from ..models import Company, Post, PostComment, PostReaction, PostReport, University, User
 from . import catalog, files, uni_news
 from .portfolio import media_url
 
-REPORTS_TO_HIDE = 3            # open reports from different people that hide a post until an admin decides
+REPORTS_TO_HIDE = 3            # open reports from different TRUSTED people that hide a post until an admin decides
 MAX_POST_IMAGES = 200          # images one person keeps in live posts (with 10 posts a day, a bound on disk use)
 
 
@@ -29,13 +31,31 @@ class Viewer:
 
 def viewer_of(user: User) -> Viewer | None:
     if user.account_type == "student":
-        return Viewer(user, "student", user.university_id)
+        # "only my university" needs the university's own confirmation, not just the profile field
+        return Viewer(user, "student", user.university_id if user.verification == "verified" else None)
     if user.account_type == "employer" and user.company is not None and user.company.status == "approved":
         return Viewer(user, "company", None, user.company_id)
     if (user.account_type == "university" and user.staff_status == "approved" and user.staff_university is not None
             and user.staff_university.is_active):
         return Viewer(user, "university", user.staff_university_id)
     return None
+
+
+def trusted(viewer: Viewer) -> bool:
+    """A report that counts towards hiding a post: a verified student, a person of an approved company (a company
+    viewer exists only when approved) or approved university staff. Anyone else's report waits for an admin."""
+    return viewer.kind != "student" or viewer.user.verification == "verified"
+
+
+async def trusted_reports(session: AsyncSession, post_id: int) -> int:
+    """Open reports on a post from people who are trusted now (and not blocked)."""
+    approved = select(Company.id).where(Company.status == "approved")
+    who = or_(and_(User.account_type == "student", User.verification == "verified"),
+              and_(User.account_type == "employer", User.company_id.in_(approved)),
+              and_(User.account_type == "university", User.staff_status == "approved"))
+    return await session.scalar(select(func.count()).select_from(PostReport).join(User, User.id == PostReport.reporter_id)
+                                .where(PostReport.post_id == post_id, PostReport.status == "open",
+                                       User.is_blocked.is_(False), who)) or 0
 
 
 def require_viewer(user: User) -> Viewer:

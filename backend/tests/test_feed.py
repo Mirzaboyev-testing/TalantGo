@@ -18,7 +18,15 @@ from tests.test_student_panel2 import PNG
 from tests.test_university_panel import approved_staff
 
 
-async def student(client, make_user, name: str, uni: str = "TDIU", fields: list[str] | None = None) -> dict:
+async def verify(*people: dict) -> None:
+    """The university confirmed these students (needed for «only my university» posts and trusted reports)."""
+    async with SessionLocal() as s:
+        await s.execute(update(User).where(User.id.in_([p["id"] for p in people])).values(verification="verified"))
+        await s.commit()
+
+
+async def student(client, make_user, name: str, uni: str = "TDIU", fields: list[str] | None = None,
+                  verified: bool = False) -> dict:
     u = await full_student(client, make_user, name)
     changes = {}
     if uni != "TDIU":
@@ -28,6 +36,8 @@ async def student(client, make_user, name: str, uni: str = "TDIU", fields: list[
     if changes:
         r = await client.patch(f"{API}/me", json=changes, headers=u["headers"])
         assert r.status_code == 200, r.text
+    if verified:                                       # after the profile change, which resets a verification
+        await verify(u)
     return u
 
 
@@ -118,9 +128,9 @@ async def test_company_and_university_posts(client, make_user):
 
 
 async def test_feed_scopes_university_visibility_and_paging(client, make_user):
-    a = await student(client, make_user, "Aziza TDIU", fields=["finance", "data"])
-    b = await student(client, make_user, "Bobur WIUT", uni="WIUT", fields=["design"])
-    c = await student(client, make_user, "Sardor TDIU", fields=["data"])
+    a = await student(client, make_user, "Aziza TDIU", fields=["finance", "data"], verified=True)
+    b = await student(client, make_user, "Bobur WIUT", uni="WIUT", fields=["design"], verified=True)
+    c = await student(client, make_user, "Sardor TDIU", fields=["data"], verified=True)
     hr = await approved_employer(client, make_user)
     staff = await approved_staff(client, make_user, "TDIU")
     wiut_staff = await approved_staff(client, make_user, "WIUT", name="WIUT markazi")
@@ -161,6 +171,16 @@ async def test_feed_scopes_university_visibility_and_paging(client, make_user):
         await s.execute(update(User).where(User.id == c["id"]).values(is_blocked=True))
         await s.commit()
     assert pc["id"] not in await feed_ids(client, a)
+
+    # live test 2026-11-20: a student who only typed TDIU into the profile (not verified) does not read its closed posts
+    d = await student(client, make_user, "Dilshod Tasdiqsiz")
+    assert pa["id"] not in await feed_ids(client, d)
+    assert (await client.get(f"{API}/posts/{pa['id']}", headers=d["headers"])).status_code == 404
+    assert await feed_ids(client, d, "university") == []
+    r = await client.post(f"{API}/posts", json={"kind": "experience", "text": "Yopiq", "visibility": "university"}, headers=d["headers"])
+    assert r.status_code == 422 and "tasdiqlangach" in r.json()["detail"]
+    pd = await post(client, d, "Mening ochiq postim")
+    assert pd["id"] in await feed_ids(client, d)                            # own posts always
 
 
 async def test_reactions_switch_and_count(client, make_user):
@@ -208,8 +228,9 @@ async def test_comments_replies_notifications_and_deleting(client, make_user):
     # a reply to a reply hangs under the top-level comment; the post's author gets one notice, not two
     c3 = (await client.post(url, json={"text": "Men ham qo'shilaman", "parent_id": c2["id"]}, headers=c["headers"])).json()
     assert c3["parent_id"] == c1["id"]
-    kinds = [n["kind"] for n in await bell(client, a)]
-    assert kinds == ["comment_reply", "post_comment"]
+    # comment notices on one post collapse into one unread row (live test 2026-11-20)
+    rows = await bell(client, a)
+    assert [n["kind"] for n in rows] == ["comment_reply"] and rows[0]["params"]["count"] == 2
     assert (await client.post(url, json={"text": "   "}, headers=c["headers"])).status_code == 422
     assert (await client.post(url, json={"text": "z" * 1001}, headers=c["headers"])).status_code == 422
     assert (await client.post(url, json={"text": "Yo'q izohga", "parent_id": 999999}, headers=c["headers"])).status_code == 404
@@ -245,7 +266,7 @@ async def test_comments_replies_notifications_and_deleting(client, make_user):
 async def test_three_reports_hide_a_post_until_an_admin_decides(client, make_user):
     admin_h = await owner(client)                          # the admin bell reaches accounts that exist
     a = await student(client, make_user, "Shikoyat Qilingan")
-    r1, r2, r3 = [await student(client, make_user, f"Shikoyatchi {i}") for i in ("Bir", "Ikki", "Uch")]
+    r1, r2, r3 = [await student(client, make_user, f"Shikoyatchi {i}", verified=True) for i in ("Bir", "Ikki", "Uch")]
     p = await post(client, a, "Bu yerda reklama bor")
     url = f"{API}/posts/{p['id']}/report"
     assert (await client.post(url, json={"reason": "spam"}, headers=a["headers"])).status_code == 422
@@ -330,6 +351,55 @@ def test_every_feed_admin_change_has_a_permission():
     missing = [f"{m} {r.path}" for r in router.routes if isinstance(r, APIRoute)
                for m in r.methods - {"GET", "HEAD"} if admin_access.required(m, r.path) is None and not _owner_only(r)]
     assert missing == []
+
+
+async def test_reports_from_new_accounts_reach_the_admin_but_do_not_hide(client, make_user):
+    """Live test 2026-11-20: three fresh accounts hid any post. Now only trusted people's reports count towards
+    hiding (a verified student, an approved company, approved staff); the others still reach the admin queue."""
+    admin_h = await owner(client)
+    a = await student(client, make_user, "Muallif Talaba")
+    p = await post(client, a, "Oddiy post")
+    url = f"{API}/posts/{p['id']}/report"
+    for i in range(3):
+        fresh = await student(client, make_user, f"Yangi Akkaunt {i}")
+        assert (await client.post(url, json={"reason": "spam"}, headers=fresh["headers"])).json() == {"ok": True}
+    viewer = await student(client, make_user, "Oddiy O'quvchi")
+    assert p["id"] in await feed_ids(client, viewer)                      # still shown
+    queue = (await client.get(f"{API}/admin/posts", headers=admin_h)).json()
+    assert [q["post"]["id"] for q in queue] == [p["id"]] and queue[0]["reports_open"] == 3
+    # two trusted reports on top: still below three trusted, still shown
+    hr = await approved_employer(client, make_user)
+    staff = await approved_staff(client, make_user, "TDIU")
+    await client.post(url, json={"reason": "offensive"}, headers=hr["headers"])
+    await client.post(url, json={"reason": "offensive"}, headers=staff["headers"])
+    assert p["id"] in await feed_ids(client, viewer)
+    # a third trusted one (a verified student) hides it
+    ok = await student(client, make_user, "Tasdiqli Talaba", verified=True)
+    await client.post(url, json={"reason": "false"}, headers=ok["headers"])
+    assert p["id"] not in await feed_ids(client, viewer)
+    assert (await client.get(f"{API}/admin/posts", headers=admin_h)).json()[0]["reports_open"] == 6
+
+
+async def test_many_comments_collapse_into_one_notice(client, make_user):
+    a = await student(client, make_user, "Mashhur Muallif")
+    b = await student(client, make_user, "Faol Izohchi")
+    p = await post(client, a)
+    for i in range(6):
+        r = await client.post(f"{API}/posts/{p['id']}/comments", json={"text": f"Fikr {i + 1}"}, headers=b["headers"])
+        assert r.status_code == 201, r.text
+    rows = [n for n in await bell(client, a) if n["kind"] == "post_comment"]
+    assert len(rows) == 1 and rows[0]["params"]["count"] == 6 and rows[0]["text"].endswith("6 ta yangi izoh")
+    assert rows[0]["params"]["text"] == "Fikr 6"                         # the newest comment is shown
+
+
+async def test_daily_comment_cap(client, make_user, monkeypatch):
+    monkeypatch.setattr(feed_api, "COMMENTS_A_DAY", 3)
+    a = await student(client, make_user, "Kunlik Izohchi")
+    p = await post(client, a)
+    for i in range(3):
+        assert (await client.post(f"{API}/posts/{p['id']}/comments", json={"text": f"Izoh {i}"}, headers=a["headers"])).status_code == 201
+    r = await client.post(f"{API}/posts/{p['id']}/comments", json={"text": "Yana bitta"}, headers=a["headers"])
+    assert r.status_code == 429 and "kunda 3" in r.json()["detail"]
 
 
 async def test_rate_limits_for_posts_and_comments(client, make_user):

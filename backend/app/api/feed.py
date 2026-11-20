@@ -29,6 +29,7 @@ Visibility = Literal["all", "university"]
 ReactionKind = Literal["like", "congrats"]
 Reason = Literal["spam", "offensive", "false", "private", "other"]
 MAX_TEXT = 3000
+COMMENTS_A_DAY = 100          # comments one person writes in a day (live test 2026-11-20)
 MAX_COMMENT = 1000
 MAX_IMAGES = 4
 COUNTER = {"like": "like_n", "congrats": "congrats_n"}
@@ -61,15 +62,21 @@ async def _bump(session: Session, post_id: int, **delta: int) -> None:
                           .execution_options(synchronize_session=False))
 
 
-async def _push_one(session: Session, user_id: int, kind: str, text: str, post_id: int, params: dict) -> None:
-    """One notice with a link to the post in the recipient's own panel feed."""
+async def _push_one(session: Session, user_id: int, kind: str, text: str, post_id: int, params: dict,
+                    grouped: bool = False) -> None:
+    """One notice with a link to the post in the recipient's own panel feed. Comment notices on one post collapse
+    into one unread row (and one Telegram message per half hour), like chat threads (live test 2026-11-20)."""
     u = await session.get(User, user_id)
     if u is None:
         return
     # each panel opens the post in its own posts section (company /korxona/postlar, university /universitet/postlar)
     base = {"student": "/talaba/hamjamiyat", "employer": "/korxona/postlar", "university": "/universitet/postlar"}.get(u.account_type)
     link = f"{base}?post={post_id}" if base else ""
-    await inbox.push(session, [user_id], kind, text, link=link, params=params)
+    if grouped:
+        await inbox.push(session, [user_id], kind, text, link=link, params=params, group=f"post:{post_id}",
+                         many=" · {count} ta yangi izoh")
+    else:
+        await inbox.push(session, [user_id], kind, text, link=link, params=params)
 
 
 async def _page(session: Session, query, viewer_id: int, before: int | None, limit: int) -> dict:
@@ -151,6 +158,13 @@ def _check(author_kind: str, kind: str, text: str, media: list[int], visibility:
                             else "«Faqat universitetim» uchun avval profilda universitetingizni belgilang")
 
 
+def _unverified_university(viewer, visibility: str | None) -> None:
+    """A student with a university in the profile but no verification yet cannot post «only my university»."""
+    if (visibility == "university" and viewer.kind == "student" and viewer.user.university_id
+            and viewer.user.verification != "verified"):
+        raise HTTPException(422, "«Faqat universitetim» talabalik tasdiqlangach ochiladi: profilda tasdiq so'rang")
+
+
 async def _claim(session: Session, user: User, media: list[int], post_id: int | None = None) -> None:
     """The images are the person's own uploads (PNG, JPG or WEBP), kept from now on."""
     if not media:
@@ -165,6 +179,7 @@ async def create_post(body: PostIn, viewer: Reader, session: Session) -> dict:
     _may_write(viewer)
     user = viewer.user
     text, media = _clean(body.text), list(dict.fromkeys(i for i in body.media_ids if i))
+    _unverified_university(viewer, body.visibility)
     _check(viewer.kind, body.kind, text, media, body.visibility, viewer.university_id)
     await _claim(session, user, media)
     ratelimit.limit(f"post:{user.id}", 10, 24 * 3600, "Bir kunda 10 tadan ortiq post joylab bo'lmaydi: ertaga davom eting")
@@ -192,6 +207,8 @@ async def edit_post(post_id: int, body: PostEditIn, viewer: Reader, session: Ses
     text = _clean(body.text) if body.text is not None else post.text
     kind, visibility = body.kind or post.kind, body.visibility or post.visibility
     media = list(dict.fromkeys(i for i in body.media_ids if i)) if body.media_ids is not None else old
+    if visibility != post.visibility:
+        _unverified_university(viewer, visibility)
     _check(post.author_kind, kind, text, media, visibility, post.university_id)
     if (text, kind, visibility, media) != (post.text, post.kind, post.visibility, old):
         await _claim(session, viewer.user, media, post.id)
@@ -302,6 +319,8 @@ async def add_comment(post_id: int, body: CommentIn, viewer: Reader, session: Se
                 or top is None or top.status != "visible"):
             raise HTTPException(404, "Javob berilayotgan izoh topilmadi")
     ratelimit.limit(f"comment:{user.id}", 10, 60, "Juda tez yozyapsiz: bir daqiqadan keyin davom eting")
+    ratelimit.limit(f"comment-day:{user.id}", COMMENTS_A_DAY, 24 * 3600,
+                    f"Bir kunda {COMMENTS_A_DAY} tadan ortiq izoh yozib bo'lmaydi: ertaga davom eting")
     comment = PostComment(post_id=post.id, user_id=user.id, parent_id=top.id if top else None, text=text)
     session.add(comment)
     await _bump(session, post.id, comments_n=1)
@@ -313,10 +332,12 @@ async def add_comment(post_id: int, body: CommentIn, viewer: Reader, session: Se
     params = {"name": name, "text": snippet, "post_id": post.id}
     told = {user.id}
     if reply_to is not None and reply_to.user_id not in told:
-        await _push_one(session, reply_to.user_id, "comment_reply", f"{name} izohingizga javob berdi: «{snippet}»", post.id, params)
+        await _push_one(session, reply_to.user_id, "comment_reply", f"{name} izohingizga javob berdi: «{snippet}»", post.id,
+                        params, grouped=True)
         told.add(reply_to.user_id)
     if post.author_id not in told:            # the post's author replying gets one notice, not two
-        await _push_one(session, post.author_id, "post_comment", f"{name} postingizga izoh yozdi: «{snippet}»", post.id, params)
+        await _push_one(session, post.author_id, "post_comment", f"{name} postingizga izoh yozdi: «{snippet}»", post.id,
+                        params, grouped=True)
     return out
 
 
@@ -379,9 +400,12 @@ async def report_post(post_id: int, body: ReportIn, viewer: Reader, session: Ses
                                    .returning(PostReport.id))).first()
     if added is None:                                    # reported before: one report per person
         return {"ok": True}
-    open_n = (await session.execute(update(Post).where(Post.id == post.id).values(reports_open=Post.reports_open + 1)
-                                    .returning(Post.reports_open).execution_options(synchronize_session=False))).scalar_one()
+    await session.execute(update(Post).where(Post.id == post.id).values(reports_open=Post.reports_open + 1)
+                          .execution_options(synchronize_session=False))
     hidden = None
+    # every report reaches the admin queue, but only trusted people's reports hide a post (three fresh accounts
+    # could otherwise hide anything; live test 2026-11-20)
+    open_n = await fd.trusted_reports(session, post.id) if fd.trusted(viewer) else 0
     if open_n >= fd.REPORTS_TO_HIDE:
         hidden = (await session.execute(update(Post).where(Post.id == post.id, Post.status == "visible")
                                         .values(status="hidden").returning(Post.id)
