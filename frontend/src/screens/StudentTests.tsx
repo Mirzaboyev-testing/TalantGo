@@ -5,6 +5,7 @@ import { Icon } from "../icons";
 import { attemptStatusLabel } from "../labels";
 import { ask, backButton, haptic } from "../tg";
 import { ErrorText, message, toast } from "../ui";
+import TestStatsCard from "./student/competitions/TestStatsCard";
 
 type View = { kind: "list" } | { kind: "take"; test: StartedTest } | { kind: "result"; id: number };
 
@@ -220,6 +221,8 @@ function Result({ id, onBack }: { id: number; onBack: () => void }) {
             {r.status === "submitted" && <div className="hint">{t("s.tests.submitted_hint")}</div>}
             {r.feedback && <p style={{ whiteSpace: "pre-line", marginBottom: 0 }}>{t("s.tests.feedback", { text: r.feedback })}</p>}
           </div>
+          {/* where the result stands among everyone who took the test (anonymous; nothing until graded) */}
+          {r.status === "graded" && r.max_score > 0 && <TestStatsCard testId={id} />}
           {r.items.map((item, n) => (
             <div key={item.question.id} className="card">
               <div className="row between">

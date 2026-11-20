@@ -1223,3 +1223,157 @@ class PostReport(Base):
     note: Mapped[str] = mapped_column(String(500), default="", server_default="")
     status: Mapped[str] = mapped_column(String(10), default="open", server_default="open")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# --------------------------------------------------------------------------- competitions, teams (docs/13-musobaqalar.md)
+
+from sqlalchemy import text as _sql  # noqa: E402  (kept with the tables that use it)
+
+TEAM_KINDS = ("persistent", "one_time")
+COMPETITION_ORGANIZERS = ("company", "university", "platform")
+COMPETITION_MODES = ("individual", "team")
+COMPETITION_TEAM_KINDS = ("any", "persistent", "one_time")
+COMPETITION_AUDIENCES = ("all", "fields", "university")
+COMPETITION_STATES = ("draft", "published", "results", "archived")
+ENTRY_STATES = ("registered", "eliminated", "withdrawn", "finished")
+
+
+class Competition(Base):
+    """An individual or team contest a company, a university or the platform (admin) runs, in 1–5 stages.
+    university_id: the organizer university for a university's competition, else the audience university."""
+    __tablename__ = "competitions"
+    __table_args__ = (
+        _in("organizer_kind", COMPETITION_ORGANIZERS, "competition_organizer_valid"),
+        _in("mode", COMPETITION_MODES, "competition_mode_valid"),
+        _in("team_kind", COMPETITION_TEAM_KINDS, "competition_team_kind_valid"),
+        _in("audience", COMPETITION_AUDIENCES, "competition_audience_valid"),
+        _in("status", COMPETITION_STATES, "competition_status_valid"),
+        CheckConstraint("team_min >= 1 AND team_max >= team_min AND team_max <= 10", name="competition_team_size"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    organizer_kind: Mapped[str] = mapped_column(String(12))
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    university_id: Mapped[int | None] = mapped_column(ForeignKey("universities.id", ondelete="SET NULL"), index=True)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_by_admin: Mapped[str] = mapped_column(String(160), default="", server_default="")
+    title: Mapped[str] = mapped_column(String(160))
+    description: Mapped[str] = mapped_column(Text, default="")
+    prize: Mapped[str] = mapped_column(String(300), default="", server_default="")
+    mode: Mapped[str] = mapped_column(String(12), default="individual")
+    team_kind: Mapped[str] = mapped_column(String(12), default="any", server_default="any")
+    team_min: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    team_max: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    audience: Mapped[str] = mapped_column(String(12), default="all", server_default="all")
+    job_fields: Mapped[list[str]] = mapped_column(ARRAY(String(24)), default=list, server_default="{}")
+    registration_ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))        # the first stage's start
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))          # the last stage's end
+    place_points: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=lambda: [50, 30, 20],
+                                                    server_default="{50,30,20}")
+    status: Mapped[str] = mapped_column(String(12), default="draft", server_default="draft", index=True)
+    hidden: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")     # by an admin
+    results_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    company: Mapped[Company | None] = relationship(lazy="selectin")
+    university: Mapped[University | None] = relationship(lazy="selectin")
+    stages: Mapped[list["CompetitionStage"]] = relationship(order_by="CompetitionStage.position", lazy="selectin",
+                                                            cascade="all, delete-orphan")
+
+
+class CompetitionStage(Base):
+    __tablename__ = "competition_stages"
+    __table_args__ = (UniqueConstraint("competition_id", "position"),
+                      CheckConstraint("ends_at > starts_at", name="competition_stage_dates_order"),
+                      CheckConstraint("advance_count IS NULL OR advance_count >= 1", name="competition_stage_advance"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    competition_id: Mapped[int] = mapped_column(ForeignKey("competitions.id", ondelete="CASCADE"), index=True)
+    position: Mapped[int] = mapped_column(Integer)                     # 1, 2, 3...: "order" in the API
+    title: Mapped[str] = mapped_column(String(160))
+    description: Mapped[str] = mapped_column(Text, default="")
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    advance_count: Mapped[int | None] = mapped_column(Integer)         # how many go on to the next stage
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Team(Base):
+    """A student team: persistent (season points, teammates can change) or one-time (made for one competition).
+    Joined instantly with the 6-character invite code; the captain removes members and renews the code."""
+    __tablename__ = "teams"
+    __table_args__ = (_in("kind", TEAM_KINDS, "team_kind_valid"),
+                      CheckConstraint("size_max BETWEEN 1 AND 10", name="team_size_max_range"),
+                      CheckConstraint("points >= 0 AND wins >= 0", name="team_points_nonnegative"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(60))
+    kind: Mapped[str] = mapped_column(String(12))
+    competition_id: Mapped[int | None] = mapped_column(ForeignKey("competitions.id", ondelete="SET NULL"), index=True)
+    captain_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    invite_code: Mapped[str] = mapped_column(String(8), unique=True)
+    size_max: Mapped[int] = mapped_column(Integer, default=5)
+    description: Mapped[str] = mapped_column(String(500), default="", server_default="")
+    points: Mapped[int] = mapped_column(Integer, default=0, server_default="0")              # season points
+    wins: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    competition: Mapped[Competition | None] = relationship(lazy="selectin")
+
+
+class TeamMembership(Base):
+    """A person in a team (the "team_members" table is the About page). left_at set: a former member."""
+    __tablename__ = "team_memberships"
+    __table_args__ = (_in("role", ("captain", "member"), "team_membership_role_valid"),
+                      Index("uq_team_memberships_active", "team_id", "user_id", unique=True,
+                            postgresql_where=_sql("left_at IS NULL")),
+                      Index("ix_team_memberships_user_active", "user_id", postgresql_where=_sql("left_at IS NULL")))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    team_id: Mapped[int] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    role: Mapped[str] = mapped_column(String(8), default="member")
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    left_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CompetitionEntry(Base):
+    """One participant of a competition: a student (individual mode) or a team (team mode)."""
+    __tablename__ = "competition_entries"
+    __table_args__ = (UniqueConstraint("competition_id", "user_id"), UniqueConstraint("competition_id", "team_id"),
+                      _in("status", ENTRY_STATES, "competition_entry_status_valid"),
+                      CheckConstraint("(user_id IS NULL) <> (team_id IS NULL)", name="competition_entry_one_owner"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    competition_id: Mapped[int] = mapped_column(ForeignKey("competitions.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    team_id: Mapped[int | None] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(12), default="registered", server_default="registered")
+    stage_reached: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    total_score: Mapped[int | None] = mapped_column(Integer)
+    place: Mapped[int | None] = mapped_column(Integer)
+    points_awarded: Mapped[int] = mapped_column(Integer, default=0, server_default="0")    # to each credited person
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class StageSubmission(Base):
+    """The work of one entry in one stage; sent again before the deadline it is replaced. members: who was on the
+    team when it was sent (they get the place points)."""
+    __tablename__ = "stage_submissions"
+    __table_args__ = (UniqueConstraint("stage_id", "entry_id"),
+                      CheckConstraint("score IS NULL OR score BETWEEN 0 AND 100", name="stage_submission_score_range"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    stage_id: Mapped[int] = mapped_column(ForeignKey("competition_stages.id", ondelete="CASCADE"), index=True)
+    entry_id: Mapped[int] = mapped_column(ForeignKey("competition_entries.id", ondelete="CASCADE"), index=True)
+    proof_url: Mapped[str] = mapped_column(String(512), default="", server_default="")
+    note: Mapped[str] = mapped_column(Text, default="", server_default="")
+    file_ids: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, server_default="{}")
+    submitted_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    score: Mapped[int | None] = mapped_column(Integer)
+    comment: Mapped[str] = mapped_column(Text, default="", server_default="")
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    members: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, server_default="{}")

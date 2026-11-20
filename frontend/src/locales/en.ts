@@ -7,6 +7,8 @@ import { student2 } from "./parts/student2";
 import { site } from "./parts/site";
 import { account } from "./parts/account";
 import { feed } from "./parts/feed";
+import { competitions } from "./parts/competitions";
+import { competitionsOrg } from "./parts/competitions-org";
 
 // English. Machine-assisted: review before a public launch.
 export const en: Record<MsgKey, string> = {
@@ -18,6 +20,8 @@ export const en: Record<MsgKey, string> = {
   ...site.en,
   ...account.en,
   ...feed.en,
+  ...competitions.en,
+  ...competitionsOrg.en,
   "common.loading": "Loading…",
   "common.close": "Close",
   "common.save": "Save",

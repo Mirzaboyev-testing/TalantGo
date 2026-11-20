@@ -9,7 +9,8 @@ import "./notifications.css";
 import { everyVisible } from "../poll";
 
 const PLACEHOLDERS = ["job", "company", "student", "university", "task", "test", "challenge", "note", "verifier",
-                      "points", "score", "max", "status", "text", "title", "comment", "place", "when", "name", "count"];
+                      "points", "score", "max", "status", "text", "title", "comment", "place", "when", "name", "count",
+                      "competition", "stage", "next_stage", "team", "organizer", "deadline"];
 
 /** The message in the reader's language: Uzbek is stored as written; ru/en use a template by kind. */
 export function notificationText(n: AppNotification): string {
@@ -46,6 +47,8 @@ const KIND_ICON: [RegExp, IconName, Tone][] = [
   [/^outcome_/, "award", "amber"],
   [/^test_/, "check", "blue"],
   [/^challenge_/, "trophy", "amber"],
+  [/^competition_|^stage_/, "trophy", "amber"],    // competitions in Topshiriqlar (docs/13-musobaqalar.md)
+  [/^team_/, "users", "blue"],
   [/task|work_|question_/, "flag", "green"],
   [/^password_/, "lock", "amber"],
 ];

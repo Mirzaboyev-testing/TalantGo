@@ -14,8 +14,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.security import _subkey
-from ..models import (ChallengeEntry, EmploymentOutcome, PortfolioItem, Post, Status, Submission, SubmissionFile,
-                      Task, User)
+from ..models import (ChallengeEntry, EmploymentOutcome, PortfolioItem, Post, StageSubmission, Status, Submission,
+                      SubmissionFile, Task, User)
 
 IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp"}
 ATTACH_TYPES = IMAGE_TYPES | {"application/pdf"}
@@ -75,10 +75,12 @@ async def claim(session: AsyncSession, user: User, file_ids: list[int], kinds: s
 
 
 async def referenced(session: AsyncSession, file_id: int) -> bool:
-    """Whether a profile photo or cover, a portfolio item, a task entry or a feed post (not removed) still uses the file."""
+    """Whether a profile photo or cover, a portfolio item, a task entry, a competition stage submission or a feed post
+    (not removed) still uses the file."""
     for query in (select(User.id).where((User.avatar_file_id == file_id) | (User.cover_file_id == file_id)),
                   select(PortfolioItem.id).where((PortfolioItem.cover_file_id == file_id) | PortfolioItem.file_ids.contains([file_id])),
                   select(ChallengeEntry.id).where(ChallengeEntry.file_ids.contains([file_id])),
+                  select(StageSubmission.id).where(StageSubmission.file_ids.contains([file_id])),
                   select(Post.id).where(Post.media_ids.contains([file_id]), Post.status != "removed")):
         if await session.scalar(query.limit(1)) is not None:
             return True

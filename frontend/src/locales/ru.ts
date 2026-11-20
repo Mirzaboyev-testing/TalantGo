@@ -7,6 +7,8 @@ import { student2 } from "./parts/student2";
 import { site } from "./parts/site";
 import { account } from "./parts/account";
 import { feed } from "./parts/feed";
+import { competitions } from "./parts/competitions";
+import { competitionsOrg } from "./parts/competitions-org";
 
 // Russian. Machine-assisted: a native speaker should review before a public launch.
 export const ru: Record<MsgKey, string> = {
@@ -18,6 +20,8 @@ export const ru: Record<MsgKey, string> = {
   ...site.ru,
   ...account.ru,
   ...feed.ru,
+  ...competitions.ru,
+  ...competitionsOrg.ru,
   "common.loading": "Загрузка…",
   "common.close": "Закрыть",
   "common.save": "Сохранить",

@@ -9,6 +9,7 @@ import { Avatar, ErrorText, message } from "../ui";
 import { StatTile } from "./employer/kit";
 import { BRAND } from "../brand";
 import PostComposer from "./student/PostComposer";
+import CompetitionsHomeCard from "./student/competitions/HomeCard";
 
 const go = (path: string) => (e?: React.MouseEvent) => { e?.preventDefault(); navigate(path); };
 export const missingLabel = (m: string) => tMaybe(`st.missing.${m}`) ?? tMaybe(`s.career.missing.${m}`) ?? m;
@@ -196,6 +197,8 @@ export default function StudentHome({ me }: { me: Me }) {
               ))}
             </div>
           )}
+
+          <CompetitionsHomeCard />
 
           <div className="co-card">
             <div className="co-card-head">

@@ -186,7 +186,9 @@ export default function App() {
 
   // students stay on the three-step sign-up until every required field is filled (mentors keep the older form)
   if (me.role === "student" && me.signup_missing.length > 0) {
-    return <>{ai}<StudentSignup me={me} onMe={setMe} onDone={async () => { await refreshMe(); navigate("/talaba"); }}
+    // a link that brought the student here (a team invite ?kod=, a competition) opens once the sign-up is done
+    const back = path.startsWith("/talaba/") ? path + window.location.search : "/talaba";
+    return <>{ai}<StudentSignup me={me} onMe={setMe} onDone={async () => { await refreshMe(); navigate(back); }}
                                 onBack={isNew ? () => setChosenStudent(false) : undefined} onLogout={logout} /></>;
   }
   if (me.signup_missing.length > 0 || changingTrack) {
@@ -214,7 +216,8 @@ function StudentApp({ me, refreshMe, setMe, onChangeTrack, onLogout }: {
   const sub = usePath().split("/")[3] ?? "";
   // tests moved from Arizalarim to Topshiriqlar (2026-11-19): older links still land on them
   useEffect(() => { if (segment === "arizalar" && sub === "testlar") navigate("/talaba/topshiriqlar/testlar", { replace: true }); }, [segment, sub]);
-  const tasksView: TasksView | undefined = segment === "tekshirish" ? "review" : segment === "yol" ? "weekly" : sub === "testlar" ? "tests" : undefined;
+  const tasksView: TasksView | undefined = segment === "tekshirish" ? "review" : segment === "yol" ? "weekly" : sub === "testlar" ? "tests"
+    : sub === "musobaqalar" ? "competitions" : sub === "jamoa" ? "teams" : sub === "reyting" ? "ranking" : undefined;
   const [unread, setUnread] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
   const refreshUnread = useCallback(() => api.groups.unread().then((r) => setUnread(r.unread), () => {}), []);

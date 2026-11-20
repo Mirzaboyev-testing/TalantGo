@@ -18,6 +18,7 @@ import Tracks from "./Tracks";
 import Universities from "./Universities";
 import SiteContent from "./SiteContent";
 import PostsAdmin from "./PostsAdmin";
+import CompetitionsAdmin from "./CompetitionsAdmin";
 import Users from "./Users";
 import { Complaints, Outcomes, Partnerships, Ranking } from "./Trust";
 import { clearToken, loadToken, saveToken } from "./session";
@@ -42,6 +43,7 @@ const MENU: { group: string; pages: Page[] }[] = [
     { id: "queue", label: "Tasdiqlash navbati", icon: "inbox", need: APPROVALS },
     { id: "complaints", label: "Shikoyatlar", icon: "flag", need: ["complaints"] },
     { id: "posts", label: "Postlar", icon: "megaphone", need: ["complaints"] },
+    { id: "competitions", label: "Musobaqalar", icon: "trophy", need: ["tests"] },
   ] },
   { group: "Talabalar", pages: [
     { id: "users", label: "Talabalar va mentorlar", icon: "school", need: ["users"] },
@@ -203,6 +205,7 @@ export default function AdminSite() {
             {current.id === "me" && <MyAccount me={me} />}
             {current.id === "complaints" && <Complaints canDecide={can("complaints")} />}
             {current.id === "posts" && <PostsAdmin canDecide={can("complaints") || can("posts")} />}
+            {current.id === "competitions" && <CompetitionsAdmin />}
             {current.id === "ranking" && <Ranking canEdit={can("ranking")} />}
             {current.id === "partnerships" && <Partnerships />}
             {current.id === "outcomes" && <Outcomes />}

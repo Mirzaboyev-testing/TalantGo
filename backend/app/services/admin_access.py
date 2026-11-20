@@ -77,6 +77,8 @@ RULES: tuple[tuple[str, str, str], ...] = (
     ("GET", "/admin/groups", "groups"),            # group members and messages
     ("GET", "/admin/applications", "reports"),     # the same rows as export/applications.csv
     ("GET", "/admin/outcomes", "reports"),         # who works where
+    ("W", "/admin/competitions", "tests"),         # competitions (docs/13-musobaqalar.md): hide, score, results
+    ("GET", "/admin/competitions", "tests"),       # entries with students' work
 )
 
 # reads with no contacts or documents, open to every active account: counts and charts, the approval badges,
