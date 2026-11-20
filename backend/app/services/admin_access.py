@@ -2,9 +2,11 @@
 account has its role's defaults. The owner can always do everything, and some things stay owner-only whatever
 is switched on (admin accounts, the bot token, AI keys, rules, resetting user passwords, adjusting points).
 
-Every change in the admin API (anything but GET) must match a rule below or it is refused for everyone but
-the owner, so a new endpoint is closed until it is given a permission here. A GET is open to every active
-account unless a rule names it (exports, AI conversations, broadcasts, the audit log, settings).
+Every admin API call must match a rule below or it is refused for everyone but the owner, so a new endpoint
+is closed until it is given a permission here. Reading works the same way since 2026-11-20 (review of
+e9ec19a): a list with personal data (contacts, documents, student numbers, messages, employment records)
+needs the permission that acts on it, and only the reads in OPEN_READS (counts, catalogues, public data)
+are open to every active account.
 """
 from fastapi import HTTPException
 
@@ -64,7 +66,25 @@ RULES: tuple[tuple[str, str, str], ...] = (
     ("*", "/admin/rules", "settings"),
     ("W", "/admin/posts/", "complaints"),          # the feed's report queue: hide or restore posts and comments
     ("W", "/admin/comments/", "complaints"),
+    # lists with personal data: the same permission as deciding on them (an analyst with nothing switched on
+    # used to read every phone, document link and student number)
+    ("GET", "/admin/verifications", "students"),   # student numbers
+    ("GET", "/admin/companies", "companies"),      # documents and the HR person's contacts
+    ("GET", "/admin/staff", "universities"),       # staff documents, phones and work e-mails
+    ("GET", "/admin/users", "users"),              # e-mails, phones, Telegram
+    ("GET", "/admin/submissions", "content"),      # students' work
+    ("GET", "/admin/complaints", "complaints"),    # who reported whom and why
+    ("GET", "/admin/groups", "groups"),            # group members and messages
+    ("GET", "/admin/applications", "reports"),     # the same rows as export/applications.csv
+    ("GET", "/admin/outcomes", "reports"),         # who works where
 )
+
+# reads with no contacts or documents, open to every active account: counts and charts, the approval badges,
+# the permission catalogue, things public on the site anyway (catalogues, the site's own content, posts: a
+# limited role may look at the report queue but not decide)
+OPEN_READS = ("/admin/stats", "/admin/dashboard", "/admin/inbox", "/admin/permissions", "/admin/tracks",
+              "/admin/tasks", "/admin/jobs", "/admin/tests", "/admin/challenges", "/admin/universities",
+              "/admin/partnerships", "/admin/ranking", "/admin/site", "/admin/posts")
 
 
 # open to every active account: its own bell
@@ -98,7 +118,7 @@ def check(account, method: str, path: str) -> None:
     if permission == SELF:
         return
     if permission is None:
-        if method == "GET":
+        if method == "GET" and path.startswith(OPEN_READS):
             return
         raise HTTPException(403, "Bu amalni faqat ilova egasi bajara oladi")
     if permission not in effective(account):

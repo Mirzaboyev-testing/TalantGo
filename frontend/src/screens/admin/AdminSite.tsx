@@ -31,7 +31,8 @@ type Me = AdminMe;
 const CanContext = createContext<(permission: string) => boolean>(() => false);
 export const useCan = () => useContext(CanContext);
 
-// `need`: the page shows only with one of these permissions; without it every active account sees the page
+// `need`: the page shows only with one of these permissions; without it every active account sees the page.
+// A page whose list holds personal data needs the same permission the server asks for (admin_access.py RULES).
 type Page = { id: string; label: string; icon: IconName; ownerOnly?: boolean; need?: string[] };
 const APPROVALS = ["students", "companies", "universities", "jobs"];
 const ROLE_LABEL: Record<string, string> = { owner: "Ega", admin: "Admin", moderator: "Moderator", analyst: "Tahlilchi" };
@@ -40,23 +41,23 @@ const MENU: { group: string; pages: Page[] }[] = [
   { group: "Moderatsiya", pages: [
     { id: "queue", label: "Tasdiqlash navbati", icon: "inbox", need: APPROVALS },
     { id: "complaints", label: "Shikoyatlar", icon: "flag", need: ["complaints"] },
-    { id: "posts", label: "Postlar", icon: "megaphone", need: ["complaints", "posts"] },
+    { id: "posts", label: "Postlar", icon: "megaphone", need: ["complaints"] },
   ] },
   { group: "Talabalar", pages: [
-    { id: "users", label: "Talabalar va mentorlar", icon: "school" },
-    { id: "submissions", label: "Topshirilgan ishlar", icon: "check" },
+    { id: "users", label: "Talabalar va mentorlar", icon: "school", need: ["users"] },
+    { id: "submissions", label: "Topshirilgan ishlar", icon: "check", need: ["content"] },
     { id: "tracks", label: "Yo'nalishlar va topshiriqlar", icon: "path", need: ["content"] },
     { id: "challenges", label: "Chellenjlar va vazifalar", icon: "flag" },
   ] },
   { group: "Ish bozori", pages: [
-    { id: "companies", label: "Kompaniyalar", icon: "building" },
+    { id: "companies", label: "Kompaniyalar", icon: "building", need: ["companies"] },
     { id: "jobs", label: "Vakansiyalar", icon: "briefcase" },
     { id: "tests", label: "Testlar", icon: "check" },
-    { id: "applications", label: "Arizalar", icon: "inbox" },
+    { id: "applications", label: "Arizalar", icon: "inbox", need: ["reports"] },
   ] },
   { group: "Ta'lim", pages: [
     { id: "universities", label: "Universitetlar", icon: "building" },
-    { id: "outcomes", label: "Bandlik yozuvlari", icon: "briefcase" },
+    { id: "outcomes", label: "Bandlik yozuvlari", icon: "briefcase", need: ["reports"] },
     { id: "partnerships", label: "Hamkorliklar", icon: "users" },
     { id: "ranking", label: "Reyting", icon: "chart" },
   ] },

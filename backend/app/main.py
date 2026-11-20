@@ -6,6 +6,8 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .api import (admin, admin_auth, assistant, auth, challenges, chat, company_tasks, company_tests, employer, groups, jobs, learning,
                   events, feed, notifications, pages, people, portfolio, public, site, trust, uni_comms, university, work)
@@ -39,8 +41,46 @@ async def lifespan(_: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title=f"{BRAND} API", version="0.1.0", lifespan=lifespan,
-              docs_url="/api/docs" if settings.app_env == "dev" else None, openapi_url="/api/openapi.json")
+# the API map and its docs only on a developer's machine: on the live site they listed every route to anyone
+DEV = settings.app_env == "dev"
+app = FastAPI(title=f"{BRAND} API", version="0.1.0", lifespan=lifespan, docs_url="/api/docs" if DEV else None,
+              redoc_url=None, openapi_url="/api/openapi.json" if DEV else None)
+
+SECURITY_HEADERS = {
+    "Strict-Transport-Security": "max-age=31536000",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+}
+# no X-Frame-Options: DENY: Telegram Web opens the Mini App in an iframe, so framing stays allowed for Telegram
+FRAME_ANCESTORS = "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org"
+
+
+class SecurityHeaders:
+    """Adds the headers above to every answer (2026-11-20 review: the site sent none). A header the answer
+    already has wins: uploaded files come with their own `Content-Security-Policy: sandbox`."""
+
+    def __init__(self, inner: ASGIApp) -> None:
+        self.inner = inner
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.inner(scope, receive, send)
+            return
+
+        async def send_with_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                for name, value in SECURITY_HEADERS.items():
+                    if name not in headers:
+                        headers.append(name, value)
+                if "content-security-policy" not in headers:
+                    headers.append("Content-Security-Policy", FRAME_ANCESTORS)
+            await send(message)
+
+        await self.inner(scope, receive, send_with_headers)
+
+
+app.add_middleware(SecurityHeaders)
 
 
 @app.exception_handler(Exception)
