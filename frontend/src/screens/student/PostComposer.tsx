@@ -35,12 +35,14 @@ export default function PostComposer({ me, editing, preset, onCreate, onSaved, o
   // "only my university" needs a university: students with one and university staff; a company posts to all
   const canLimit = me.account_type === "student" ? Boolean(me.university_ref)
     : me.account_type === "university" ? Boolean(me.staff_university ?? me.university_ref) : false;
+  // a student's "only my university" opens once the university verified them (the server says 422 otherwise)
 
   // an unsent post survives a reload or a closed tab (text and kind; images are re-picked)
   const [draft] = useState(() => (editing ? null : readDraft(me.id)));
   const [text, setText] = useState(editing?.text ?? draft?.text ?? "");
   const [kind, setKind] = useState<PostKind>(editing?.kind ?? (draft && kinds.includes(draft.kind) ? draft.kind : kinds[0]));
   const [vis, setVis] = useState<PostVisibility>(editing?.visibility ?? "all");
+  const uniLocked = me.account_type === "student" && me.verification !== "verified" && vis !== "university";
   const [imgs, setImgs] = useState<Img[]>(() => (editing?.media ?? []).map((m) => ({ key: `m${m.id}`, url: m.url, id: m.id, local: false })));
   const [active, setActive] = useState(Boolean(editing) || Boolean(autoFocus) || Boolean(draft?.text));
   const [busy, setBusy] = useState(false);
@@ -210,11 +212,13 @@ export default function PostComposer({ me, editing, preset, onCreate, onSaved, o
           {imgs.length > 0 && <span className="fd-tool-n">{imgs.length}/{MAX_IMAGES}</span>}
         </button>
         {canLimit && (
-          <label className="fd-vis-select">
+          <label className="fd-vis-select" title={uniLocked ? t("fd.compose.vis.locked_hint") : undefined}>
             <Icon name={vis === "all" ? "globe" : "lock"} size={16} />
             <select value={vis} aria-label={t("fd.compose.vis_label")} onChange={(e) => setVis(e.target.value as PostVisibility)}>
               <option value="all">{t("fd.compose.vis.all")}</option>
-              <option value="university">{t("fd.compose.vis.university")}</option>
+              <option value="university" disabled={uniLocked}>
+                {t("fd.compose.vis.university")}{uniLocked ? ` · ${t("fd.compose.vis.locked")}` : ""}
+              </option>
             </select>
           </label>
         )}
