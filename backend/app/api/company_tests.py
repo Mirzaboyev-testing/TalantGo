@@ -301,6 +301,14 @@ async def results(test_id: int, user: ApprovedEmployer, session: Session) -> dic
     return {"test": test_summary(test, len(attempts), sum(a.status == "submitted" for a in attempts)), "rows": rows}
 
 
+async def _locked(session: Session, attempt: TestAttempt) -> TestAttempt:
+    """The attempt read again under a row lock (2026-11-20, live test): three parallel "Topshirish" taps all
+    passed the status check, wrote the answers over each other and told the company three times. Now the
+    second request waits for the first one's commit and then sees the new status."""
+    return (await session.execute(select(TestAttempt).where(TestAttempt.id == attempt.id)
+                                  .with_for_update(of=TestAttempt).execution_options(populate_existing=True))).scalar_one()
+
+
 async def _own_attempt(session: Session, user: User, attempt_id: int) -> TestAttempt:
     attempt = await session.get(TestAttempt, attempt_id)
     if attempt is None or attempt.test.company_id != user.company_id or attempt.status == "in_progress":
@@ -318,7 +326,9 @@ async def attempt_detail(attempt_id: int, user: ApprovedEmployer, session: Sessi
 @employer_router.post("/test-attempts/{attempt_id}/grade")
 async def grade(attempt_id: int, body: GradingIn, user: ApprovedEmployer, session: Session) -> dict:
     """Points for written answers (and, if the company wants, a correction of an automatic score)."""
-    attempt = await _own_attempt(session, user, attempt_id)
+    # two staff grading at once: the second waits, merges into the first one's points and does not tell
+    # the student a second time
+    attempt = await _locked(session, await _own_attempt(session, user, attempt_id))
     questions = {q.id: q for q in attempt.test.questions}
     answers = {a["question_id"]: dict(a) for a in attempt.answers}
     for g in body.grades:
@@ -433,6 +443,7 @@ async def submit(test_id: int, body: SubmitIn, user: CurrentUser, session: Sessi
     test, attempt = await _test_for_student(session, user, test_id)
     if attempt is None:
         raise HTTPException(409, "Avval testni boshlang")
+    attempt = await _locked(session, attempt)
     if attempt.status != "in_progress":
         raise HTTPException(409, "Bu testni allaqachon topshirgansiz")
     given = {a.question_id: a for a in body.answers}
