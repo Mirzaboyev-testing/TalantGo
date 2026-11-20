@@ -10,6 +10,7 @@ import { PanelCards, panelBase } from "./panels";
 import { CompanyTile } from "./PublicCompanies";
 import { PublicJobCard } from "./PublicJobs";
 import { initials, siteImage, useSiteContent } from "./siteContent";
+import CompetitionHighlights from "../screens/competitions/CompetitionHighlights";
 import "./home.css";
 
 const STEPS: { icon: string; title: MsgKey; text: MsgKey }[] = [
@@ -166,6 +167,9 @@ export default function Home({ me }: { me: Me | null }) {
           </div>
         </div>
       </section>
+
+      {/* winners and leading teams of the competitions: shows only when the admin turns it on (admin → Musobaqalar) */}
+      <CompetitionHighlights />
 
       {jobs && jobs.length > 0 && (
         <section className="pub-wrap pub-section">

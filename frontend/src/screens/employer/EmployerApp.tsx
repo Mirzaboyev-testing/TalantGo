@@ -21,12 +21,14 @@ import { fieldLabel } from "../student/StudentSignup";
 import DirectChat from "../student/DirectChat";
 import CompanyEvents from "./CompanyEvents";
 import Feed from "../student/Feed";
+import CompetitionManager from "../competitions/CompetitionManager";
+import { competitionsApi } from "../../competitionsApi";
 import { formatDateTime, t, useLang } from "../../i18n";
 import { statusLabel } from "../../pipeline";
 import { ApplicantCard, CardBody } from "./ApplicantCard";
 import { CompanyMark, daysLeft, EmptyState, PageHead, Tabs } from "./kit";
 
-type Tab = "home" | "candidates" | "jobs" | "students" | "messages" | "tasks" | "events" | "feed" | "universities" | "tests" | "groups" | "profile";
+type Tab = "home" | "candidates" | "jobs" | "students" | "messages" | "tasks" | "competitions" | "events" | "feed" | "universities" | "tests" | "groups" | "profile";
 const tabs = (n: EmployerCounters | null, chats = 0): ShellTab<Tab>[] => [
   { id: "home", icon: "home", label: t("nav.company.home"), group: t("co.nav.main"), badge: n?.outcomes || undefined },
   { id: "candidates", icon: "inbox", label: t("nav.company.candidates"), group: t("co.nav.hiring"), badge: n?.new_applications || undefined },
@@ -35,6 +37,7 @@ const tabs = (n: EmployerCounters | null, chats = 0): ShellTab<Tab>[] => [
   { id: "messages", icon: "chat", label: t("co.msg.nav"), group: t("co.nav.hiring"), badge: chats || undefined },
   { id: "tasks", icon: "flag", label: t("nav.company.tasks"), group: t("co.nav.talent"), badge: n?.to_review || undefined },
   { id: "tests", icon: "check", label: t("nav.company.tests"), group: t("co.nav.talent"), badge: n?.to_grade || undefined },
+  { id: "competitions", icon: "trophy", label: t("corg.title"), group: t("co.nav.talent") },
   { id: "events", icon: "calendar", label: t("co.ev.nav"), group: t("co.nav.talent") },
   { id: "feed", icon: "megaphone", label: t("co.feed.nav"), group: t("co.nav.talent") },
   { id: "universities", icon: "school", label: t("nav.company.universities"), group: t("co.nav.network"), badge: n?.partnerships_in || undefined },
@@ -43,7 +46,8 @@ const tabs = (n: EmployerCounters | null, chats = 0): ShellTab<Tab>[] => [
 ];
 // /korxona/<segment>
 const ROUTES: Record<Tab, string> = {
-  home: "", candidates: "nomzodlar", jobs: "vakansiyalar", students: "talabalar", messages: "xabarlar", tasks: "vazifalar", events: "tadbirlar", feed: "postlar",
+  home: "", candidates: "nomzodlar", jobs: "vakansiyalar", students: "talabalar", messages: "xabarlar", tasks: "vazifalar",
+  competitions: "musobaqalar", events: "tadbirlar", feed: "postlar",
   universities: "universitetlar", tests: "testlar",
   groups: "guruhlar", profile: "profil",
 };
@@ -77,6 +81,8 @@ export default function EmployerApp({ me, onChanged, onLogout }: { me: Me; onCha
         {tab === "tasks" && <CompanyTasks />}
         {tab === "messages" && <DirectChat side="company" onUnread={refresh} />}
         {tab === "events" && <CompanyEvents />}
+        {/* individual and team competitions (docs/13-musobaqalar.md); ?c=<id> opens one, as organizer notices link */}
+        {tab === "competitions" && <CompetitionManager api={competitionsApi.organizer} kind="company" me={me} />}
         {tab === "feed" && <div className="co-page co-narrow"><Feed me={me} /></div>}
         {tab === "universities" && <CompanyUniversities />}
         {tab === "students" && (
