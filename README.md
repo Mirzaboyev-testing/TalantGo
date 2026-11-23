@@ -6,8 +6,8 @@ A platform that connects students, companies and universities in Uzbekistan. Stu
 experience while they study, companies hire people whose work they have already seen, and universities see
 where their students actually get placed.
 
-Try it: Telegram Mini App [@talantgo_bot](https://t.me/talantgo_bot) or the website
-https://careerflow.2-28-27-205.sslip.io
+Try it: Telegram Mini App [@careerup_uz_bot](https://t.me/careerup_uz_bot) or the website https://careerup.uz
+(own domain since 2026-11-23; the old careerflow.2-28-27-205.sslip.io address redirects there)
 
 ## Three panels
 

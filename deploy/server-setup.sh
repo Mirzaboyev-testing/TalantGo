@@ -8,7 +8,7 @@ set -euo pipefail
 cd /root/careerflow
 
 CADDYFILE=/root/universal_marketplace/Caddyfile
-SITE=careerflow.2-28-27-205.sslip.io
+SITE=careerup.uz                     # own domain since 2026-11-23 (was careerflow.2-28-27-205.sslip.io)
 COMPOSE="docker compose -f docker-compose.yml -f deploy/docker-compose.server.yml"
 step() { printf '\n=== %s\n' "$*"; }
 
