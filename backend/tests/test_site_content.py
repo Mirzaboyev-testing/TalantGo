@@ -114,8 +114,11 @@ async def test_limited_roles_only_look(client):
     assert (await client.get(f"{API}/admin/site")).status_code == 401
 
 
-async def test_headline_numbers_count_only_approved_members(client):
+async def test_headline_numbers_count_signed_up_students_and_approved_members(client):
+    from datetime import UTC, datetime
+
     from app.models import User
+    now = datetime.now(UTC)
     async with SessionLocal() as session:
         joined = University(name="Joined University", short_name="JU", is_active=True)
         waiting = University(name="Waiting University", short_name="WU", is_active=True)
@@ -124,13 +127,15 @@ async def test_headline_numbers_count_only_approved_members(client):
         session.add_all([
             User(telegram_id=71001, full_name="Lead", account_type="university", staff_university_id=joined.id, staff_status="approved"),
             User(telegram_id=71002, full_name="Applicant", account_type="university", staff_university_id=waiting.id, staff_status="pending"),
-            User(telegram_id=71003, full_name="Verified", university_id=joined.id, verification="verified"),
-            User(telegram_id=71004, full_name="Unverified", university_id=joined.id, verification="pending"),
-            User(telegram_id=71005, full_name="Blocked", university_id=joined.id, verification="verified", is_blocked=True),
+            User(telegram_id=71003, full_name="Verified", university_id=joined.id, verification="verified", consent_at=now),
+            User(telegram_id=71004, full_name="Just signed up", university_id=joined.id, consent_at=now),
+            User(telegram_id=71005, full_name="Blocked", university_id=joined.id, consent_at=now, is_blocked=True),
+            User(telegram_id=71006, full_name="Only opened the bot"),
         ])
         await session.commit()
     stats = (await client.get(f"{API}/public/stats")).json()
-    assert stats["universities"] == 1 and stats["students"] == 1
+    # a student counts from the moment the sign-up is finished (consent), verified or not; staff never count
+    assert stats["universities"] == 1 and stats["students"] == 2
 
 
 async def test_universities_page_lists_only_joined(client):

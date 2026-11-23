@@ -52,15 +52,16 @@ def joined_universities():
 @router.get("/stats")
 @shortcache.public("stats")
 async def stats(session: Session) -> dict:
-    """The site's headline numbers count only who has joined and been approved, never the sign-up catalogue:
-    companies the admin approved, universities with an approved staff member (the catalogue of all 200+
-    universities is only for picking at sign-up) and students whose studies were verified."""
+    """The site's headline numbers, never the sign-up catalogue: companies the admin approved, universities with an
+    approved staff member (the catalogue of all 200+ universities is only for picking at sign-up), and students who
+    finished signing up (gave consent): the count grows the moment someone registers (owner's choice, 2026-11-23),
+    while someone who only opened the bot is not counted."""
     jobs = await session.scalar(select(func.count()).select_from(visible_jobs().subquery()))
     return {
         "jobs": jobs,
         "companies": await session.scalar(select(func.count()).select_from(Company).where(Company.status == "approved")),
         "students": await session.scalar(select(func.count()).select_from(User).where(
-            User.account_type == "student", User.verification == "verified", User.is_blocked.is_(False))),
+            User.account_type == "student", User.consent_at.isnot(None), User.is_blocked.is_(False))),
         "universities": await session.scalar(select(func.count()).select_from(University).where(
             University.is_active.is_(True), University.id.in_(joined_universities()))),
     }
